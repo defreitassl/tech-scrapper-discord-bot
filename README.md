@@ -2,11 +2,12 @@
 
 Bot de Discord em Node.js + TypeScript para enviar vagas de emprego para iniciantes em tecnologia em um canal especifico.
 
-Nesta primeira etapa, o projeto apenas conecta o bot no Discord e envia uma mensagem de teste no canal configurado.
+Nesta etapa, o projeto conecta o bot no Discord, envia uma mensagem de teste no canal configurado e possui a base inicial de banco com Prisma e PostgreSQL.
 
 ## Requisitos
 
 - Node.js 20 ou superior
+- PostgreSQL
 - Um bot criado no Discord Developer Portal
 - O bot adicionado ao servidor com permissao para enviar mensagens no canal desejado
 
@@ -29,6 +30,29 @@ Preencha as variaveis:
 ```env
 DISCORD_TOKEN=token_do_seu_bot
 DISCORD_CHANNEL_ID=id_do_canal
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/discord_jobs_bot?schema=public"
+```
+
+Crie o banco no PostgreSQL antes de rodar a migration. O nome usado no exemplo e `discord_jobs_bot`.
+
+## Banco de dados
+
+Gere o Prisma Client:
+
+```bash
+npm run prisma:generate
+```
+
+Crie e aplique a migration:
+
+```bash
+npm run prisma:migrate -- --name init
+```
+
+Abra o Prisma Studio:
+
+```bash
+npm run prisma:studio
 ```
 
 ## Execucao
@@ -52,5 +76,7 @@ Quando o bot conectar, ele exibira um log no terminal e enviara uma mensagem de 
 - Conexao com Discord
 - Leitura de variaveis de ambiente
 - Envio de mensagem de teste
+- Schema inicial do Prisma com PostgreSQL
+- Model `JobPost` para armazenar vagas
 
-Ainda nao ha banco de dados, scraping ou agendamento.
+Ainda nao ha painel web, scraping, IA ou agendamento.
