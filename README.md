@@ -2,7 +2,7 @@
 
 Bot de Discord em Node.js + TypeScript para enviar vagas de emprego para iniciantes em tecnologia em um canal especifico.
 
-Nesta etapa, o projeto conecta o bot no Discord, envia uma mensagem de teste no canal configurado e possui a base inicial de banco com Prisma e PostgreSQL.
+Nesta etapa, o projeto conecta o bot no Discord, possui a base inicial de banco com Prisma e PostgreSQL, e inclui um painel web simples para cadastrar, gerenciar e publicar vagas pendentes manualmente.
 
 ## Requisitos
 
@@ -71,12 +71,39 @@ npm start
 
 Quando o bot conectar, ele exibira um log no terminal e enviara uma mensagem de teste no canal configurado.
 
+## Painel admin
+
+Com o banco configurado e as migrations aplicadas, compile o projeto:
+
+```bash
+npm run build
+```
+
+Inicie o painel:
+
+```bash
+npm run admin
+```
+
+Acesse:
+
+```text
+http://localhost:3000/admin/jobs
+```
+
+Para cadastrar uma vaga, clique em `Nova vaga`, preencha pelo menos o titulo ou o texto bruto e salve.
+Para marcar uma vaga como `PENDING`, ela precisa ter texto pronto, IA habilitada ou URL preenchida.
+
+Para enviar vagas pendentes ao Discord, use o botao `Enviar vagas pendentes` na listagem. O painel busca ate 5 vagas com status `PENDING`, envia no canal configurado em `DISCORD_CHANNEL_ID` e atualiza cada vaga enviada para `SENT`.
+
 ## Escopo atual
 
 - Conexao com Discord
 - Leitura de variaveis de ambiente
 - Envio de mensagem de teste
+- Envio manual de vagas `PENDING` para Discord pelo painel
 - Schema inicial do Prisma com PostgreSQL
 - Model `JobPost` para armazenar vagas
+- Painel admin simples para cadastrar, listar, visualizar e editar vagas
 
-Ainda nao ha painel web, scraping, IA ou agendamento.
+Ainda nao ha scraping, IA, autenticacao ou agendamento.
