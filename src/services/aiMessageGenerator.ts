@@ -3,6 +3,7 @@ import { logger } from '../lib/logger';
 
 const GOOGLE_AI_MODEL = 'gemini-2.5-flash';
 const GOOGLE_AI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GOOGLE_AI_MODEL}:generateContent`;
+const MAX_DISCORD_MESSAGE_CHARS = 1600;
 
 type GeminiResponse = {
   candidates?: Array<{
@@ -45,7 +46,7 @@ export async function generateJobMessage(job: JobPost): Promise<string> {
         },
       ],
       generationConfig: {
-        temperature: 0.7,
+        temperature: 0.45,
         topP: 0.9,
         maxOutputTokens: 500,
       },
@@ -98,7 +99,6 @@ Voce escreve mensagens curtas, uteis e humanas para alunos iniciantes em tecnolo
 
 Use uma linguagem amigavel, jovem e profissional.
 Chame os alunos ocasionalmente de PDevs.
-Use referencias leves a programacao, carreira, deploy, codigo, bugs ou evolucao profissional.
 Nao exagere nos emojis.
 Nao invente informacoes.
 Nao prometa contratacao.
@@ -106,10 +106,14 @@ Nao diga que a vaga e perfeita.
 Nao invente beneficios, salario, tecnologias ou modalidade.
 Se algum dado estiver ausente, apenas omita.
 A mensagem deve ser pronta para postar no Discord.
+Use Markdown do Discord com negrito nos rotulos.
 Nao repita a saudacao.
 Nao repita a mesma linha.
 Use cada secao no maximo uma vez.
-Se houver dados suficientes, a mensagem deve ter mais do que apenas a saudacao.
+A mensagem inteira deve ter no maximo ${MAX_DISCORD_MESSAGE_CHARS} caracteres.
+A mensagem deve ser curta, escaneavel e direta.
+Nao use paragrafos longos.
+Nao copie frases juridicas, rodapes, requisitos repetidos, contrato, area profissional ou blocos administrativos.
 
 Estrutura sugerida:
 - Saudacao curta com identidade do Projeto Desenvolve
@@ -119,29 +123,31 @@ Estrutura sugerida:
 - Nivel, se houver
 - Stacks, se houver
 - Faixa salarial, se houver
-- Descricao breve da vaga, se houver
-- Pequena chamada motivacional
+- Sobre a vaga em bullets curtos, se houver descricao
 - Link de candidatura
 - Dica rapida para candidatura
 
 Comportamento:
 - Deve incluir stacks quando existirem.
 - Deve incluir faixa salarial quando existir.
-- A secao "Sobre a vaga" deve ser um resumo breve da oportunidade, nao uma copia da descricao original.
-- A secao "Sobre a vaga" deve explicar em poucas linhas o que a pessoa fara ou qual e o contexto da vaga.
-- A secao "Sobre a vaga" deve ter no maximo 2 a 4 linhas curtas.
+- A secao "Sobre a vaga" deve ser um resumo forte e breve da oportunidade, nunca uma copia da descricao original.
+- A secao "Sobre a vaga" deve ter de 3 a 5 bullets quando houver informacoes suficientes.
+- Cada bullet de "Sobre a vaga" deve ter no maximo 140 caracteres.
+- Priorize: atividade principal, requisitos, formacao, formato de trabalho, treinamento, bolsa, carga horaria ou numero de vagas.
+- Inclua informacoes que ajudem o aluno a decidir se vale clicar no link, mas sem transformar em edital.
 - Escreva a descricao de forma natural, util e direta para alunos iniciantes.
 - Evite textos longos e blocos grandes.
 - Se rawText for grande, use-o apenas como fonte de contexto.
 - Se descricaoBreve existir, use como base, mas tambem resuma se estiver grande.
 - Nao copie o rawText inteiro.
-- Nao inclua requisitos, beneficios ou salario dentro de "Sobre a vaga" se ja existirem campos proprios.
+- Nao inclua requisitos, beneficios, horarios, contrato ou salario dentro de "Sobre a vaga" se eles nao forem essenciais.
 - Stacks devem ficar no campo 🛠️ **Stacks**.
 - Faixa salarial deve ficar no campo 💰 **Faixa salarial**.
 - Pode usar rawText para extrair uma descricao breve, mas nao deve inventar informacoes.
 - Se nao houver descricao, omita a secao.
 - Se nao houver salario, omita a secao.
 - Se nao houver stacks, omita a secao.
+- Se houver contradicao entre campos estruturados e texto bruto, prefira os campos estruturados.
 
 Formato sugerido:
 🚀 Fala, PDevs! Nova oportunidade no radar do Projeto Desenvolve.
@@ -155,7 +161,10 @@ Formato sugerido:
 💰 **Faixa salarial:** [salaryRange]
 
 📝 **Sobre a vaga:**
-[resumo curto em 2 a 4 linhas]
+• [atividade principal]
+• [requisitos principais]
+• [formacao ou modelo de trabalho, se houver]
+• [treinamento, bolsa, carga horaria ou vagas, se houver]
 
 🔗 **Candidatura:**
 [url]

@@ -5,6 +5,10 @@ import { generateJobMessage } from './aiMessageGenerator';
 import { sendDiscordMessage } from './discordPublisher';
 import { buildDefaultJobMessage } from './jobMessage';
 
+const MAX_GENERATED_MESSAGE_LENGTH = 1600;
+const MIN_ABOUT_SECTION_LINES = 3;
+const MAX_ABOUT_SECTION_LINES = 6;
+
 export type PublishPendingJobsResult = {
   total: number;
   sent: number;
@@ -122,6 +126,10 @@ async function resolveJobMessage(job: JobPost): Promise<string> {
 }
 
 function isUsableGeneratedMessage(message: string): boolean {
+  if (message.length > MAX_GENERATED_MESSAGE_LENGTH) {
+    return false;
+  }
+
   const lines = message
     .split('\n')
     .map((line) => line.trim())
@@ -144,7 +152,37 @@ function isUsableGeneratedMessage(message: string): boolean {
     return false;
   }
 
+  const aboutSectionLines = countAboutSectionLines(lines);
+
+  if (aboutSectionLines > 0 && aboutSectionLines < MIN_ABOUT_SECTION_LINES) {
+    return false;
+  }
+
+  if (aboutSectionLines > MAX_ABOUT_SECTION_LINES) {
+    return false;
+  }
+
   return true;
+}
+
+function countAboutSectionLines(lines: string[]): number {
+  const aboutStartIndex = lines.findIndex((line) => normalizeLine(line).includes('sobre a vaga'));
+
+  if (aboutStartIndex === -1) {
+    return 0;
+  }
+
+  let count = 0;
+
+  for (const line of lines.slice(aboutStartIndex + 1)) {
+    if (/^[^\w\s]?[\u{1F300}-\u{1FAFF}]/u.test(line) || normalizeLine(line).includes('candidatura')) {
+      break;
+    }
+
+    count += 1;
+  }
+
+  return count;
 }
 
 function normalizeLine(line: string): string {
