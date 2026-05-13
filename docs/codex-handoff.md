@@ -44,6 +44,14 @@ Apesar do nome mencionar scraper, o projeto ainda nao implementa scraping. O est
 - Falha no envio marca a vaga como `ERROR`.
 - Vagas arquivadas usam status `ARCHIVED`.
 
+## Organizacao do painel admin
+
+- `src/admin/server.ts` e apenas o ponto de entrada: configura Express, registra routers, redireciona `/` para `/admin/jobs`, inicia o servidor e inicia o `scheduledPublisher`.
+- Rotas de vagas ficam em `src/admin/routes/jobs.routes.ts`; rotas de envio agendado ficam em `src/admin/routes/schedule.routes.ts`.
+- Views server-rendered ficam em `src/admin/views/`: `jobs.views.ts`, `schedule.views.ts`, `layout.ts`, `components.ts` e `styles.ts`.
+- Helpers puros ficam em `src/admin/helpers/`: `forms.ts`, `validators.ts`, `status.ts` e `formatters.ts`.
+- Views e helpers nao devem acessar Prisma diretamente. Rotas podem chamar Prisma e services.
+
 ## Proximos passos recomendados
 
 - Manter o painel simples e server-rendered em Express ate haver necessidade real de frontend separado.

@@ -11,7 +11,11 @@
 
 ## Principais modulos
 
-- `src/admin/server.ts`: servidor Express do painel admin. Renderiza HTML/CSS diretamente e define as rotas de cadastro, listagem, detalhe, edicao e acoes manuais.
+- `src/admin/server.ts`: ponto de entrada do painel admin. Cria o app Express, configura middlewares, registra rotas, inicia o servidor e inicia o `scheduledPublisher`.
+- `src/admin/routes/jobs.routes.ts`: rotas de vagas do painel admin, incluindo listagem, cadastro, detalhe, edicao, aprovacao, geracao manual de mensagem com IA, arquivamento e envio manual.
+- `src/admin/routes/schedule.routes.ts`: rotas de configuracao do envio agendado.
+- `src/admin/views/`: renderizacao server-side do painel. `layout.ts` contem o layout base, `styles.ts` contem o CSS inline, `components.ts` contem componentes HTML reutilizaveis, `jobs.views.ts` contem telas de vagas e `schedule.views.ts` contem a tela de agendamento.
+- `src/admin/helpers/`: helpers puros do painel. `forms.ts` concentra parse e normalizacao de formularios, `validators.ts` concentra validacoes de formulario/status, `status.ts` concentra labels de status e `formatters.ts` concentra formatacao visual simples.
 - `src/services/publishPendingJobs.ts`: fluxo de publicacao de vagas, incluindo envio em lote de vagas `PENDING` e envio de uma unica vaga.
 - `src/services/schedulerSettings.ts`: leitura, criacao padrao, validacao e atualizacao das configuracoes de envio agendado.
 - `src/services/schedulerOperations.ts`: consultas operacionais do agendamento, como limite restante do dia e proximas vagas `PENDING`.
