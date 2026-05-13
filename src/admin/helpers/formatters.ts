@@ -13,7 +13,3 @@ export function escapeHtml(value: string): string {
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#039;');
 }
-
-export function getQueryMessage(message: unknown): string | undefined {
-  return typeof message === 'string' ? message : undefined;
-}

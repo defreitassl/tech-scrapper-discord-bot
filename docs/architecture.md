@@ -15,8 +15,9 @@
 - `src/admin/routes/jobs.routes.ts`: rotas de vagas do painel admin, incluindo listagem, cadastro, detalhe, edicao, aprovacao, geracao manual de mensagem com IA, arquivamento e envio manual.
 - `src/admin/routes/schedule.routes.ts`: rotas de configuracao do envio agendado.
 - `src/admin/views/`: renderizacao server-side do painel. `layout.ts` contem o layout base, `styles.ts` contem o CSS inline, `components.ts` contem componentes HTML reutilizaveis, `jobs.views.ts` contem telas de vagas e `schedule.views.ts` contem a tela de agendamento.
-- `src/admin/helpers/`: helpers puros do painel. `forms.ts` concentra parse e normalizacao de formularios, `validators.ts` concentra validacoes de formulario/status, `status.ts` concentra labels de status e `formatters.ts` concentra formatacao visual simples.
+- `src/admin/helpers/`: helpers puros do painel. `forms.ts` concentra parse e normalizacao de formularios, `validators.ts` concentra validacoes de formulario/status, `status.ts` concentra labels de status, `formatters.ts` concentra formatacao visual simples e `notifications.ts` concentra notificacoes temporarias via query params.
 - `src/services/publishPendingJobs.ts`: fluxo de publicacao de vagas, incluindo envio em lote de vagas `PENDING` e envio de uma unica vaga.
+- `src/services/jobDeduplication.ts`: primeira camada reutilizavel de deduplicacao de vagas. Bloqueia duplicata forte por URL normalizada e sinaliza possivel duplicata por titulo + empresa normalizados.
 - `src/services/schedulerSettings.ts`: leitura, criacao padrao, validacao e atualizacao das configuracoes de envio agendado.
 - `src/services/schedulerOperations.ts`: consultas operacionais do agendamento, como limite restante do dia e proximas vagas `PENDING`.
 - `src/services/scheduledPublisher.ts`: registro dos crons de publicacao e aplicacao do limite diario antes de chamar `publishPendingJobs`.
@@ -30,22 +31,25 @@
 ## Fluxo de publicacao
 
 1. O admin cadastra ou edita uma vaga.
-2. No cadastro manual de nova vaga, o painel salva com status `PENDING` por padrao e `useAi` marcado por padrao.
-3. Se nao houver `readyText` e `useAi` estiver ativo, o painel tenta gerar `aiGeneratedText` automaticamente com Gemini.
-4. Se a IA falhar no cadastro, a vaga continua salva como `PENDING`; o preview e o envio continuam usando o template padrao quando necessario.
-5. Na pagina de detalhes, o painel exibe um preview da mensagem que seria enviada ao Discord. Ele usa `readyText`, depois `aiGeneratedText` valido e, se nenhum deles existir, o template padrao.
-6. Se quiser atualizar a mensagem, o admin pode acionar `Regenerar mensagem com IA`, que chama Gemini e salva o resultado em `aiGeneratedText` sem enviar ao Discord.
-7. Para vagas antigas ou rascunhos, o admin ainda pode usar `Aprovar para envio`, que internamente marca a vaga como `PENDING`.
-8. O admin pode acionar `Enviar esta vaga agora` na pagina de detalhes ou `Enviar vagas pendentes` na listagem.
-9. `publishPendingJobs` busca ate 5 vagas com status `PENDING`, ordenadas por criacao. O envio individual usa a mesma resolucao de mensagem para a vaga atual.
-10. Para cada vaga, o sistema resolve a mensagem:
+2. No cadastro manual de nova vaga, antes de criar o registro, o painel consulta `jobDeduplication`.
+3. Se a URL preenchida ja existir apos normalizacao simples, a vaga nao e criada, a IA nao e chamada e o admin e redirecionado para a vaga existente com aviso.
+4. Se nao houver URL duplicada, mas ja existir vaga com mesmo titulo e empresa normalizados, o cadastro continua e o painel mostra um aviso de possivel duplicata.
+5. No cadastro manual de nova vaga, o painel salva com status `PENDING` por padrao e `useAi` marcado por padrao.
+6. Se nao houver `readyText` e `useAi` estiver ativo, o painel tenta gerar `aiGeneratedText` automaticamente com Gemini.
+7. Se a IA falhar no cadastro, a vaga continua salva como `PENDING`; o preview e o envio continuam usando o template padrao quando necessario.
+8. Na pagina de detalhes, o painel exibe um preview da mensagem que seria enviada ao Discord. Ele usa `readyText`, depois `aiGeneratedText` valido e, se nenhum deles existir, o template padrao.
+9. Se quiser atualizar a mensagem, o admin pode acionar `Regenerar mensagem com IA`, que chama Gemini e salva o resultado em `aiGeneratedText` sem enviar ao Discord.
+10. Para vagas antigas ou rascunhos, o admin ainda pode usar `Aprovar para envio`, que internamente marca a vaga como `PENDING`.
+11. O admin pode acionar `Enviar esta vaga agora` na pagina de detalhes ou `Enviar vagas pendentes` na listagem.
+12. `publishPendingJobs` busca ate 5 vagas com status `PENDING`, ordenadas por criacao. O envio individual usa a mesma resolucao de mensagem para a vaga atual.
+13. Para cada vaga, o sistema resolve a mensagem:
    - usa `readyText` se existir;
    - reutiliza `aiGeneratedText` se existir e for valido;
    - chama a IA se `useAi` estiver habilitado;
    - usa template padrao se a IA falhar ou estiver desabilitada.
-11. `discordPublisher` envia a mensagem ao canal configurado por `DISCORD_CHANNEL_ID`.
-12. A vaga e marcada como `SENT` com `sentAt`.
-13. Em caso de erro, a vaga e marcada como `ERROR`.
+14. `discordPublisher` envia a mensagem ao canal configurado por `DISCORD_CHANNEL_ID`.
+15. A vaga e marcada como `SENT` com `sentAt`.
+16. Em caso de erro, a vaga e marcada como `ERROR`.
 
 O envio individual nao reenvia vagas `SENT` e nao publica vagas `ARCHIVED`.
 
@@ -71,6 +75,8 @@ A tela `/admin/settings/schedule` tambem mostra um resumo operacional com status
 
 O painel admin e a interface operacional do projeto. Ele permite criar, revisar, editar, visualizar, arquivar, preparar vagas para publicacao e configurar o envio agendado.
 
+O feedback operacional do painel e exibido por notificacoes temporarias server-rendered, usando query params como `message` e `noticeType`. Essas notificacoes nao sao logs persistentes, nao criam tabela no banco e nao substituem os logs da aplicacao.
+
 Na interface, os status sao exibidos com nomes amigaveis:
 
 - `DRAFT`: Rascunho.
@@ -89,7 +95,7 @@ O PostgreSQL armazena as vagas, seus textos, metadados, status, datas de criacao
 
 O banco tambem armazena `SchedulerSettings`, que guarda se o agendamento esta ativo, o limite diario, o timezone e os horarios de envio. O campo de timezone existe por compatibilidade, mas o painel sempre salva `America/Sao_Paulo`.
 
-O banco tambem sera o ponto natural para deduplicacao futura quando providers de coleta forem adicionados.
+A deduplicacao atual nao usa constraint unica nem altera o schema. Ela consulta os registros existentes via Prisma e compara valores normalizados em `jobDeduplication`. O banco continuara sendo o ponto natural para deduplicacao mais forte quando providers de coleta forem adicionados.
 
 ## Papel do Discord
 

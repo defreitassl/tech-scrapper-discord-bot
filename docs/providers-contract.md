@@ -50,6 +50,8 @@ Normalizacao sugerida:
 
 Deduplicacao deve evitar publicar a mesma vaga mais de uma vez.
 
+A primeira camada reutilizavel ja existe em `src/services/jobDeduplication.ts` e deve ser reaproveitada por futuros providers antes de criar registros no banco.
+
 Possiveis chaves:
 
 - `externalId` quando a fonte fornecer;
@@ -57,7 +59,9 @@ Possiveis chaves:
 - combinacao de `title`, `company` e `source`;
 - hash de texto normalizado quando nao houver URL confiavel.
 
-No inicio, a deduplicacao deve ser conservadora. Em caso de duvida, criar como `DRAFT` para revisao em vez de descartar automaticamente.
+No estado atual, a duplicata forte usa URL normalizada com trim e remocao de barra final. Quando nao ha URL duplicada, titulo + empresa normalizados indicam apenas possivel duplicata e nao bloqueiam criacao.
+
+No inicio, a deduplicacao deve ser conservadora. Em caso de duvida, criar como `DRAFT` para revisao em vez de descartar automaticamente. Nao ha constraint unica no banco nesta etapa.
 
 ## Status sugerido apos coleta
 
@@ -71,4 +75,3 @@ Motivos:
 - mantem controle editorial do canal.
 
 Somente apos revisao a vaga deve ser marcada como `PENDING`.
-

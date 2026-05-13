@@ -3,9 +3,10 @@ import { JobPost, JobStatus } from '@prisma/client';
 import { logger } from '../../lib/logger';
 import { prisma } from '../../lib/prisma';
 import { generateJobMessage } from '../../services/aiMessageGenerator';
+import { checkJobDuplicate } from '../../services/jobDeduplication';
 import { publishPendingJobs, publishSingleJob } from '../../services/publishPendingJobs';
-import { getQueryMessage } from '../helpers/formatters';
 import { parseJobForm } from '../helpers/forms';
+import { getNoticeFromQuery, redirectWithNotice } from '../helpers/notifications';
 import { validateJob, validatePending } from '../helpers/validators';
 import { renderLayout } from '../views/layout';
 import { renderJobDetails, renderJobForm, renderJobsList } from '../views/jobs.views';
@@ -18,7 +19,7 @@ export function createJobsRouter(): express.Router {
       orderBy: { createdAt: 'desc' },
     });
 
-    response.send(renderJobsList(jobs, getQueryMessage(request.query.message)));
+    response.send(renderJobsList(jobs, getNoticeFromQuery(request.query)));
   });
 
   router.get('/admin/jobs/new', (_request, response) => {
@@ -38,12 +39,30 @@ export function createJobsRouter(): express.Router {
       return;
     }
 
+    const duplicateCheck = await checkJobDuplicate(createData);
+
+    if (duplicateCheck.duplicateByUrl) {
+      logger.info('Cadastro de vaga duplicada por URL bloqueado no admin.', {
+        existingJobId: duplicateCheck.duplicateByUrl.id,
+        url: createData.url,
+      });
+
+      redirectWithNotice(
+        response,
+        `/admin/jobs/${duplicateCheck.duplicateByUrl.id}`,
+        'Esta vaga ja existe no sistema.',
+        'warning',
+      );
+      return;
+    }
+
     const job = await prisma.jobPost.create({ data: createData });
     logger.info('Vaga criada no admin.', {
       jobId: job.id,
       title: job.title,
       status: job.status,
       useAi: job.useAi,
+      possibleDuplicateJobId: duplicateCheck.possibleDuplicateByTitleAndCompany?.id,
     });
 
     if (!job.readyText?.trim() && job.useAi) {
@@ -60,8 +79,14 @@ export function createJobsRouter(): express.Router {
           messageLength: generatedMessage.length,
         });
 
-        response.redirect(
-          `/admin/jobs/${job.id}?message=${encodeURIComponent('Vaga salva como pronta para envio. A mensagem com IA foi gerada automaticamente.')}`,
+        redirectWithNotice(
+          response,
+          `/admin/jobs/${job.id}`,
+          getJobCreatedNoticeMessage(
+            'Vaga cadastrada com sucesso. A mensagem com IA foi gerada automaticamente.',
+            duplicateCheck.possibleDuplicateByTitleAndCompany,
+          ),
+          duplicateCheck.possibleDuplicateByTitleAndCompany ? 'warning' : 'success',
         );
         return;
       } catch (error) {
@@ -70,18 +95,29 @@ export function createJobsRouter(): express.Router {
           title: job.title,
         });
 
-        response.redirect(
-          `/admin/jobs/${job.id}?message=${encodeURIComponent('Vaga salva como pronta para envio, mas nao foi possivel gerar a mensagem com IA agora. O preview usa o template padrao e voce pode regenerar depois.')}`,
+        redirectWithNotice(
+          response,
+          `/admin/jobs/${job.id}`,
+          getJobCreatedNoticeMessage(
+            'Vaga cadastrada com sucesso, mas nao foi possivel gerar a mensagem com IA agora. O preview usa o template padrao e voce pode regenerar depois.',
+            duplicateCheck.possibleDuplicateByTitleAndCompany,
+          ),
+          'warning',
         );
         return;
       }
     }
 
     const message = job.readyText?.trim()
-      ? 'Vaga salva como pronta para envio. Como ha texto pronto, a IA nao foi chamada automaticamente.'
-      : 'Vaga salva como pronta para envio. A IA nao foi chamada porque a opcao de usar IA esta desmarcada.';
+      ? 'Vaga cadastrada com sucesso. Como ha texto pronto, a IA nao foi chamada automaticamente.'
+      : 'Vaga cadastrada com sucesso. A IA nao foi chamada porque a opcao de usar IA esta desmarcada.';
 
-    response.redirect(`/admin/jobs/${job.id}?message=${encodeURIComponent(message)}`);
+    redirectWithNotice(
+      response,
+      `/admin/jobs/${job.id}`,
+      getJobCreatedNoticeMessage(message, duplicateCheck.possibleDuplicateByTitleAndCompany),
+      duplicateCheck.possibleDuplicateByTitleAndCompany ? 'warning' : 'success',
+    );
   });
 
   router.post('/admin/jobs/publish-pending', async (_request, response) => {
@@ -89,11 +125,12 @@ export function createJobsRouter(): express.Router {
       logger.info('Publicacao manual de vagas pendentes iniciada pelo admin.');
       const result = await publishPendingJobs();
       const message = `Publicacao concluida. Encontradas: ${result.total}. Enviadas: ${result.sent}. Erros: ${result.failed}.`;
+      const noticeType = result.failed > 0 ? 'warning' : result.sent > 0 ? 'success' : 'info';
 
-      response.redirect(`/admin/jobs?message=${encodeURIComponent(message)}`);
+      redirectWithNotice(response, '/admin/jobs', message, noticeType);
     } catch (error) {
       logger.error('Erro ao publicar vagas pendentes pelo admin.', error);
-      response.redirect(`/admin/jobs?message=${encodeURIComponent('Erro ao publicar vagas pendentes.')}`);
+      redirectWithNotice(response, '/admin/jobs', 'Erro ao enviar vagas pendentes.', 'error');
     }
   });
 
@@ -106,8 +143,7 @@ export function createJobsRouter(): express.Router {
 
     response.send(
       renderJobDetails(job, {
-        notice: getQueryMessage(request.query.message),
-        error: getQueryMessage(request.query.error),
+        notice: getNoticeFromQuery(request.query),
       }),
     );
   });
@@ -169,7 +205,7 @@ export function createJobsRouter(): express.Router {
     const error = validatePending(job);
 
     if (error) {
-      response.status(400).send(renderJobDetails(job, { error }));
+      response.status(400).send(renderJobDetails(job, { notice: { message: error, type: 'error' } }));
       return;
     }
 
@@ -182,7 +218,7 @@ export function createJobsRouter(): express.Router {
       title: job.title,
     });
 
-    response.redirect(`/admin/jobs/${job.id}?message=${encodeURIComponent('Vaga marcada como pronta para envio.')}`);
+    redirectWithNotice(response, `/admin/jobs/${job.id}`, 'Vaga marcada como pronta para envio.');
   });
 
   router.post('/admin/jobs/:id/generate-ai-message', async (request, response) => {
@@ -209,14 +245,17 @@ export function createJobsRouter(): express.Router {
         messageLength: generatedMessage.length,
       });
 
-      response.redirect(`/admin/jobs/${job.id}?message=${encodeURIComponent('Mensagem com IA gerada e salva.')}`);
+      redirectWithNotice(response, `/admin/jobs/${job.id}`, 'Mensagem com IA gerada com sucesso.');
     } catch (error) {
       logger.error('Erro ao gerar mensagem com IA pelo admin.', error, {
         jobId: job.id,
         title: job.title,
       });
-      response.redirect(
-        `/admin/jobs/${job.id}?error=${encodeURIComponent('Nao foi possivel gerar a mensagem com IA. Verifique os dados da vaga e tente novamente.')}`,
+      redirectWithNotice(
+        response,
+        `/admin/jobs/${job.id}`,
+        'Erro ao gerar IA. Verifique os dados da vaga e tente novamente.',
+        'error',
       );
     }
   });
@@ -229,9 +268,9 @@ export function createJobsRouter(): express.Router {
     }
 
     const result = await publishSingleJob(job);
-    const queryKey = result.status === 'failed' ? 'error' : 'message';
+    const noticeType = result.status === 'sent' ? 'success' : result.status === 'skipped' ? 'warning' : 'error';
 
-    response.redirect(`/admin/jobs/${job.id}?${queryKey}=${encodeURIComponent(result.message)}`);
+    redirectWithNotice(response, `/admin/jobs/${job.id}`, result.message, noticeType);
   });
 
   router.post('/admin/jobs/:id/archive', async (request, response) => {
@@ -250,7 +289,7 @@ export function createJobsRouter(): express.Router {
       title: job.title,
     });
 
-    response.redirect('/admin/jobs');
+    redirectWithNotice(response, '/admin/jobs', 'Vaga arquivada.');
   });
 
   return router;
@@ -265,4 +304,12 @@ async function findJobOrRenderNotFound(id: string, response: express.Response): 
   }
 
   return job;
+}
+
+function getJobCreatedNoticeMessage(message: string, possibleDuplicate: { id: string } | null): string {
+  if (!possibleDuplicate) {
+    return message;
+  }
+
+  return 'Possivel duplicata detectada: ja existe uma vaga com mesmo titulo e empresa.';
 }

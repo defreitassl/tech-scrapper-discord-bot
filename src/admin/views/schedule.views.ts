@@ -7,8 +7,10 @@ import {
 } from '../../services/schedulerSettings';
 import { ScheduleFormData, scheduleFormFromSettings } from '../helpers/forms';
 import { escapeHtml, formatDate } from '../helpers/formatters';
+import type { AdminNotice } from '../helpers/notifications';
 import {
   renderFormSection,
+  renderNotification,
   renderSchedulerStateBadge,
   renderStatusBadge,
 } from './components';
@@ -19,8 +21,7 @@ export function renderScheduleSettingsForm(options: {
   form?: ScheduleFormData;
   dailyUsage?: SchedulerDailyUsage;
   pendingJobs?: JobPost[];
-  notice?: string;
-  error?: string;
+  notice?: AdminNotice;
 }): string {
   const form = options.form ?? scheduleFormFromSettings(options.settings);
   const sentToday = options.dailyUsage?.sentToday ?? 0;
@@ -36,8 +37,7 @@ export function renderScheduleSettingsForm(options: {
         <a class="button secondary" href="/admin/jobs">Voltar para vagas</a>
       </div>
     </div>
-    ${options.notice ? `<p class="notice">${escapeHtml(options.notice)}</p>` : ''}
-    ${options.error ? `<p class="error">${escapeHtml(options.error)}</p>` : ''}
+    ${renderNotification(options.notice)}
     <section class="card settings-summary">
       <div class="section-heading">
         <h2>Resumo operacional</h2>
@@ -77,7 +77,7 @@ export function renderScheduleSettingsForm(options: {
         ].join(''),
       )}
       <div class="form-actions">
-        <button type="submit">Salvar configuracoes</button>
+        <button type="submit" data-loading-label="Salvando...">Salvar configuracoes</button>
       </div>
     </form>
     ${renderScheduleSettingsScript()}

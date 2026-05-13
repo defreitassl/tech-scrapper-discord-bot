@@ -20,6 +20,8 @@ Apesar do nome mencionar scraper, o projeto ainda nao implementa scraping. O est
 - O painel permite criar, listar, ver detalhes, editar, gerar mensagem com IA, aprovar para envio e arquivar.
 - A interface chama `DRAFT` de `Rascunho`, `PENDING` de `Pronta para envio`, `SENT` de `Enviada`, `ERROR` de `Erro` e `ARCHIVED` de `Arquivada`. O enum do banco nao muda.
 - Novas vagas manuais entram como `PENDING` por padrao e `useAi` vem marcado por padrao no formulario.
+- No cadastro manual, antes de criar a vaga, `src/services/jobDeduplication.ts` verifica duplicata forte por URL normalizada. Se encontrar, nao cria nova vaga, nao chama IA e redireciona para a vaga existente com toast de aviso.
+- Se nao houver URL duplicada, mas existir vaga com mesmo titulo e empresa normalizados, o cadastro continua normalmente e o painel mostra aviso de possivel duplicata.
 - No cadastro manual, quando nao ha `readyText` e `useAi` esta ativo, o painel tenta gerar `aiGeneratedText` automaticamente. Falha de IA nao bloqueia o cadastro.
 - Para aprovar para envio, a vaga precisa ter dados suficientes para template, `readyText`, `aiGeneratedText` valido ou URL preenchida.
 - A pagina de detalhes mostra preview da mensagem sem chamar IA automaticamente.
@@ -49,8 +51,10 @@ Apesar do nome mencionar scraper, o projeto ainda nao implementa scraping. O est
 - `src/admin/server.ts` e apenas o ponto de entrada: configura Express, registra routers, redireciona `/` para `/admin/jobs`, inicia o servidor e inicia o `scheduledPublisher`.
 - Rotas de vagas ficam em `src/admin/routes/jobs.routes.ts`; rotas de envio agendado ficam em `src/admin/routes/schedule.routes.ts`.
 - Views server-rendered ficam em `src/admin/views/`: `jobs.views.ts`, `schedule.views.ts`, `layout.ts`, `components.ts` e `styles.ts`.
-- Helpers puros ficam em `src/admin/helpers/`: `forms.ts`, `validators.ts`, `status.ts` e `formatters.ts`.
+- Helpers puros ficam em `src/admin/helpers/`: `forms.ts`, `validators.ts`, `status.ts`, `formatters.ts` e `notifications.ts`.
 - Views e helpers nao devem acessar Prisma diretamente. Rotas podem chamar Prisma e services.
+- Feedback operacional do painel usa notificacoes temporarias renderizadas no HTML via query params `message` e `noticeType`. Nao existe tela de logs nem persistencia em banco para essas notificacoes.
+- A deduplicacao fica em `src/services/jobDeduplication.ts` para reuso futuro por providers. Nao ha unique constraint nem migration nesta etapa.
 
 ## Proximos passos recomendados
 
@@ -58,7 +62,7 @@ Apesar do nome mencionar scraper, o projeto ainda nao implementa scraping. O est
 - Implementar providers apenas depois de definir contrato e estrategia.
 - Comecar por uma fonte simples e publica.
 - Salvar coletas automaticas como `DRAFT`.
-- Adicionar deduplicacao conservadora antes de criar muitas vagas.
+- Reutilizar `jobDeduplication` nos providers antes de criar vagas automaticamente.
 - Adicionar autenticacao simples antes de expor o painel fora de ambiente local/confiavel.
 - Se mexer no agendamento, preserve o reaproveitamento de `publishPendingJobs` e evite duplicar a logica de envio.
 

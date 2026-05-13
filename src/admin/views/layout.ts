@@ -27,7 +27,51 @@ ${adminStyles}
           </div>
         </header>
         <main>${content}</main>
+        ${renderAdminScripts()}
       </body>
     </html>
+  `;
+}
+
+function renderAdminScripts(): string {
+  return `
+    <script>
+      (() => {
+        const hideNotification = (notification) => {
+          notification.classList.add('notification-hiding');
+          window.setTimeout(() => notification.remove(), 180);
+        };
+
+        document.querySelectorAll('[data-notification]').forEach((notification) => {
+          const closeButton = notification.querySelector('[data-notification-close]');
+          const autoHideMs = Number(notification.getAttribute('data-autohide-ms') ?? '0');
+
+          closeButton?.addEventListener('click', () => hideNotification(notification));
+
+          if (autoHideMs > 0) {
+            window.setTimeout(() => hideNotification(notification), autoHideMs);
+          }
+        });
+
+        document.querySelectorAll('form').forEach((form) => {
+          form.addEventListener('submit', (event) => {
+            const submitter = event.submitter;
+
+            if (!(submitter instanceof HTMLButtonElement)) {
+              return;
+            }
+
+            const loadingLabel = submitter.getAttribute('data-loading-label');
+
+            if (loadingLabel) {
+              submitter.textContent = loadingLabel;
+            }
+
+            submitter.disabled = true;
+            submitter.classList.add('is-loading');
+          });
+        });
+      })();
+    </script>
   `;
 }

@@ -7,8 +7,8 @@ import {
   validateSchedulerSettingsInput,
 } from '../../services/schedulerSettings';
 import { reloadScheduledPublisher } from '../../services/scheduledPublisher';
-import { getQueryMessage } from '../helpers/formatters';
 import { parseScheduleSettingsForm } from '../helpers/forms';
+import { getNoticeFromQuery, redirectWithNotice } from '../helpers/notifications';
 import { renderScheduleSettingsForm } from '../views/schedule.views';
 
 export function createScheduleRouter(): express.Router {
@@ -26,7 +26,7 @@ export function createScheduleRouter(): express.Router {
         settings,
         dailyUsage,
         pendingJobs,
-        notice: getQueryMessage(request.query.message),
+        notice: getNoticeFromQuery(request.query),
       }),
     );
   });
@@ -42,7 +42,14 @@ export function createScheduleRouter(): express.Router {
         getUpcomingPendingJobs(5),
       ]);
 
-      response.status(400).send(renderScheduleSettingsForm({ form, dailyUsage, pendingJobs, error }));
+      response.status(400).send(
+        renderScheduleSettingsForm({
+          form,
+          dailyUsage,
+          pendingJobs,
+          notice: { message: error, type: 'error' },
+        }),
+      );
       return;
     }
 
@@ -56,9 +63,7 @@ export function createScheduleRouter(): express.Router {
       sendTimes: form.sendTimes,
     });
 
-    response.redirect(
-      `/admin/settings/schedule?message=${encodeURIComponent('Configuracoes de envio agendado salvas.')}`,
-    );
+    redirectWithNotice(response, '/admin/settings/schedule', 'Configuracoes de envio agendado salvas.');
   });
 
   return router;

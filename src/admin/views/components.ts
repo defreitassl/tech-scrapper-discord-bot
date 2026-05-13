@@ -1,11 +1,47 @@
 import { JobStatus } from '@prisma/client';
 import { escapeHtml } from '../helpers/formatters';
+import type { AdminNotice } from '../helpers/notifications';
 import { getStatusLabel } from '../helpers/status';
 
-export function renderPostButton(action: string, label: string, variant = 'secondary'): string {
+export function renderNotification(notice?: AdminNotice): string {
+  if (!notice) {
+    return '';
+  }
+
+  const labels: Record<AdminNotice['type'], string> = {
+    success: 'Sucesso',
+    error: 'Erro',
+    warning: 'Atencao',
+    info: 'Informacao',
+    loading: 'Processando',
+  };
+  const autoHideMs: Record<AdminNotice['type'], number> = {
+    success: 4000,
+    info: 4000,
+    warning: 6000,
+    error: 10000,
+    loading: 0,
+  };
+
+  return `
+    <div class="notification-stack" aria-live="polite" aria-atomic="true">
+      <div class="notification notification-${notice.type}" data-notification data-autohide-ms="${autoHideMs[notice.type]}">
+        <div class="notification-content">
+          <span class="notification-label">${escapeHtml(labels[notice.type])}</span>
+          <p>${escapeHtml(notice.message)}</p>
+        </div>
+        <button type="button" class="notification-close" aria-label="Fechar notificacao" data-notification-close>&times;</button>
+      </div>
+    </div>
+  `;
+}
+
+export function renderPostButton(action: string, label: string, variant = 'secondary', loadingLabel?: string): string {
+  const loadingAttribute = loadingLabel ? ` data-loading-label="${escapeHtml(loadingLabel)}"` : '';
+
   return `
     <form method="post" action="${action}">
-      <button type="submit" class="${escapeHtml(variant)}">${escapeHtml(label)}</button>
+      <button type="submit" class="${escapeHtml(variant)}"${loadingAttribute}>${escapeHtml(label)}</button>
     </form>
   `;
 }

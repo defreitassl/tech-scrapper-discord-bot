@@ -1,19 +1,21 @@
 import { JobPost } from '@prisma/client';
 import { JobFormData, formFromJob } from '../helpers/forms';
 import { escapeHtml, formatDate } from '../helpers/formatters';
+import type { AdminNotice } from '../helpers/notifications';
 import { getStatusLabel, statuses } from '../helpers/status';
 import { buildDefaultJobMessage } from '../../services/jobMessage';
 import { isUsableGeneratedMessage } from '../../services/publishPendingJobs';
 import {
   renderFormSection,
   renderInput,
+  renderNotification,
   renderPostButton,
   renderStatusBadge,
   renderTextarea,
 } from './components';
 import { renderLayout } from './layout';
 
-export function renderJobsList(jobs: JobPost[], message?: string): string {
+export function renderJobsList(jobs: JobPost[], notice?: AdminNotice): string {
   const rows = jobs
     .map(
       (job) => `
@@ -29,8 +31,8 @@ export function renderJobsList(jobs: JobPost[], message?: string): string {
           <td><span class="date-cell">${job.sentAt ? formatDate(job.sentAt) : '-'}</span></td>
           <td class="actions">
             <a class="button secondary" href="/admin/jobs/${escapeHtml(job.id)}/edit">Editar</a>
-            ${renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/pending`, 'Aprovar para envio')}
-            ${renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/archive`, 'Arquivar')}
+            ${renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/pending`, 'Aprovar para envio', 'secondary', 'Salvando...')}
+            ${renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/archive`, 'Arquivar', 'secondary', 'Salvando...')}
           </td>
         </tr>
       `,
@@ -46,12 +48,12 @@ export function renderJobsList(jobs: JobPost[], message?: string): string {
       </div>
       <div class="actions">
         <form method="post" action="/admin/jobs/publish-pending">
-          <button type="submit" class="primary-action">Enviar vagas pendentes</button>
+          <button type="submit" class="primary-action" data-loading-label="Enviando...">Enviar vagas pendentes</button>
         </form>
         <a class="button" href="/admin/jobs/new">Nova vaga</a>
       </div>
     </div>
-    ${message ? `<p class="notice">${escapeHtml(message)}</p>` : ''}
+    ${renderNotification(notice)}
     <section class="card table-card">
       <div class="section-heading">
         <h2>Lista de vagas</h2>
@@ -81,7 +83,7 @@ export function renderJobsList(jobs: JobPost[], message?: string): string {
   return renderLayout('Vagas', content);
 }
 
-export function renderJobDetails(job: JobPost, feedback: { notice?: string; error?: string } = {}): string {
+export function renderJobDetails(job: JobPost, feedback: { notice?: AdminNotice } = {}): string {
   const fields: Array<[string, string | null]> = [
     ['Titulo', job.title],
     ['Empresa', job.company],
@@ -118,8 +120,7 @@ export function renderJobDetails(job: JobPost, feedback: { notice?: string; erro
         <a class="button" href="/admin/jobs/${escapeHtml(job.id)}/edit">Editar</a>
       </div>
     </div>
-    ${feedback.notice ? `<p class="notice">${escapeHtml(feedback.notice)}</p>` : ''}
-    ${feedback.error ? `<p class="error">${escapeHtml(feedback.error)}</p>` : ''}
+    ${renderNotification(feedback.notice)}
     <section class="card">
       <div class="section-heading">
         <h2>Resumo</h2>
@@ -135,10 +136,10 @@ export function renderJobDetails(job: JobPost, feedback: { notice?: string; erro
       ${renderLongText('Texto gerado por IA', job.aiGeneratedText)}
     </div>
     <div class="actions footer-actions">
-      ${renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/publish`, 'Enviar esta vaga agora', 'primary-action')}
-      ${renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/generate-ai-message`, 'Regenerar mensagem com IA')}
-      ${renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/pending`, 'Aprovar para envio')}
-      ${renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/archive`, 'Arquivar')}
+      ${renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/publish`, 'Enviar esta vaga agora', 'primary-action', 'Enviando...')}
+      ${renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/generate-ai-message`, 'Regenerar mensagem com IA', 'secondary', 'Gerando...')}
+      ${renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/pending`, 'Aprovar para envio', 'secondary', 'Salvando...')}
+      ${renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/archive`, 'Arquivar', 'secondary', 'Salvando...')}
     </div>
   `;
 
@@ -165,7 +166,7 @@ export function renderJobForm(options: {
         <a class="button secondary" href="/admin/jobs">Voltar</a>
       </div>
     </div>
-    ${options.error ? `<p class="error">${escapeHtml(options.error)}</p>` : ''}
+    ${renderNotification(options.error ? { message: options.error, type: 'error' } : undefined)}
     <form method="post" action="${escapeHtml(options.action)}" class="job-form">
       ${renderFormSection(
         'Informacoes principais',
@@ -225,7 +226,7 @@ export function renderJobForm(options: {
         </label>`,
       )}
       <div class="form-actions">
-        <button type="submit">${isNewJob ? 'Salvar e preparar para envio' : 'Salvar'}</button>
+        <button type="submit" data-loading-label="Salvando...">${isNewJob ? 'Salvar e preparar para envio' : 'Salvar'}</button>
       </div>
     </form>
   `;
