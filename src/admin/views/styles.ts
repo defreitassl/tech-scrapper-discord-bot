@@ -295,6 +295,13 @@ export const adminStyles = `
             line-height: 1.55;
           }
 
+          .collection-note {
+            margin: -12px 0 18px;
+            color: var(--text-muted);
+            font-size: 13px;
+            line-height: 1.45;
+          }
+
           .card {
             padding: 22px;
             border: 1px solid var(--border);

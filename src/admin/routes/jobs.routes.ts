@@ -5,6 +5,7 @@ import { prisma } from '../../lib/prisma';
 import { generateJobMessage } from '../../services/aiMessageGenerator';
 import { checkJobDuplicate } from '../../services/jobDeduplication';
 import { publishPendingJobs, publishSingleJob } from '../../services/publishPendingJobs';
+import { runJobProviders } from '../../providers/providerRunner';
 import { parseJobForm } from '../helpers/forms';
 import { getNoticeFromQuery, redirectWithNotice } from '../helpers/notifications';
 import { validateJob, validatePending } from '../helpers/validators';
@@ -131,6 +132,20 @@ export function createJobsRouter(): express.Router {
     } catch (error) {
       logger.error('Erro ao publicar vagas pendentes pelo admin.', error);
       redirectWithNotice(response, '/admin/jobs', 'Erro ao enviar vagas pendentes.', 'error');
+    }
+  });
+
+  router.post('/admin/jobs/collect', async (_request, response) => {
+    try {
+      logger.info('Coleta manual de vagas de teste iniciada pelo admin.');
+      const result = await runJobProviders();
+      const message = `Coleta concluida: ${result.createdJobs} novas vagas, ${result.ignoredDuplicates} duplicatas ignoradas.`;
+      const noticeType = result.errors.length > 0 ? 'warning' : result.createdJobs > 0 ? 'success' : 'info';
+
+      redirectWithNotice(response, '/admin/jobs', message, noticeType);
+    } catch (error) {
+      logger.error('Erro ao coletar vagas de teste pelo admin.', error);
+      redirectWithNotice(response, '/admin/jobs', 'Erro ao coletar vagas de teste.', 'error');
     }
   });
 

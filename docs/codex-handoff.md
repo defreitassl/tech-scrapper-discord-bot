@@ -6,6 +6,8 @@ O `tech-scrapper-discord-bot` e um bot/painel para cadastrar, organizar e public
 
 Apesar do nome mencionar scraper, o projeto ainda nao implementa scraping. O estado atual e um painel admin manual com publicacao controlada para Discord.
 
+Existe uma base inicial de providers em `src/providers/`, mas somente com provider mock/de teste. Ela valida o fluxo de coleta sem acessar sites reais.
+
 ## Stack
 
 - Node.js + TypeScript.
@@ -20,6 +22,7 @@ Apesar do nome mencionar scraper, o projeto ainda nao implementa scraping. O est
 - O painel permite criar, listar, ver detalhes, editar, gerar mensagem com IA, aprovar para envio e arquivar.
 - A interface chama `DRAFT` de `Rascunho`, `PENDING` de `Pronta para envio`, `SENT` de `Enviada`, `ERROR` de `Erro` e `ARCHIVED` de `Arquivada`. O enum do banco nao muda.
 - Novas vagas manuais entram como `PENDING` por padrao e `useAi` vem marcado por padrao no formulario.
+- Vagas coletadas por providers entram sempre como `DRAFT`, com `useAi = false`, sem chamar Gemini/IA e sem publicar no Discord.
 - No cadastro manual, antes de criar a vaga, `src/services/jobDeduplication.ts` verifica duplicata forte por URL normalizada. Se encontrar, nao cria nova vaga, nao chama IA e redireciona para a vaga existente com toast de aviso.
 - Se nao houver URL duplicada, mas existir vaga com mesmo titulo e empresa normalizados, o cadastro continua normalmente e o painel mostra aviso de possivel duplicata.
 - No cadastro manual, quando nao ha `readyText` e `useAi` esta ativo, o painel tenta gerar `aiGeneratedText` automaticamente. Falha de IA nao bloqueia o cadastro.
@@ -55,12 +58,24 @@ Apesar do nome mencionar scraper, o projeto ainda nao implementa scraping. O est
 - Views e helpers nao devem acessar Prisma diretamente. Rotas podem chamar Prisma e services.
 - Feedback operacional do painel usa notificacoes temporarias renderizadas no HTML via query params `message` e `noticeType`. Nao existe tela de logs nem persistencia em banco para essas notificacoes.
 - A deduplicacao fica em `src/services/jobDeduplication.ts` para reuso futuro por providers. Nao ha unique constraint nem migration nesta etapa.
+- A listagem de vagas possui a acao `Coletar vagas de teste`, que chama `POST /admin/jobs/collect` e executa `runJobProviders()`.
+
+## Providers de coleta
+
+- O contrato fica em `src/providers/types.ts`.
+- A normalizacao fica em `src/providers/normalizeCollectedJob.ts`.
+- Providers ativos ficam em `src/providers/providerRegistry.ts`.
+- O provider atual e `src/providers/mockJobs.provider.ts`.
+- O runner central fica em `src/providers/providerRunner.ts`.
+- O runner percorre os providers ativos, normaliza vagas, reaproveita `checkJobDuplicate`, ignora duplicatas fortes por URL e cria as demais como `DRAFT`.
+- Possiveis duplicatas por titulo + empresa sao contabilizadas, mas nao bloqueiam criacao.
+- Nao ha scraping real, Cheerio, Playwright, LinkedIn, Gupy, Solides ou fonte externa nesta etapa.
 
 ## Proximos passos recomendados
 
 - Manter o painel simples e server-rendered em Express ate haver necessidade real de frontend separado.
-- Implementar providers apenas depois de definir contrato e estrategia.
-- Comecar por uma fonte simples e publica.
+- Evoluir providers a partir da base mock atual.
+- Comecar provider real por uma fonte simples e publica.
 - Salvar coletas automaticas como `DRAFT`.
 - Reutilizar `jobDeduplication` nos providers antes de criar vagas automaticamente.
 - Adicionar autenticacao simples antes de expor o painel fora de ambiente local/confiavel.

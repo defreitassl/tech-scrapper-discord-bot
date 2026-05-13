@@ -2,7 +2,7 @@
 
 Bot de Discord em Node.js + TypeScript para enviar vagas de emprego para iniciantes em tecnologia em um canal especifico.
 
-Nesta etapa, o projeto conecta o bot no Discord, possui banco com Prisma e PostgreSQL, inclui um painel web simples para cadastrar, gerenciar e publicar vagas pendentes manualmente, e pode gerar mensagens com IA usando Google AI Studio.
+Nesta etapa, o projeto conecta o bot no Discord, possui banco com Prisma e PostgreSQL, inclui um painel web simples para cadastrar, gerenciar e publicar vagas pendentes manualmente, pode gerar mensagens com IA usando Google AI Studio e possui uma base inicial de providers com coleta mock/de teste.
 
 ## Requisitos
 
@@ -115,6 +115,14 @@ Para enviar uma vaga especifica, acesse os detalhes e use `Enviar esta vaga agor
 
 Quando `readyText` estiver preenchido, ele tem prioridade. Se nao houver `readyText`, o bot reutiliza `aiGeneratedText` quando existir. Se a vaga estiver com `useAi` habilitado e ainda nao tiver texto gerado, o bot gera a mensagem com Google AI Studio, salva em `aiGeneratedText` e envia. Se a IA falhar, o template padrao e usado para nao bloquear o envio.
 
+### Coleta de teste/mock
+
+A listagem de vagas possui o botao `Coletar vagas de teste`. Ele executa a base inicial de providers em `src/providers/` usando apenas um provider mock.
+
+Essa coleta cria vagas fake como `DRAFT`, exibidas no painel como `Rascunho`. Ela nao chama Gemini/IA, nao marca vagas como `PENDING` e nao envia nada ao Discord.
+
+Ao clicar novamente, vagas com a mesma URL normalizada sao ignoradas como duplicatas fortes.
+
 ## Envio agendado
 
 O envio agendado e configurado pelo painel admin, nao por `.env`.
@@ -173,5 +181,6 @@ npm run admin
 - Model `JobPost` para armazenar vagas
 - Model `SchedulerSettings` para configuracao de envio agendado
 - Painel admin simples para cadastrar, listar, visualizar e editar vagas
+- Base inicial de providers com coleta mock/de teste
 
-Ainda nao ha scraping ou autenticacao.
+Ainda nao ha scraping real, coleta de fontes externas ou autenticacao.

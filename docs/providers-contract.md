@@ -1,6 +1,6 @@
 # Contrato de Providers
 
-Este documento propoe um contrato inicial para futuras fontes de coleta de vagas. Nao ha implementacao de providers ainda.
+Este documento define o contrato inicial para fontes de coleta de vagas. A implementacao atual possui apenas um provider mock/de teste em `src/providers/mockJobs.provider.ts`, sem scraping real e sem acesso a sites externos.
 
 ## Interface sugerida
 
@@ -12,6 +12,8 @@ export interface JobSourceProvider {
 ```
 
 O provider deve ser pequeno, testavel e responsavel por uma unica fonte ou familia de fontes.
+
+Providers ativos devem ser registrados em `src/providers/providerRegistry.ts`. O runner central fica em `src/providers/providerRunner.ts`.
 
 ## Tipo sugerido
 
@@ -46,6 +48,16 @@ Normalizacao sugerida:
 - evitar transformar dados de forma destrutiva;
 - inferir campos apenas quando houver confianca clara.
 
+A normalizacao atual fica em `src/providers/normalizeCollectedJob.ts`.
+
+Ela:
+
+- remove espacos duplicados de campos estruturados;
+- transforma strings vazias em `null`;
+- preserva `rawText` quando ele existe;
+- garante `source`, usando o nome do provider como fallback;
+- nao chama IA e nao tenta enriquecer dados ausentes.
+
 ## Deduplicacao
 
 Deduplicacao deve evitar publicar a mesma vaga mais de uma vez.
@@ -63,6 +75,11 @@ No estado atual, a duplicata forte usa URL normalizada com trim e remocao de bar
 
 No inicio, a deduplicacao deve ser conservadora. Em caso de duvida, criar como `DRAFT` para revisao em vez de descartar automaticamente. Nao ha constraint unica no banco nesta etapa.
 
+O runner atual aplica exatamente essa regra:
+
+- URL duplicada bloqueia a criacao e incrementa `ignoredDuplicates`;
+- titulo + empresa iguais incrementam `possibleDuplicates`, mas a vaga ainda e criada como `DRAFT`.
+
 ## Status sugerido apos coleta
 
 Vagas coletadas automaticamente devem entrar como `DRAFT`.
@@ -75,3 +92,12 @@ Motivos:
 - mantem controle editorial do canal.
 
 Somente apos revisao a vaga deve ser marcada como `PENDING`.
+
+Na implementacao atual, `runJobProviders()` cria vagas coletadas com:
+
+- `status = DRAFT`;
+- `useAi = false`;
+- sem `readyText`;
+- sem `aiGeneratedText`.
+
+Isso garante que a coleta automatica nao dispare Gemini/IA nem publique vagas no Discord.

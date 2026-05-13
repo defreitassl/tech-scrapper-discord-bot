@@ -16,6 +16,7 @@
 - `src/admin/routes/schedule.routes.ts`: rotas de configuracao do envio agendado.
 - `src/admin/views/`: renderizacao server-side do painel. `layout.ts` contem o layout base, `styles.ts` contem o CSS inline, `components.ts` contem componentes HTML reutilizaveis, `jobs.views.ts` contem telas de vagas e `schedule.views.ts` contem a tela de agendamento.
 - `src/admin/helpers/`: helpers puros do painel. `forms.ts` concentra parse e normalizacao de formularios, `validators.ts` concentra validacoes de formulario/status, `status.ts` concentra labels de status, `formatters.ts` concentra formatacao visual simples e `notifications.ts` concentra notificacoes temporarias via query params.
+- `src/providers/`: base inicial de providers de coleta. Inclui contrato (`types.ts`), normalizacao (`normalizeCollectedJob.ts`), registry de providers ativos (`providerRegistry.ts`), provider mock (`mockJobs.provider.ts`) e runner (`providerRunner.ts`).
 - `src/services/publishPendingJobs.ts`: fluxo de publicacao de vagas, incluindo envio em lote de vagas `PENDING` e envio de uma unica vaga.
 - `src/services/jobDeduplication.ts`: primeira camada reutilizavel de deduplicacao de vagas. Bloqueia duplicata forte por URL normalizada e sinaliza possivel duplicata por titulo + empresa normalizados.
 - `src/services/schedulerSettings.ts`: leitura, criacao padrao, validacao e atualizacao das configuracoes de envio agendado.
@@ -52,6 +53,25 @@
 16. Em caso de erro, a vaga e marcada como `ERROR`.
 
 O envio individual nao reenvia vagas `SENT` e nao publica vagas `ARCHIVED`.
+
+## Fluxo de coleta de teste/providers
+
+O projeto possui uma base inicial de providers em `src/providers/`, sem scraping real nesta etapa.
+
+O fluxo atual e acionado manualmente no painel pela rota `POST /admin/jobs/collect`, exibida na listagem como `Coletar vagas de teste`.
+
+1. O admin aciona a coleta de teste na listagem de vagas.
+2. `runJobProviders` percorre os providers registrados em `providerRegistry`.
+3. Cada provider executa `collect()` e retorna `CollectedJob[]`.
+4. Cada vaga coletada passa por `normalizeCollectedJob`, que remove espacos duplicados em campos estruturados, transforma strings vazias em `null`, preserva `rawText` quando existir e garante `source`.
+5. Antes de criar no banco, o runner chama `checkJobDuplicate` em `src/services/jobDeduplication.ts`.
+6. Duplicata forte por URL normalizada bloqueia a criacao.
+7. Possivel duplicata por titulo + empresa e apenas contabilizada; a vaga ainda e criada como `DRAFT` para revisao humana.
+8. Vagas criadas automaticamente entram sempre como `DRAFT`, com `useAi = false`.
+9. A coleta nao chama Gemini/IA, nao marca vagas como `PENDING` e nao envia nada ao Discord.
+10. O painel redireciona de volta para `/admin/jobs` com um toast resumindo novas vagas e duplicatas por URL ignoradas.
+
+O provider ativo nesta etapa e apenas `mockJobsProvider`, que retorna vagas fake para validar arquitetura e fluxo operacional. Nao ha provider para LinkedIn, Gupy, Solides ou qualquer fonte real.
 
 ## Fluxo de publicacao agendada
 

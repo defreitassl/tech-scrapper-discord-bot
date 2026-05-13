@@ -19,15 +19,16 @@ O projeto resolve parte desse problema centralizando cadastro, organizacao, revi
 3. Se a IA falhar, a vaga continua pronta para envio e o preview usa o template padrao.
 4. Um administrador revisa os detalhes e o preview da mensagem.
 5. O admin pode enviar a vaga especifica pela pagina de detalhes, enviar vagas `PENDING` em lote ou deixar para o envio agendado.
-6. O envio manual em lote busca ate 5 vagas `PENDING`.
-7. Opcionalmente, o envio agendado configurado no painel tambem pode publicar vagas `PENDING`, respeitando o limite diario configurado. O admin escolhe de 1 a 10 vagas por dia e um horario para cada vaga; o timezone do sistema e `America/Sao_Paulo`.
-8. Para cada vaga, o sistema resolve a mensagem usando esta prioridade:
+6. O admin tambem pode executar uma coleta de teste/mock, que cria vagas fake como `DRAFT` para validar a base de providers sem scraping real.
+7. O envio manual em lote busca ate 5 vagas `PENDING`.
+8. Opcionalmente, o envio agendado configurado no painel tambem pode publicar vagas `PENDING`, respeitando o limite diario configurado. O admin escolhe de 1 a 10 vagas por dia e um horario para cada vaga; o timezone do sistema e `America/Sao_Paulo`.
+9. Para cada vaga, o sistema resolve a mensagem usando esta prioridade:
    - `readyText`, quando preenchido.
    - `aiGeneratedText`, quando ja existe e e considerado valido.
    - IA, quando `useAi` esta habilitado.
    - template padrao, quando nao ha texto pronto ou a IA falha.
-9. A mensagem e enviada ao canal configurado no Discord.
-10. A vaga enviada e marcada como `SENT`; falhas viram `ERROR`.
+10. A mensagem e enviada ao canal configurado no Discord.
+11. A vaga enviada e marcada como `SENT`; falhas viram `ERROR`.
 
 ## Escopo atual
 
@@ -38,14 +39,15 @@ O projeto resolve parte desse problema centralizando cadastro, organizacao, revi
 - Envio manual de uma vaga especifica pela pagina de detalhes.
 - Envio manual de vagas `PENDING` para Discord.
 - Envio agendado de vagas `PENDING`, configurado no painel admin.
+- Base inicial de providers com coleta mock/de teste, salvando vagas como `DRAFT`.
 - Geracao opcional de mensagem com Google AI Studio/Gemini.
 - Persistencia em PostgreSQL via Prisma.
 - Template padrao para mensagem quando IA nao e usada ou falha.
 
 ## Fora de escopo por enquanto
 
-- Scraping automatico de vagas.
-- Agendamento de coletas.
+- Scraping real de vagas.
+- Coleta automatica agendada de providers.
 - Autenticacao no painel admin.
 - Fila de publicacao avancada.
 - Moderacao multiusuario.

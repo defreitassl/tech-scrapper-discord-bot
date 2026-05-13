@@ -18,7 +18,8 @@
 - Definir contrato de providers.
 - Definir estrategia de fontes.
 - Definir guidelines de scraping.
-- Planejar normalizacao e deduplicacao sem implementar scraping ainda.
+- Implementar a base inicial de providers com coleta mock/de teste.
+- Normalizar vagas coletadas e reaproveitar deduplicacao por URL antes de criar rascunhos.
 
 ## V1.2 primeiro provider real
 
