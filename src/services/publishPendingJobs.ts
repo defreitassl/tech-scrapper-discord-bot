@@ -15,13 +15,38 @@ export type PublishPendingJobsResult = {
   failed: number;
 };
 
-export async function publishPendingJobs(): Promise<PublishPendingJobsResult> {
-  logger.info('Buscando vagas pendentes para publicacao.', { limit: 5 });
+export type PublishSingleJobResult =
+  | {
+      status: 'sent';
+      message: string;
+    }
+  | {
+      status: 'skipped';
+      message: string;
+    }
+  | {
+      status: 'failed';
+      message: string;
+    };
+
+export async function publishPendingJobs(options: { limit?: number } = {}): Promise<PublishPendingJobsResult> {
+  const limit = options.limit ?? 5;
+
+  logger.info('Buscando vagas pendentes para publicacao.', { limit });
+
+  if (limit <= 0) {
+    logger.info('Publicacao de vagas pendentes ignorada porque o limite e zero.', { limit });
+    return {
+      total: 0,
+      sent: 0,
+      failed: 0,
+    };
+  }
 
   const jobs = await prisma.jobPost.findMany({
     where: { status: JobStatus.PENDING },
     orderBy: { createdAt: 'asc' },
-    take: 5,
+    take: limit,
   });
 
   const result: PublishPendingJobsResult = {
@@ -33,41 +58,14 @@ export async function publishPendingJobs(): Promise<PublishPendingJobsResult> {
   logger.info('Vagas pendentes encontradas.', { total: jobs.length });
 
   for (const job of jobs) {
-    try {
-      const message = await resolveJobMessage(job);
-      logger.info('Mensagem resolvida para vaga.', {
-        jobId: job.id,
-        title: job.title,
-        messageLength: message.length,
-        preview: truncate(message, 180),
-      });
+    const publishResult = await publishSingleJob(job);
 
-      await sendDiscordMessage(message);
-
-      await prisma.jobPost.update({
-        where: { id: job.id },
-        data: {
-          status: JobStatus.SENT,
-          sentAt: new Date(),
-        },
-      });
-
+    if (publishResult.status === 'sent') {
       result.sent += 1;
-      logger.info('Vaga enviada para o Discord e marcada como SENT.', {
-        jobId: job.id,
-        title: job.title,
-      });
-    } catch (error) {
-      await prisma.jobPost.update({
-        where: { id: job.id },
-        data: { status: JobStatus.ERROR },
-      });
+    }
 
+    if (publishResult.status === 'failed') {
       result.failed += 1;
-      logger.error('Erro ao enviar vaga para o Discord. Vaga marcada como ERROR.', error, {
-        jobId: job.id,
-        title: job.title,
-      });
     }
   }
 
@@ -75,7 +73,75 @@ export async function publishPendingJobs(): Promise<PublishPendingJobsResult> {
   return result;
 }
 
-async function resolveJobMessage(job: JobPost): Promise<string> {
+export async function publishSingleJob(job: JobPost): Promise<PublishSingleJobResult> {
+  if (job.status === JobStatus.SENT) {
+    return {
+      status: 'skipped',
+      message: 'Esta vaga ja foi enviada e nao sera reenviada.',
+    };
+  }
+
+  if (job.status === JobStatus.ARCHIVED) {
+    return {
+      status: 'skipped',
+      message: 'Esta vaga esta arquivada e nao pode ser enviada.',
+    };
+  }
+
+  if (!hasPublishableContent(job)) {
+    return {
+      status: 'skipped',
+      message: 'Esta vaga ainda nao tem mensagem pronta nem dados suficientes para gerar o template de envio.',
+    };
+  }
+
+  try {
+    const message = await resolveJobMessage(job);
+    logger.info('Mensagem resolvida para vaga.', {
+      jobId: job.id,
+      title: job.title,
+      messageLength: message.length,
+      preview: truncate(message, 180),
+    });
+
+    await sendDiscordMessage(message);
+
+    await prisma.jobPost.update({
+      where: { id: job.id },
+      data: {
+        status: JobStatus.SENT,
+        sentAt: new Date(),
+      },
+    });
+
+    logger.info('Vaga enviada para o Discord e marcada como SENT.', {
+      jobId: job.id,
+      title: job.title,
+    });
+
+    return {
+      status: 'sent',
+      message: 'Vaga enviada para o Discord.',
+    };
+  } catch (error) {
+    await prisma.jobPost.update({
+      where: { id: job.id },
+      data: { status: JobStatus.ERROR },
+    });
+
+    logger.error('Erro ao enviar vaga para o Discord. Vaga marcada como ERROR.', error, {
+      jobId: job.id,
+      title: job.title,
+    });
+
+    return {
+      status: 'failed',
+      message: 'Nao foi possivel enviar esta vaga. Ela foi marcada como erro.',
+    };
+  }
+}
+
+export async function resolveJobMessage(job: JobPost): Promise<string> {
   const readyText = job.readyText?.trim();
 
   if (readyText) {
@@ -125,7 +191,22 @@ async function resolveJobMessage(job: JobPost): Promise<string> {
   }
 }
 
-function isUsableGeneratedMessage(message: string): boolean {
+function hasPublishableContent(job: JobPost): boolean {
+  const aiGeneratedText = job.aiGeneratedText?.trim();
+
+  return Boolean(
+    job.readyText?.trim() ||
+      (aiGeneratedText && isUsableGeneratedMessage(aiGeneratedText)) ||
+      job.title?.trim() ||
+      job.company?.trim() ||
+      job.location?.trim() ||
+      job.shortDescription?.trim() ||
+      job.rawText?.trim() ||
+      job.url?.trim(),
+  );
+}
+
+export function isUsableGeneratedMessage(message: string): boolean {
   if (message.length > MAX_GENERATED_MESSAGE_LENGTH) {
     return false;
   }

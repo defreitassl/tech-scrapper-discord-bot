@@ -100,11 +100,62 @@ http://localhost:3000/admin/jobs
 ```
 
 Para cadastrar uma vaga, clique em `Nova vaga`, preencha pelo menos o titulo ou o texto bruto e salve. O cadastro tambem aceita stacks, faixa salarial e uma descricao breve da vaga.
-Para marcar uma vaga como `PENDING`, ela precisa ter texto pronto, IA habilitada ou URL preenchida.
+
+Novas vagas cadastradas manualmente entram como `PENDING` por padrao, exibidas no painel como `Pronta para envio`. Quando `useAi` esta marcado e nao ha `readyText`, o painel tenta gerar `aiGeneratedText` automaticamente com Google AI Studio/Gemini ao salvar. Se a IA falhar, a vaga continua salva como pronta para envio e o preview usa o template padrao.
+
+Na pagina de detalhes, o painel mostra um preview da mensagem que seria enviada ao Discord. Esse preview usa `readyText`, depois `aiGeneratedText` valido e, se nenhum deles existir, o template padrao.
+
+Tambem e possivel usar a acao `Regenerar mensagem com IA` nos detalhes da vaga. Essa acao chama o Google AI Studio, salva o resultado em `aiGeneratedText` e volta para a pagina de detalhes. Ela nao envia a vaga ao Discord.
+
+Para vagas antigas ou rascunhos, a acao `Aprovar para envio` continua disponivel. Internamente o status continua sendo `PENDING`, mas no painel ele aparece como `Pronta para envio`.
 
 Para enviar vagas pendentes ao Discord, use o botao `Enviar vagas pendentes` na listagem. O painel busca ate 5 vagas com status `PENDING`, envia no canal configurado em `DISCORD_CHANNEL_ID` e atualiza cada vaga enviada para `SENT`.
 
+Para enviar uma vaga especifica, acesse os detalhes e use `Enviar esta vaga agora`. Vagas ja enviadas nao sao reenviadas e vagas arquivadas nao sao publicadas.
+
 Quando `readyText` estiver preenchido, ele tem prioridade. Se nao houver `readyText`, o bot reutiliza `aiGeneratedText` quando existir. Se a vaga estiver com `useAi` habilitado e ainda nao tiver texto gerado, o bot gera a mensagem com Google AI Studio, salva em `aiGeneratedText` e envia. Se a IA falhar, o template padrao e usado para nao bloquear o envio.
+
+## Envio agendado
+
+O envio agendado e configurado pelo painel admin, nao por `.env`.
+
+Acesse:
+
+```text
+http://localhost:3000/admin/settings/schedule
+```
+
+Nessa tela e possivel definir:
+
+- se o agendamento esta ativo;
+- quantas vagas podem ser enviadas por dia pelo agendamento;
+- o timezone;
+- os horarios de envio, um por linha, no formato `HH:mm`.
+
+A mesma tela tambem mostra um resumo operacional com:
+
+- agendamento ativo ou inativo;
+- limite diario configurado;
+- vagas enviadas hoje;
+- quanto ainda pode ser enviado no dia pelo agendamento;
+- timezone e horarios configurados;
+- proximas vagas `PENDING` na fila de envio.
+
+Exemplo:
+
+```text
+10:00
+15:00
+19:30
+```
+
+O agendamento publica somente vagas com status `PENDING`, reutilizando o mesmo fluxo de `publishPendingJobs`. O limite diario considera vagas ja enviadas no dia pelo campo `sentAt`, incluindo envios manuais. O envio manual pelo painel continua disponivel e nao recebe bloqueio de limite diario nesta etapa.
+
+O processo do painel admin precisa estar rodando para que os horarios configurados sejam executados:
+
+```bash
+npm run admin
+```
 
 ## Escopo atual
 
@@ -112,9 +163,11 @@ Quando `readyText` estiver preenchido, ele tem prioridade. Se nao houver `readyT
 - Leitura de variaveis de ambiente
 - Envio de mensagem de teste
 - Envio manual de vagas `PENDING` para Discord pelo painel
+- Envio agendado de vagas `PENDING` configurado pelo painel
 - Geracao opcional de mensagens com Google AI Studio
 - Schema inicial do Prisma com PostgreSQL
 - Model `JobPost` para armazenar vagas
+- Model `SchedulerSettings` para configuracao de envio agendado
 - Painel admin simples para cadastrar, listar, visualizar e editar vagas
 
-Ainda nao ha scraping, autenticacao ou agendamento.
+Ainda nao ha scraping ou autenticacao.

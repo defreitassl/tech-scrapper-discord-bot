@@ -39,3 +39,13 @@ model JobPost {
   @@index([status])
   @@index([sentAt])
 }
+
+model SchedulerSettings {
+  id         String   @id @default("default")
+  enabled    Boolean  @default(false)
+  dailyLimit Int      @default(5)
+  timezone   String   @default("America/Sao_Paulo")
+  sendTimes  String[]
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}

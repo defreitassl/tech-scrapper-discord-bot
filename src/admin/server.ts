@@ -1,13 +1,34 @@
 import 'dotenv/config';
 import express from 'express';
-import { JobPost, JobStatus } from '@prisma/client';
+import { JobPost, JobStatus, SchedulerSettings } from '@prisma/client';
 import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
-import { publishPendingJobs } from '../services/publishPendingJobs';
+import { generateJobMessage } from '../services/aiMessageGenerator';
+import { buildDefaultJobMessage } from '../services/jobMessage';
+import { isUsableGeneratedMessage, publishPendingJobs, publishSingleJob } from '../services/publishPendingJobs';
+import { reloadScheduledPublisher, startScheduledPublisher } from '../services/scheduledPublisher';
+import {
+  SchedulerDailyUsage,
+  getSchedulerDailyUsage,
+  getUpcomingPendingJobs,
+} from '../services/schedulerOperations';
+import {
+  getSchedulerSettings,
+  parseSendTimes,
+  updateSchedulerSettings,
+  validateSchedulerSettingsInput,
+} from '../services/schedulerSettings';
 
 const app = express();
 const port = Number(process.env.ADMIN_PORT ?? 3000);
 const statuses = Object.values(JobStatus);
+const statusLabels: Record<JobStatus, string> = {
+  [JobStatus.DRAFT]: 'Rascunho',
+  [JobStatus.PENDING]: 'Pronta para envio',
+  [JobStatus.SENT]: 'Enviada',
+  [JobStatus.ERROR]: 'Erro',
+  [JobStatus.ARCHIVED]: 'Arquivada',
+};
 
 type JobFormData = {
   title: string | null;
@@ -24,6 +45,20 @@ type JobFormData = {
   readyText: string | null;
   useAi: boolean;
   status: JobStatus;
+};
+
+type JobApprovalData = Pick<
+  JobPost,
+  'title' | 'company' | 'location' | 'shortDescription' | 'rawText' | 'readyText' | 'aiGeneratedText' | 'useAi' | 'url'
+>;
+
+type ScheduleFormData = {
+  enabled: boolean;
+  dailyLimit: number;
+  timezone: string;
+  sendTimes: string[];
+  sendTimesInput: string;
+  sendTimesError: string | null;
 };
 
 app.use(express.urlencoded({ extended: false }));
@@ -46,6 +81,53 @@ app.get('/', (_request, response) => {
   response.redirect('/admin/jobs');
 });
 
+app.get('/admin/settings/schedule', async (request, response) => {
+  const settings = await getSchedulerSettings();
+  const [dailyUsage, pendingJobs] = await Promise.all([
+    getSchedulerDailyUsage(settings),
+    getUpcomingPendingJobs(5),
+  ]);
+
+  response.send(
+    renderScheduleSettingsForm({
+      settings,
+      dailyUsage,
+      pendingJobs,
+      notice: getQueryMessage(request.query.message),
+    }),
+  );
+});
+
+app.post('/admin/settings/schedule', async (request, response) => {
+  const form = parseScheduleSettingsForm(request.body);
+  const error = form.sendTimesError ?? validateSchedulerSettingsInput(form);
+
+  if (error) {
+    const settings = await getSchedulerSettings();
+    const [dailyUsage, pendingJobs] = await Promise.all([
+      getSchedulerDailyUsage(settings),
+      getUpcomingPendingJobs(5),
+    ]);
+
+    response.status(400).send(renderScheduleSettingsForm({ form, dailyUsage, pendingJobs, error }));
+    return;
+  }
+
+  await updateSchedulerSettings(form);
+  await reloadScheduledPublisher();
+
+  logger.info('Configuracao de agendamento atualizada pelo admin.', {
+    enabled: form.enabled,
+    dailyLimit: form.dailyLimit,
+    timezone: form.timezone,
+    sendTimes: form.sendTimes,
+  });
+
+  response.redirect(
+    `/admin/settings/schedule?message=${encodeURIComponent('Configuracoes de envio agendado salvas.')}`,
+  );
+});
+
 app.get('/admin/jobs', async (request, response) => {
   const jobs = await prisma.jobPost.findMany({
     orderBy: { createdAt: 'desc' },
@@ -60,14 +142,18 @@ app.get('/admin/jobs/new', (_request, response) => {
 
 app.post('/admin/jobs', async (request, response) => {
   const form = parseJobForm(request.body);
-  const error = validateJob(form);
+  const createData = {
+    ...form,
+    status: JobStatus.PENDING,
+  };
+  const error = validateJob(createData);
 
   if (error) {
-    response.status(400).send(renderJobForm({ title: 'Nova vaga', action: '/admin/jobs', form, error }));
+    response.status(400).send(renderJobForm({ title: 'Nova vaga', action: '/admin/jobs', form: createData, error }));
     return;
   }
 
-  const job = await prisma.jobPost.create({ data: form });
+  const job = await prisma.jobPost.create({ data: createData });
   logger.info('Vaga criada no admin.', {
     jobId: job.id,
     title: job.title,
@@ -75,7 +161,42 @@ app.post('/admin/jobs', async (request, response) => {
     useAi: job.useAi,
   });
 
-  response.redirect(`/admin/jobs/${job.id}`);
+  if (!job.readyText?.trim() && job.useAi) {
+    try {
+      const generatedMessage = await generateJobMessage(job);
+
+      await prisma.jobPost.update({
+        where: { id: job.id },
+        data: { aiGeneratedText: generatedMessage },
+      });
+
+      logger.info('Mensagem gerada automaticamente com IA no cadastro da vaga.', {
+        jobId: job.id,
+        messageLength: generatedMessage.length,
+      });
+
+      response.redirect(
+        `/admin/jobs/${job.id}?message=${encodeURIComponent('Vaga salva como pronta para envio. A mensagem com IA foi gerada automaticamente.')}`,
+      );
+      return;
+    } catch (error) {
+      logger.error('Erro ao gerar mensagem automaticamente no cadastro. Vaga mantida como PENDING.', error, {
+        jobId: job.id,
+        title: job.title,
+      });
+
+      response.redirect(
+        `/admin/jobs/${job.id}?message=${encodeURIComponent('Vaga salva como pronta para envio, mas nao foi possivel gerar a mensagem com IA agora. O preview usa o template padrao e voce pode regenerar depois.')}`,
+      );
+      return;
+    }
+  }
+
+  const message = job.readyText?.trim()
+    ? 'Vaga salva como pronta para envio. Como ha texto pronto, a IA nao foi chamada automaticamente.'
+    : 'Vaga salva como pronta para envio. A IA nao foi chamada porque a opcao de usar IA esta desmarcada.';
+
+  response.redirect(`/admin/jobs/${job.id}?message=${encodeURIComponent(message)}`);
 });
 
 app.post('/admin/jobs/publish-pending', async (_request, response) => {
@@ -98,7 +219,12 @@ app.get('/admin/jobs/:id', async (request, response) => {
     return;
   }
 
-  response.send(renderJobDetails(job));
+  response.send(
+    renderJobDetails(job, {
+      notice: getQueryMessage(request.query.message),
+      error: getQueryMessage(request.query.error),
+    }),
+  );
 });
 
 app.get('/admin/jobs/:id/edit', async (request, response) => {
@@ -119,7 +245,7 @@ app.post('/admin/jobs/:id', async (request, response) => {
   }
 
   const form = parseJobForm(request.body);
-  const error = validateJob(form);
+  const error = validateJob(form, job.aiGeneratedText);
 
   if (error) {
     response.status(400).send(
@@ -158,7 +284,7 @@ app.post('/admin/jobs/:id/pending', async (request, response) => {
   const error = validatePending(job);
 
   if (error) {
-    response.status(400).send(renderJobDetails(job, error));
+    response.status(400).send(renderJobDetails(job, { error }));
     return;
   }
 
@@ -166,12 +292,61 @@ app.post('/admin/jobs/:id/pending', async (request, response) => {
     where: { id: job.id },
     data: { status: JobStatus.PENDING },
   });
-  logger.info('Vaga marcada como PENDING no admin.', {
+  logger.info('Vaga aprovada para envio no admin.', {
     jobId: job.id,
     title: job.title,
   });
 
-  response.redirect('/admin/jobs');
+  response.redirect(`/admin/jobs/${job.id}?message=${encodeURIComponent('Vaga marcada como pronta para envio.')}`);
+});
+
+app.post('/admin/jobs/:id/generate-ai-message', async (request, response) => {
+  const job = await findJobOrRenderNotFound(request.params.id, response);
+
+  if (!job) {
+    return;
+  }
+
+  try {
+    logger.info('Geracao manual de mensagem com IA iniciada pelo admin.', {
+      jobId: job.id,
+      title: job.title,
+    });
+    const generatedMessage = await generateJobMessage(job);
+
+    await prisma.jobPost.update({
+      where: { id: job.id },
+      data: { aiGeneratedText: generatedMessage },
+    });
+
+    logger.info('Mensagem gerada manualmente com IA e salva.', {
+      jobId: job.id,
+      messageLength: generatedMessage.length,
+    });
+
+    response.redirect(`/admin/jobs/${job.id}?message=${encodeURIComponent('Mensagem com IA gerada e salva.')}`);
+  } catch (error) {
+    logger.error('Erro ao gerar mensagem com IA pelo admin.', error, {
+      jobId: job.id,
+      title: job.title,
+    });
+    response.redirect(
+      `/admin/jobs/${job.id}?error=${encodeURIComponent('Nao foi possivel gerar a mensagem com IA. Verifique os dados da vaga e tente novamente.')}`,
+    );
+  }
+});
+
+app.post('/admin/jobs/:id/publish', async (request, response) => {
+  const job = await findJobOrRenderNotFound(request.params.id, response);
+
+  if (!job) {
+    return;
+  }
+
+  const result = await publishSingleJob(job);
+  const queryKey = result.status === 'failed' ? 'error' : 'message';
+
+  response.redirect(`/admin/jobs/${job.id}?${queryKey}=${encodeURIComponent(result.message)}`);
 });
 
 app.post('/admin/jobs/:id/archive', async (request, response) => {
@@ -195,6 +370,9 @@ app.post('/admin/jobs/:id/archive', async (request, response) => {
 
 app.listen(port, () => {
   logger.info('Painel admin iniciado.', { url: `http://localhost:${port}/admin/jobs` });
+  startScheduledPublisher().catch((error) => {
+    logger.error('Erro ao iniciar agendamento de envio.', error);
+  });
 });
 
 function parseJobForm(body: unknown): JobFormData {
@@ -216,24 +394,44 @@ function parseJobForm(body: unknown): JobFormData {
   };
 }
 
-function validateJob(form: JobFormData): string | null {
+function parseScheduleSettingsForm(body: unknown): ScheduleFormData {
+  const sendTimesInput = fieldValue(body, 'sendTimes');
+  const parsedSendTimes = parseSendTimes(sendTimesInput);
+
+  return {
+    enabled: fieldValue(body, 'enabled') === 'on',
+    dailyLimit: Number(fieldValue(body, 'dailyLimit')),
+    timezone: fieldValue(body, 'timezone').trim() || 'America/Sao_Paulo',
+    sendTimes: parsedSendTimes.sendTimes,
+    sendTimesInput,
+    sendTimesError: parsedSendTimes.error,
+  };
+}
+
+function validateJob(form: JobFormData, existingAiGeneratedText: string | null = null): string | null {
   if (!form.title && !form.rawText) {
     return 'Informe pelo menos o titulo ou o texto bruto da vaga.';
   }
 
   if (form.status === JobStatus.PENDING) {
-    return validatePending(form);
+    return validatePending({ ...form, aiGeneratedText: existingAiGeneratedText });
   }
 
   return null;
 }
 
-function validatePending(job: Pick<JobPost, 'readyText' | 'useAi' | 'url'>): string | null {
-  if (job.readyText || job.useAi || job.url) {
+function validatePending(job: JobApprovalData): string | null {
+  if (job.readyText || job.aiGeneratedText || hasTemplateData(job)) {
     return null;
   }
 
-  return 'Para marcar como PENDING, informe readyText, habilite useAi ou preencha a URL.';
+  return 'Para deixar pronta para envio, informe dados da vaga, texto pronto, mensagem gerada por IA ou URL.';
+}
+
+function hasTemplateData(
+  job: Pick<JobApprovalData, 'title' | 'company' | 'location' | 'shortDescription' | 'rawText' | 'url'>,
+): boolean {
+  return Boolean(job.title || job.company || job.location || job.shortDescription || job.rawText || job.url);
 }
 
 async function findJobOrRenderNotFound(id: string, response: express.Response): Promise<JobPost | null> {
@@ -294,7 +492,7 @@ function renderJobsList(jobs: JobPost[], message?: string): string {
           <td><span class="date-cell">${job.sentAt ? formatDate(job.sentAt) : '-'}</span></td>
           <td class="actions">
             <a class="button secondary" href="/admin/jobs/${escapeHtml(job.id)}/edit">Editar</a>
-            ${renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/pending`, 'Marcar PENDING')}
+            ${renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/pending`, 'Aprovar para envio')}
             ${renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/archive`, 'Arquivar')}
           </td>
         </tr>
@@ -346,7 +544,134 @@ function renderJobsList(jobs: JobPost[], message?: string): string {
   return renderLayout('Vagas', content);
 }
 
-function renderJobDetails(job: JobPost, error?: string): string {
+function renderScheduleSettingsForm(options: {
+  settings?: SchedulerSettings;
+  form?: ScheduleFormData;
+  dailyUsage?: SchedulerDailyUsage;
+  pendingJobs?: JobPost[];
+  notice?: string;
+  error?: string;
+}): string {
+  const form = options.form ?? scheduleFormFromSettings(options.settings);
+  const sentToday = options.dailyUsage?.sentToday ?? 0;
+  const remainingToday = options.dailyUsage?.remainingToday ?? Math.max(form.dailyLimit - sentToday, 0);
+  const content = `
+    <div class="page-heading">
+      <div>
+        <p class="eyebrow">Configuracoes</p>
+        <h1>Envio agendado</h1>
+        <p class="subtitle">Defina o envio automatico e acompanhe o limite diario, os horarios configurados e a fila de vagas prontas.</p>
+      </div>
+      <div class="actions">
+        <a class="button secondary" href="/admin/jobs">Voltar para vagas</a>
+      </div>
+    </div>
+    ${options.notice ? `<p class="notice">${escapeHtml(options.notice)}</p>` : ''}
+    ${options.error ? `<p class="error">${escapeHtml(options.error)}</p>` : ''}
+    <section class="card settings-summary">
+      <div class="section-heading">
+        <h2>Resumo operacional</h2>
+        ${renderSchedulerStateBadge(form.enabled)}
+      </div>
+      <dl>
+        <div class="detail-item"><dt>Agendamento</dt><dd>${form.enabled ? 'Ativo' : 'Inativo'}</dd></div>
+        <div class="detail-item"><dt>Limite diario</dt><dd>${escapeHtml(String(form.dailyLimit))}</dd></div>
+        <div class="detail-item"><dt>Enviadas hoje</dt><dd>${escapeHtml(String(sentToday))}</dd></div>
+        <div class="detail-item"><dt>Restante hoje</dt><dd>${escapeHtml(String(remainingToday))}</dd></div>
+        <div class="detail-item"><dt>Timezone</dt><dd>${escapeHtml(form.timezone)}</dd></div>
+        <div class="detail-item"><dt>Horarios</dt><dd>${escapeHtml(formatSendTimesForDisplay(form.sendTimes))}</dd></div>
+        <div class="detail-item"><dt>Processo</dt><dd>O painel admin precisa estar rodando para o agendamento funcionar.</dd></div>
+        <div class="detail-item"><dt>Escopo do limite</dt><dd>O limite diario vale apenas para o envio agendado. O envio manual continua disponivel e nao e bloqueado por esse limite.</dd></div>
+      </dl>
+    </section>
+    ${renderPendingJobsQueue(options.pendingJobs ?? [])}
+    <form method="post" action="/admin/settings/schedule" class="job-form settings-form">
+      ${renderFormSection(
+        'Regras de envio',
+        'O agendamento envia somente vagas com status Pronta para envio, respeitando o limite diario configurado. Envios manuais pela listagem nao sao bloqueados por esse limite.',
+        [
+          `<label class="checkbox wide">
+            <input type="checkbox" name="enabled" ${form.enabled ? 'checked' : ''}>
+            <span>
+              <strong>Ativar envio agendado</strong>
+              <small>Quando desativado, nenhum horario automatico publica vagas.</small>
+            </span>
+          </label>`,
+          renderInput('dailyLimit', 'Vagas por dia', String(form.dailyLimit), 'Limite diario aplicado apenas ao envio agendado.'),
+          renderInput('timezone', 'Timezone', form.timezone, 'Ex.: America/Sao_Paulo'),
+          renderTextarea(
+            'sendTimes',
+            'Horarios de envio',
+            form.sendTimesInput,
+            6,
+            'Informe um horario por linha no formato HH:mm. Linhas vazias sao ignoradas, duplicados sao removidos e os horarios sao ordenados.',
+          ),
+        ].join(''),
+      )}
+      <div class="form-actions">
+        <button type="submit">Salvar configuracoes</button>
+      </div>
+    </form>
+  `;
+
+  return renderLayout('Envio agendado', content);
+}
+
+function renderPendingJobsQueue(jobs: JobPost[]): string {
+  const rows = jobs
+    .map(
+      (job) => `
+        <tr>
+          <td>
+            <a class="job-title" href="/admin/jobs/${escapeHtml(job.id)}">${escapeHtml(job.title ?? 'Sem titulo')}</a>
+          </td>
+          <td>${escapeHtml(job.company ?? '-')}</td>
+          <td>${renderStatusBadge(job.status)}</td>
+          <td><span class="date-cell">${formatDate(job.createdAt)}</span></td>
+          <td><a class="button secondary" href="/admin/jobs/${escapeHtml(job.id)}">Detalhes</a></td>
+        </tr>
+      `,
+    )
+    .join('');
+
+  return `
+    <section class="card table-card schedule-queue">
+      <div class="section-heading">
+        <h2>Fila de envio</h2>
+        <span>Proximas vagas prontas</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Titulo</th>
+              <th>Empresa</th>
+              <th>Status</th>
+              <th>Criada em</th>
+              <th>Acoes</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows || '<tr><td colspan="5" class="empty">Nenhuma vaga pronta para envio no momento.</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  `;
+}
+
+function scheduleFormFromSettings(settings?: SchedulerSettings): ScheduleFormData {
+  return {
+    enabled: settings?.enabled ?? false,
+    dailyLimit: settings?.dailyLimit ?? 5,
+    timezone: settings?.timezone ?? 'America/Sao_Paulo',
+    sendTimes: settings?.sendTimes ?? [],
+    sendTimesInput: (settings?.sendTimes ?? []).join('\n'),
+    sendTimesError: null,
+  };
+}
+
+function renderJobDetails(job: JobPost, feedback: { notice?: string; error?: string } = {}): string {
   const fields: Array<[string, string | null]> = [
     ['Titulo', job.title],
     ['Empresa', job.company],
@@ -358,7 +683,7 @@ function renderJobDetails(job: JobPost, error?: string): string {
     ['URL', job.url],
     ['Fonte', job.source],
     ['Usar IA', job.useAi ? 'Sim' : 'Nao'],
-    ['Status', job.status],
+    ['Status', getStatusLabel(job.status)],
     ['Criada em', formatDate(job.createdAt)],
     ['Atualizada em', formatDate(job.updatedAt)],
     ['Enviada em', job.sentAt ? formatDate(job.sentAt) : null],
@@ -366,7 +691,7 @@ function renderJobDetails(job: JobPost, error?: string): string {
 
   const details = fields
     .map(([label, value]) => {
-      const renderedValue = label === 'Status' && value ? renderStatusBadge(value as JobStatus) : escapeHtml(value ?? '-');
+      const renderedValue = label === 'Status' ? renderStatusBadge(job.status) : escapeHtml(value ?? '-');
       return `<div class="detail-item"><dt>${escapeHtml(label)}</dt><dd>${renderedValue}</dd></div>`;
     })
     .join('');
@@ -383,7 +708,8 @@ function renderJobDetails(job: JobPost, error?: string): string {
         <a class="button" href="/admin/jobs/${escapeHtml(job.id)}/edit">Editar</a>
       </div>
     </div>
-    ${error ? `<p class="error">${escapeHtml(error)}</p>` : ''}
+    ${feedback.notice ? `<p class="notice">${escapeHtml(feedback.notice)}</p>` : ''}
+    ${feedback.error ? `<p class="error">${escapeHtml(feedback.error)}</p>` : ''}
     <section class="card">
       <div class="section-heading">
         <h2>Resumo</h2>
@@ -391,6 +717,7 @@ function renderJobDetails(job: JobPost, error?: string): string {
       </div>
       <dl>${details}</dl>
     </section>
+    ${renderMessagePreview(job)}
     <div class="text-grid">
       ${renderLongText('Sobre a vaga', job.shortDescription)}
       ${renderLongText('Texto bruto', job.rawText)}
@@ -398,7 +725,9 @@ function renderJobDetails(job: JobPost, error?: string): string {
       ${renderLongText('Texto gerado por IA', job.aiGeneratedText)}
     </div>
     <div class="actions footer-actions">
-      ${renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/pending`, 'Marcar PENDING')}
+      ${renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/publish`, 'Enviar esta vaga agora', 'primary-action')}
+      ${renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/generate-ai-message`, 'Regenerar mensagem com IA')}
+      ${renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/pending`, 'Aprovar para envio')}
       ${renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/archive`, 'Arquivar')}
     </div>
   `;
@@ -414,12 +743,13 @@ function renderJobForm(options: {
   error?: string;
 }): string {
   const form = options.form ?? formFromJob(options.job);
+  const isNewJob = !options.job;
   const content = `
     <div class="page-heading">
       <div>
         <p class="eyebrow">Cadastro de vaga</p>
         <h1>${escapeHtml(options.title)}</h1>
-        <p class="subtitle">Preencha os dados principais e escolha como a vaga sera preparada para envio.</p>
+        <p class="subtitle">${isNewJob ? 'Preencha os dados principais. Vagas novas entram prontas para envio e ficam na fila do agendamento.' : 'Atualize os dados principais e escolha como a vaga sera preparada para envio.'}</p>
       </div>
       <div class="actions">
         <a class="button secondary" href="/admin/jobs">Voltar</a>
@@ -451,7 +781,9 @@ function renderJobForm(options: {
       )}
       ${renderFormSection(
         'Textos e IA',
-        'Cole o texto original ou informe um texto pronto para publicacao.',
+        isNewJob
+          ? 'Cole o texto original. Ao salvar, o sistema tenta gerar a mensagem com IA automaticamente, exceto quando houver texto pronto.'
+          : 'Cole o texto original ou informe um texto pronto para publicacao.',
         [
           renderTextarea('rawText', 'Texto bruto', form.rawText, 8, 'Texto capturado da fonte original.'),
           renderTextarea('readyText', 'Texto pronto', form.readyText, 8, 'Mensagem final que pode ser enviada sem IA.'),
@@ -459,29 +791,31 @@ function renderJobForm(options: {
             <input type="checkbox" name="useAi" ${form.useAi ? 'checked' : ''}>
             <span>
               <strong>Usar IA para preparar o texto</strong>
-              <small>Quando marcado, o sistema pode gerar uma versao melhor formatada antes do envio.</small>
+              <small>${isNewJob ? 'Quando marcado, a mensagem sera gerada automaticamente ao salvar se nao houver texto pronto.' : 'Quando marcado, o sistema pode gerar uma versao melhor formatada antes do envio.'}</small>
             </span>
           </label>`,
         ].join(''),
       )}
       ${renderFormSection(
         'Status',
-        'Controle o ciclo da vaga sem alterar as regras de publicacao.',
+        isNewJob
+          ? 'Novas vagas manuais ficam como Pronta para envio e podem ser enviadas agora ou pelo agendamento.'
+          : 'Controle o ciclo da vaga sem alterar as regras de publicacao.',
         `<label>
           <span>Status</span>
           <select name="status">
             ${statuses
               .map(
                 (status) =>
-                  `<option value="${escapeHtml(status)}" ${status === form.status ? 'selected' : ''}>${escapeHtml(status)}</option>`,
+                  `<option value="${escapeHtml(status)}" ${status === form.status ? 'selected' : ''}>${escapeHtml(getStatusLabel(status))}</option>`,
               )
               .join('')}
           </select>
-          <small>PENDING exige texto pronto, IA habilitada ou URL preenchida.</small>
+          <small>Aprovacao manual segue disponivel para vagas antigas ou rascunhos.</small>
         </label>`,
       )}
       <div class="form-actions">
-        <button type="submit">Salvar</button>
+        <button type="submit">${isNewJob ? 'Salvar e preparar para envio' : 'Salvar'}</button>
       </div>
     </form>
   `;
@@ -504,11 +838,11 @@ function formFromJob(job?: JobPost): JobFormData {
     rawText: job?.rawText ?? null,
     readyText: job?.readyText ?? null,
     useAi: job?.useAi ?? true,
-    status: job?.status ?? JobStatus.DRAFT,
+    status: job?.status ?? JobStatus.PENDING,
   };
 }
 
-function renderInput(name: keyof JobFormData, label: string, value: string | null, help?: string): string {
+function renderInput(name: string, label: string, value: string | null, help?: string): string {
   return `
     <label>
       <span>${escapeHtml(label)}</span>
@@ -518,7 +852,7 @@ function renderInput(name: keyof JobFormData, label: string, value: string | nul
   `;
 }
 
-function renderTextarea(name: keyof JobFormData, label: string, value: string | null, rows = 7, help?: string): string {
+function renderTextarea(name: string, label: string, value: string | null, rows = 7, help?: string): string {
   return `
     <label class="wide">
       <span>${escapeHtml(label)}</span>
@@ -558,6 +892,55 @@ function renderLongText(title: string, value: string | null): string {
   `;
 }
 
+function renderMessagePreview(job: JobPost): string {
+  const preview = resolvePreviewMessage(job);
+
+  return `
+    <section class="card preview-card">
+      <div class="section-heading">
+        <div>
+          <h2>Preview da mensagem</h2>
+          <p>${escapeHtml(preview.description)}</p>
+        </div>
+        <span>${escapeHtml(preview.source)}</span>
+      </div>
+      <pre class="message-preview">${escapeHtml(preview.message)}</pre>
+    </section>
+  `;
+}
+
+function resolvePreviewMessage(job: JobPost): { message: string; source: string; description: string } {
+  const readyText = job.readyText?.trim();
+
+  if (readyText) {
+    return {
+      message: readyText,
+      source: 'Texto pronto',
+      description: 'Esta e a mensagem que sera enviada, pois readyText tem prioridade.',
+    };
+  }
+
+  const aiGeneratedText = job.aiGeneratedText?.trim();
+
+  if (aiGeneratedText && isUsableGeneratedMessage(aiGeneratedText)) {
+    return {
+      message: aiGeneratedText,
+      source: 'Texto gerado por IA',
+      description: 'Esta e a mensagem salva em aiGeneratedText e considerada valida.',
+    };
+  }
+
+  const description = aiGeneratedText
+    ? 'O texto gerado por IA salvo nao e considerado valido; o preview usa o template padrao.'
+    : 'Nenhum texto pronto ou texto de IA valido foi encontrado; o preview usa o template padrao.';
+
+  return {
+    message: buildDefaultJobMessage(job),
+    source: 'Template padrao',
+    description,
+  };
+}
+
 function renderPostButton(action: string, label: string, variant = 'secondary'): string {
   return `
     <form method="post" action="${action}">
@@ -567,7 +950,22 @@ function renderPostButton(action: string, label: string, variant = 'secondary'):
 }
 
 function renderStatusBadge(status: JobStatus): string {
-  return `<span class="status-badge status-${escapeHtml(status.toLowerCase())}">${escapeHtml(status)}</span>`;
+  return `<span class="status-badge status-${escapeHtml(status.toLowerCase())}">${escapeHtml(getStatusLabel(status))}</span>`;
+}
+
+function renderSchedulerStateBadge(enabled: boolean): string {
+  const label = enabled ? 'Ativo' : 'Inativo';
+  const className = enabled ? 'scheduler-active' : 'scheduler-inactive';
+
+  return `<span class="status-badge ${className}">${label}</span>`;
+}
+
+function getStatusLabel(status: JobStatus): string {
+  return statusLabels[status];
+}
+
+function formatSendTimesForDisplay(sendTimes: string[]): string {
+  return sendTimes.length ? sendTimes.join(', ') : 'Nenhum horario configurado';
 }
 
 function renderLayout(title: string, content: string): string {
@@ -820,6 +1218,12 @@ function renderLayout(title: string, content: string): string {
             text-decoration: none;
           }
 
+          .topbar nav {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+          }
+
           .page-heading {
             display: flex;
             align-items: center;
@@ -865,6 +1269,11 @@ function renderLayout(title: string, content: string): string {
           .table-card {
             padding: 0;
             overflow: hidden;
+          }
+
+          .settings-summary,
+          .schedule-queue {
+            margin-bottom: 18px;
           }
 
           .section-heading {
@@ -996,6 +1405,24 @@ function renderLayout(title: string, content: string): string {
             margin-top: 18px;
           }
 
+          .preview-card {
+            margin-top: 18px;
+            border-color: rgba(15, 118, 110, 0.28);
+            background: linear-gradient(180deg, #ffffff 0%, #f3fbfa 100%);
+          }
+
+          .preview-card .section-heading p {
+            margin: 6px 0 0;
+            color: var(--text-muted);
+            font-size: 13px;
+            line-height: 1.45;
+          }
+
+          .message-preview {
+            border-color: rgba(15, 118, 110, 0.22);
+            background: #ffffff;
+          }
+
           .text-card {
             min-width: 0;
           }
@@ -1052,6 +1479,18 @@ function renderLayout(title: string, content: string): string {
             color: #e2e8f0;
             border-color: #334155;
             background: #334155;
+          }
+
+          .scheduler-active {
+            color: #166534;
+            border-color: #bbf7d0;
+            background: #f0fdf4;
+          }
+
+          .scheduler-inactive {
+            color: #475569;
+            border-color: #cbd5e1;
+            background: #f1f5f9;
           }
 
           .error,
@@ -1138,7 +1577,10 @@ function renderLayout(title: string, content: string): string {
               <span class="brand-mark">PD</span>
               <span>Projeto Desenvolve Jobs</span>
             </div>
-            <a href="/admin/jobs">Vagas</a>
+            <nav>
+              <a href="/admin/jobs">Vagas</a>
+              <a href="/admin/settings/schedule">Configuracoes de envio</a>
+            </nav>
           </div>
         </header>
         <main>${content}</main>

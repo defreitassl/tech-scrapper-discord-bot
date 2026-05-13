@@ -17,9 +17,21 @@ Apesar do nome mencionar scraper, o projeto ainda nao implementa scraping. O est
 ## Regras de negocio atuais
 
 - Vagas sao armazenadas como `JobPost`.
-- O painel permite criar, listar, ver detalhes, editar, marcar como `PENDING` e arquivar.
-- Para marcar como `PENDING`, a vaga precisa ter `readyText`, `useAi` habilitado ou URL preenchida.
+- O painel permite criar, listar, ver detalhes, editar, gerar mensagem com IA, aprovar para envio e arquivar.
+- A interface chama `DRAFT` de `Rascunho`, `PENDING` de `Pronta para envio`, `SENT` de `Enviada`, `ERROR` de `Erro` e `ARCHIVED` de `Arquivada`. O enum do banco nao muda.
+- Novas vagas manuais entram como `PENDING` por padrao e `useAi` vem marcado por padrao no formulario.
+- No cadastro manual, quando nao ha `readyText` e `useAi` esta ativo, o painel tenta gerar `aiGeneratedText` automaticamente. Falha de IA nao bloqueia o cadastro.
+- Para aprovar para envio, a vaga precisa ter dados suficientes para template, `readyText`, `aiGeneratedText` valido ou URL preenchida.
+- A pagina de detalhes mostra preview da mensagem sem chamar IA automaticamente.
+- A acao manual `Regenerar mensagem com IA` chama Gemini, salva em `aiGeneratedText` e nao envia a vaga ao Discord.
+- A pagina de detalhes tem `Enviar esta vaga agora`, que reutiliza a mesma resolucao de mensagem do envio em lote, marca sucesso como `SENT` com `sentAt` e falha como `ERROR`.
+- O envio individual nao reenvia vagas `SENT` e nao publica vagas `ARCHIVED`.
 - O envio manual busca ate 5 vagas `PENDING` por vez.
+- O envio agendado e configurado em `/admin/settings/schedule` e salvo em `SchedulerSettings`, nao em `.env`.
+- A tela `/admin/settings/schedule` mostra resumo operacional do agendamento: ativo/inativo, limite diario, enviadas hoje, restante do dia, timezone, horarios e proximas vagas `PENDING`.
+- O scheduler roda junto com `npm run admin`, registra um cron por horario configurado e so envia vagas `PENDING`.
+- O limite diario do scheduler considera vagas `SENT` com `sentAt` no dia atual do timezone configurado. O envio manual continua existindo e nao e bloqueado por esse limite.
+- As consultas operacionais do agendamento ficam em `src/services/schedulerOperations.ts`; reutilize esse servico para evitar duplicar calculo de dia por timezone ou limite restante.
 - Ordem de resolucao da mensagem:
   1. `readyText`.
   2. `aiGeneratedText` valido.
@@ -37,6 +49,7 @@ Apesar do nome mencionar scraper, o projeto ainda nao implementa scraping. O est
 - Salvar coletas automaticas como `DRAFT`.
 - Adicionar deduplicacao conservadora antes de criar muitas vagas.
 - Adicionar autenticacao simples antes de expor o painel fora de ambiente local/confiavel.
+- Se mexer no agendamento, preserve o reaproveitamento de `publishPendingJobs` e evite duplicar a logica de envio.
 
 ## Decisoes importantes ja tomadas
 
@@ -47,4 +60,4 @@ Apesar do nome mencionar scraper, o projeto ainda nao implementa scraping. O est
 - Evitar login, captcha, paywalls e circunvencao de bloqueios.
 - Manter mensagens de Discord curtas, formatadas e uteis para alunos iniciantes.
 - Usar IA como apoio, nao como dependencia obrigatoria.
-
+- Configurar horarios e limite diario de envio pelo banco/painel, nao por `.env`.

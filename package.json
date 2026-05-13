@@ -21,7 +21,8 @@
     "@prisma/client": "^6.7.0",
     "discord.js": "^14.19.3",
     "dotenv": "^16.5.0",
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "node-cron": "^4.2.1"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
