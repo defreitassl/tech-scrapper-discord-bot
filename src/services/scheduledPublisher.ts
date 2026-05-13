@@ -2,7 +2,7 @@ import cron, { ScheduledTask } from 'node-cron';
 import { logger } from '../lib/logger';
 import { publishPendingJobs } from './publishPendingJobs';
 import { getSchedulerDailyUsage } from './schedulerOperations';
-import { getSchedulerSettings } from './schedulerSettings';
+import { countSendTimeSlots, getSchedulerSettings, normalizeSchedulerSettings } from './schedulerSettings';
 
 const runningTasks: ScheduledTask[] = [];
 
@@ -13,7 +13,7 @@ export async function startScheduledPublisher(): Promise<void> {
 export async function reloadScheduledPublisher(): Promise<void> {
   stopScheduledPublisher();
 
-  const settings = await getSchedulerSettings();
+  const settings = normalizeSchedulerSettings(await getSchedulerSettings());
 
   if (!settings.enabled) {
     logger.info('Agendamento de envio desativado.', { settingsId: settings.id });
@@ -25,7 +25,9 @@ export async function reloadScheduledPublisher(): Promise<void> {
     return;
   }
 
-  for (const sendTime of settings.sendTimes) {
+  const sendTimeSlots = countSendTimeSlots(settings.sendTimes);
+
+  for (const [sendTime, slotCount] of sendTimeSlots) {
     const expression = cronExpressionFromTime(sendTime);
     const task = cron.schedule(
       expression,
@@ -42,6 +44,7 @@ export async function reloadScheduledPublisher(): Promise<void> {
     runningTasks.push(task);
     logger.info('Horario de envio agendado.', {
       sendTime,
+      slotCount,
       timezone: settings.timezone,
       expression,
     });
@@ -56,14 +59,16 @@ export function stopScheduledPublisher(): void {
 }
 
 async function runScheduledPublish(sendTime: string): Promise<void> {
-  const settings = await getSchedulerSettings();
+  const settings = normalizeSchedulerSettings(await getSchedulerSettings());
 
   if (!settings.enabled) {
     logger.info('Execucao agendada ignorada porque o agendamento esta desativado.', { sendTime });
     return;
   }
 
-  if (!settings.sendTimes.includes(sendTime)) {
+  const slotCount = countSendTimeSlots(settings.sendTimes).get(sendTime) ?? 0;
+
+  if (slotCount === 0) {
     logger.info('Execucao agendada ignorada porque o horario nao esta mais configurado.', {
       sendTime,
       configuredSendTimes: settings.sendTimes,
@@ -74,6 +79,7 @@ async function runScheduledPublish(sendTime: string): Promise<void> {
   try {
     logger.info('Publicacao agendada iniciada.', {
       sendTime,
+      slotCount,
       dailyLimit: settings.dailyLimit,
       timezone: settings.timezone,
     });
@@ -89,12 +95,15 @@ async function runScheduledPublish(sendTime: string): Promise<void> {
       return;
     }
 
-    const result = await publishPendingJobs({ limit: usage.remainingToday });
+    const publishLimit = Math.min(slotCount, usage.remainingToday);
+    const result = await publishPendingJobs({ limit: publishLimit });
 
     logger.info('Publicacao agendada finalizada.', {
       sendTime,
+      slotCount,
       sentTodayBeforeRun: usage.sentToday,
       remainingLimit: usage.remainingToday,
+      publishLimit,
       ...result,
     });
   } catch (error) {

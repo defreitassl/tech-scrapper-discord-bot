@@ -13,8 +13,11 @@ import {
   getUpcomingPendingJobs,
 } from '../services/schedulerOperations';
 import {
+  AVAILABLE_SEND_TIMES,
+  DAILY_LIMIT_OPTIONS,
+  DEFAULT_SCHEDULER_TIMEZONE,
   getSchedulerSettings,
-  parseSendTimes,
+  normalizeSchedulerSettings,
   updateSchedulerSettings,
   validateSchedulerSettingsInput,
 } from '../services/schedulerSettings';
@@ -57,8 +60,6 @@ type ScheduleFormData = {
   dailyLimit: number;
   timezone: string;
   sendTimes: string[];
-  sendTimesInput: string;
-  sendTimesError: string | null;
 };
 
 app.use(express.urlencoded({ extended: false }));
@@ -100,7 +101,7 @@ app.get('/admin/settings/schedule', async (request, response) => {
 
 app.post('/admin/settings/schedule', async (request, response) => {
   const form = parseScheduleSettingsForm(request.body);
-  const error = form.sendTimesError ?? validateSchedulerSettingsInput(form);
+  const error = validateSchedulerSettingsInput(form);
 
   if (error) {
     const settings = await getSchedulerSettings();
@@ -395,16 +396,11 @@ function parseJobForm(body: unknown): JobFormData {
 }
 
 function parseScheduleSettingsForm(body: unknown): ScheduleFormData {
-  const sendTimesInput = fieldValue(body, 'sendTimes');
-  const parsedSendTimes = parseSendTimes(sendTimesInput);
-
   return {
     enabled: fieldValue(body, 'enabled') === 'on',
     dailyLimit: Number(fieldValue(body, 'dailyLimit')),
-    timezone: fieldValue(body, 'timezone').trim() || 'America/Sao_Paulo',
-    sendTimes: parsedSendTimes.sendTimes,
-    sendTimesInput,
-    sendTimesError: parsedSendTimes.error,
+    timezone: DEFAULT_SCHEDULER_TIMEZONE,
+    sendTimes: fieldValues(body, 'sendTimes'),
   };
 }
 
@@ -462,6 +458,24 @@ function fieldValue(body: unknown, field: string): string {
   }
 
   return value;
+}
+
+function fieldValues(body: unknown, field: string): string[] {
+  if (!body || typeof body !== 'object') {
+    return [];
+  }
+
+  const value = (body as Record<string, unknown>)[field];
+
+  if (Array.isArray(value)) {
+    return value.filter((item): item is string => typeof item === 'string');
+  }
+
+  if (typeof value === 'string') {
+    return [value];
+  }
+
+  return [];
 }
 
 function parseStatus(value: string): JobStatus {
@@ -578,8 +592,8 @@ function renderScheduleSettingsForm(options: {
         <div class="detail-item"><dt>Limite diario</dt><dd>${escapeHtml(String(form.dailyLimit))}</dd></div>
         <div class="detail-item"><dt>Enviadas hoje</dt><dd>${escapeHtml(String(sentToday))}</dd></div>
         <div class="detail-item"><dt>Restante hoje</dt><dd>${escapeHtml(String(remainingToday))}</dd></div>
-        <div class="detail-item"><dt>Timezone</dt><dd>${escapeHtml(form.timezone)}</dd></div>
-        <div class="detail-item"><dt>Horarios</dt><dd>${escapeHtml(formatSendTimesForDisplay(form.sendTimes))}</dd></div>
+        <div class="detail-item"><dt>Timezone do sistema</dt><dd>${escapeHtml(form.timezone)}</dd></div>
+        <div class="detail-item"><dt>Slots configurados</dt><dd>${renderSendTimeSlotsSummary(form.sendTimes)}</dd></div>
         <div class="detail-item"><dt>Processo</dt><dd>O painel admin precisa estar rodando para o agendamento funcionar.</dd></div>
         <div class="detail-item"><dt>Escopo do limite</dt><dd>O limite diario vale apenas para o envio agendado. O envio manual continua disponivel e nao e bloqueado por esse limite.</dd></div>
       </dl>
@@ -588,7 +602,7 @@ function renderScheduleSettingsForm(options: {
     <form method="post" action="/admin/settings/schedule" class="job-form settings-form">
       ${renderFormSection(
         'Regras de envio',
-        'O agendamento envia somente vagas com status Pronta para envio, respeitando o limite diario configurado. Envios manuais pela listagem nao sao bloqueados por esse limite.',
+        'Escolha quantas vagas serao enviadas por dia e um horario para cada vaga. Cada horario envia 1 vaga da fila; horarios repetidos enviam mais de uma vaga no mesmo horario.',
         [
           `<label class="checkbox wide">
             <input type="checkbox" name="enabled" ${form.enabled ? 'checked' : ''}>
@@ -597,21 +611,20 @@ function renderScheduleSettingsForm(options: {
               <small>Quando desativado, nenhum horario automatico publica vagas.</small>
             </span>
           </label>`,
-          renderInput('dailyLimit', 'Vagas por dia', String(form.dailyLimit), 'Limite diario aplicado apenas ao envio agendado.'),
-          renderInput('timezone', 'Timezone', form.timezone, 'Ex.: America/Sao_Paulo'),
-          renderTextarea(
-            'sendTimes',
-            'Horarios de envio',
-            form.sendTimesInput,
-            6,
-            'Informe um horario por linha no formato HH:mm. Linhas vazias sao ignoradas, duplicados sao removidos e os horarios sao ordenados.',
-          ),
+          renderDailyLimitSelect(form.dailyLimit),
+          `<div class="detail-item timezone-info wide">
+            <dt>Timezone</dt>
+            <dd>${escapeHtml(DEFAULT_SCHEDULER_TIMEZONE)}</dd>
+            <small>Definido automaticamente pelo sistema.</small>
+          </div>`,
+          renderSendTimeSlotSelects(form.sendTimes),
         ].join(''),
       )}
       <div class="form-actions">
         <button type="submit">Salvar configuracoes</button>
       </div>
     </form>
+    ${renderScheduleSettingsScript()}
   `;
 
   return renderLayout('Envio agendado', content);
@@ -660,14 +673,117 @@ function renderPendingJobsQueue(jobs: JobPost[]): string {
   `;
 }
 
+function renderDailyLimitSelect(dailyLimit: number): string {
+  return `
+    <label>
+      <span>Vagas por dia</span>
+      <select name="dailyLimit" id="dailyLimitSelect">
+        ${DAILY_LIMIT_OPTIONS.map(
+          (option) =>
+            `<option value="${option}" ${option === dailyLimit ? 'selected' : ''}>${option}</option>`,
+        ).join('')}
+      </select>
+      <small>Escolha quantas vagas serao enviadas por dia pelo agendamento.</small>
+    </label>
+  `;
+}
+
+function renderSendTimeSlotSelects(sendTimes: string[]): string {
+  return `
+    <div class="wide schedule-slots">
+      <div class="schedule-slots-header">
+        <h3>Horarios de envio</h3>
+        <small>Escolha um horario para cada vaga. Cada horario envia 1 vaga da fila.</small>
+      </div>
+      <div id="sendTimeSlots" class="schedule-slots-grid">
+        ${sendTimes.map((sendTime, index) => renderSendTimeSlotSelect(index, sendTime)).join('')}
+      </div>
+      <small>Horarios repetidos enviam mais de uma vaga no mesmo horario.</small>
+    </div>
+  `;
+}
+
+function renderSendTimeSlotSelect(index: number, selectedSendTime: string): string {
+  return `
+    <label>
+      <span>Vaga ${index + 1}</span>
+      <select name="sendTimes">
+        ${AVAILABLE_SEND_TIMES.map(
+          (sendTime) =>
+            `<option value="${escapeHtml(sendTime)}" ${sendTime === selectedSendTime ? 'selected' : ''}>${escapeHtml(sendTime)}</option>`,
+        ).join('')}
+      </select>
+    </label>
+  `;
+}
+
+function renderSendTimeSlotsSummary(sendTimes: string[]): string {
+  return `
+    <ol class="slot-summary">
+      ${sendTimes
+        .map((sendTime, index) => `<li>Vaga ${index + 1}: ${escapeHtml(sendTime)}</li>`)
+        .join('')}
+    </ol>
+  `;
+}
+
+function renderScheduleSettingsScript(): string {
+  return `
+    <script>
+      (() => {
+        const availableSendTimes = ${JSON.stringify(AVAILABLE_SEND_TIMES)};
+        const dailyLimitSelect = document.getElementById('dailyLimitSelect');
+        const slotsContainer = document.getElementById('sendTimeSlots');
+
+        if (!dailyLimitSelect || !slotsContainer) {
+          return;
+        }
+
+        const buildSlot = (index, selectedValue) => {
+          const label = document.createElement('label');
+          const title = document.createElement('span');
+          const select = document.createElement('select');
+
+          title.textContent = 'Vaga ' + (index + 1);
+          select.name = 'sendTimes';
+
+          for (const sendTime of availableSendTimes) {
+            const option = document.createElement('option');
+            option.value = sendTime;
+            option.textContent = sendTime;
+            option.selected = sendTime === selectedValue;
+            select.appendChild(option);
+          }
+
+          label.appendChild(title);
+          label.appendChild(select);
+
+          return label;
+        };
+
+        dailyLimitSelect.addEventListener('change', () => {
+          const currentValues = Array.from(slotsContainer.querySelectorAll('select')).map((select) => select.value);
+          const dailyLimit = Number(dailyLimitSelect.value);
+
+          slotsContainer.replaceChildren();
+
+          for (let index = 0; index < dailyLimit; index += 1) {
+            slotsContainer.appendChild(buildSlot(index, currentValues[index] ?? availableSendTimes[index % availableSendTimes.length]));
+          }
+        });
+      })();
+    </script>
+  `;
+}
+
 function scheduleFormFromSettings(settings?: SchedulerSettings): ScheduleFormData {
+  const normalizedSettings = settings ? normalizeSchedulerSettings(settings) : null;
+
   return {
-    enabled: settings?.enabled ?? false,
-    dailyLimit: settings?.dailyLimit ?? 5,
-    timezone: settings?.timezone ?? 'America/Sao_Paulo',
-    sendTimes: settings?.sendTimes ?? [],
-    sendTimesInput: (settings?.sendTimes ?? []).join('\n'),
-    sendTimesError: null,
+    enabled: normalizedSettings?.enabled ?? false,
+    dailyLimit: normalizedSettings?.dailyLimit ?? 5,
+    timezone: normalizedSettings?.timezone ?? DEFAULT_SCHEDULER_TIMEZONE,
+    sendTimes: normalizedSettings?.sendTimes ?? AVAILABLE_SEND_TIMES.slice(0, 5),
   };
 }
 
@@ -964,10 +1080,6 @@ function getStatusLabel(status: JobStatus): string {
   return statusLabels[status];
 }
 
-function formatSendTimesForDisplay(sendTimes: string[]): string {
-  return sendTimes.length ? sendTimes.join(', ') : 'Nenhum horario configurado';
-}
-
 function renderLayout(title: string, content: string): string {
   return `
     <!doctype html>
@@ -1021,6 +1133,13 @@ function renderLayout(title: string, content: string): string {
           h2 {
             margin: 0;
             font-size: 18px;
+            line-height: 1.3;
+            color: #172033;
+          }
+
+          h3 {
+            margin: 0;
+            font-size: 15px;
             line-height: 1.3;
             color: #172033;
           }
@@ -1398,6 +1517,36 @@ function renderLayout(title: string, content: string): string {
             background: var(--surface-soft);
           }
 
+          .timezone-info {
+            margin: 0;
+          }
+
+          .schedule-slots {
+            padding: 14px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--surface-soft);
+          }
+
+          .schedule-slots-header {
+            margin-bottom: 12px;
+          }
+
+          .schedule-slots-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+          }
+
+          .slot-summary {
+            margin: 0;
+            padding-left: 18px;
+          }
+
+          .slot-summary li + li {
+            margin-top: 4px;
+          }
+
           .text-grid {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1529,6 +1678,7 @@ function renderLayout(title: string, content: string): string {
 
             .page-heading,
             .form-grid,
+            .schedule-slots-grid,
             .text-grid,
             dl {
               display: block;
@@ -1557,6 +1707,7 @@ function renderLayout(title: string, content: string): string {
 
             .form-grid label,
             .form-grid .checkbox,
+            .schedule-slots-grid label,
             .text-card,
             .detail-item {
               margin-top: 14px;

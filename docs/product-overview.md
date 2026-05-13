@@ -20,7 +20,7 @@ O projeto resolve parte desse problema centralizando cadastro, organizacao, revi
 4. Um administrador revisa os detalhes e o preview da mensagem.
 5. O admin pode enviar a vaga especifica pela pagina de detalhes, enviar vagas `PENDING` em lote ou deixar para o envio agendado.
 6. O envio manual em lote busca ate 5 vagas `PENDING`.
-7. Opcionalmente, o envio agendado configurado no painel tambem pode publicar vagas `PENDING`, respeitando o limite diario configurado.
+7. Opcionalmente, o envio agendado configurado no painel tambem pode publicar vagas `PENDING`, respeitando o limite diario configurado. O admin escolhe de 1 a 10 vagas por dia e um horario para cada vaga; o timezone do sistema e `America/Sao_Paulo`.
 8. Para cada vaga, o sistema resolve a mensagem usando esta prioridade:
    - `readyText`, quando preenchido.
    - `aiGeneratedText`, quando ja existe e e considerado valido.

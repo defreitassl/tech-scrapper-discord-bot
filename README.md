@@ -128,9 +128,12 @@ http://localhost:3000/admin/settings/schedule
 Nessa tela e possivel definir:
 
 - se o agendamento esta ativo;
-- quantas vagas podem ser enviadas por dia pelo agendamento;
-- o timezone;
-- os horarios de envio, um por linha, no formato `HH:mm`.
+- quantas vagas podem ser enviadas por dia pelo agendamento, escolhendo uma opcao de 1 a 10;
+- um horario para cada vaga do dia.
+
+O timezone nao e editavel pela interface. O sistema usa sempre `America/Sao_Paulo`.
+
+Cada slot de horario envia 1 vaga da fila. Horarios repetidos representam multiplos envios no mesmo horario.
 
 A mesma tela tambem mostra um resumo operacional com:
 
@@ -138,15 +141,16 @@ A mesma tela tambem mostra um resumo operacional com:
 - limite diario configurado;
 - vagas enviadas hoje;
 - quanto ainda pode ser enviado no dia pelo agendamento;
-- timezone e horarios configurados;
+- timezone do sistema;
+- slots configurados;
 - proximas vagas `PENDING` na fila de envio.
 
 Exemplo:
 
 ```text
-10:00
-15:00
-19:30
+Vaga 1: 10:00
+Vaga 2: 10:00
+Vaga 3: 15:00
 ```
 
 O agendamento publica somente vagas com status `PENDING`, reutilizando o mesmo fluxo de `publishPendingJobs`. O limite diario considera vagas ja enviadas no dia pelo campo `sentAt`, incluindo envios manuais. O envio manual pelo painel continua disponivel e nao recebe bloqueio de limite diario nesta etapa.

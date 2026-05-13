@@ -28,8 +28,11 @@ Apesar do nome mencionar scraper, o projeto ainda nao implementa scraping. O est
 - O envio individual nao reenvia vagas `SENT` e nao publica vagas `ARCHIVED`.
 - O envio manual busca ate 5 vagas `PENDING` por vez.
 - O envio agendado e configurado em `/admin/settings/schedule` e salvo em `SchedulerSettings`, nao em `.env`.
-- A tela `/admin/settings/schedule` mostra resumo operacional do agendamento: ativo/inativo, limite diario, enviadas hoje, restante do dia, timezone, horarios e proximas vagas `PENDING`.
-- O scheduler roda junto com `npm run admin`, registra um cron por horario configurado e so envia vagas `PENDING`.
+- A tela `/admin/settings/schedule` mostra resumo operacional do agendamento: ativo/inativo, limite diario, enviadas hoje, restante do dia, timezone do sistema, slots configurados e proximas vagas `PENDING`.
+- O timezone nao e editavel no painel; o backend sempre usa e persiste `America/Sao_Paulo`.
+- O admin escolhe de 1 a 10 vagas por dia e um horario para cada vaga. Cada horario representa 1 slot; horarios duplicados enviam mais de uma vaga no mesmo horario.
+- O scheduler roda junto com `npm run admin`, agrupa horarios repetidos, registra um cron por horario unico e so envia vagas `PENDING`.
+- Em cada horario, o scheduler envia ate o menor valor entre slots daquele horario e limite restante do dia.
 - O limite diario do scheduler considera vagas `SENT` com `sentAt` no dia atual do timezone configurado. O envio manual continua existindo e nao e bloqueado por esse limite.
 - As consultas operacionais do agendamento ficam em `src/services/schedulerOperations.ts`; reutilize esse servico para evitar duplicar calculo de dia por timezone ou limite restante.
 - Ordem de resolucao da mensagem:

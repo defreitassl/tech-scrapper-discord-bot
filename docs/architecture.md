@@ -48,18 +48,20 @@ O envio individual nao reenvia vagas `SENT` e nao publica vagas `ARCHIVED`.
 ## Fluxo de publicacao agendada
 
 1. O admin acessa `Configuracoes de envio` no painel.
-2. A configuracao e salva no banco pelo model `SchedulerSettings`.
-3. O painel admin registra um cron para cada horario configurado em `sendTimes`, usando o timezone salvo.
-4. Em cada execucao, `scheduledPublisher` recarrega a configuracao do banco.
-5. Se o agendamento estiver desativado, o horario nao estiver mais configurado ou o limite diario ja tiver sido atingido, nada e enviado.
-6. O limite diario considera vagas `SENT` com `sentAt` dentro do dia atual no timezone configurado.
-7. Quando ainda ha limite restante, o scheduler chama `publishPendingJobs({ limit: limiteRestante })`.
+2. O admin escolhe a quantidade de vagas por dia em um select e um horario para cada vaga diaria. O timezone nao e editavel e o backend sempre persiste `America/Sao_Paulo`.
+3. A configuracao e salva no banco pelo model `SchedulerSettings`.
+4. O painel admin agrupa horarios repetidos e registra um cron para cada horario unico em `sendTimes`, usando `America/Sao_Paulo`.
+5. Cada item de `sendTimes` representa 1 slot de envio. Horarios duplicados significam multiplos slots no mesmo horario.
+6. Em cada execucao, `scheduledPublisher` recarrega a configuracao do banco.
+7. Se o agendamento estiver desativado, o horario nao estiver mais configurado ou o limite diario ja tiver sido atingido, nada e enviado.
+8. O limite diario considera vagas `SENT` com `sentAt` dentro do dia atual no timezone configurado.
+9. Quando ainda ha limite restante, o scheduler chama `publishPendingJobs({ limit })`, usando o menor valor entre os slots daquele horario e o limite restante do dia.
 
 O envio agendado nao duplica a logica de envio: a resolucao da mensagem, envio ao Discord e atualizacao de status continuam concentrados em `publishPendingJobs`.
 
 O envio manual continua disponivel no painel e, nesta etapa, nao e bloqueado pelo limite diario. Como o limite agendado conta vagas enviadas por `sentAt`, envios manuais feitos no mesmo dia reduzem o limite restante para execucoes agendadas futuras.
 
-A tela `/admin/settings/schedule` tambem mostra um resumo operacional com status do agendamento, limite diario, vagas enviadas hoje, restante do dia, timezone, horarios e a fila das proximas vagas `PENDING`, ordenadas por `createdAt` asc como no envio.
+A tela `/admin/settings/schedule` tambem mostra um resumo operacional com status do agendamento, limite diario, vagas enviadas hoje, restante do dia, timezone do sistema, slots configurados e a fila das proximas vagas `PENDING`, ordenadas por `createdAt` asc como no envio.
 
 ## Papel do painel admin
 
@@ -81,7 +83,7 @@ Ele nao deve conter regras complexas de coleta automatica. A responsabilidade pr
 
 O PostgreSQL armazena as vagas, seus textos, metadados, status, datas de criacao/atualizacao/envio e informacoes usadas na geracao da mensagem.
 
-O banco tambem armazena `SchedulerSettings`, que guarda se o agendamento esta ativo, o limite diario, o timezone e os horarios de envio. Essa configuracao nao deve ser definida por `.env`.
+O banco tambem armazena `SchedulerSettings`, que guarda se o agendamento esta ativo, o limite diario, o timezone e os horarios de envio. O campo de timezone existe por compatibilidade, mas o painel sempre salva `America/Sao_Paulo`.
 
 O banco tambem sera o ponto natural para deduplicacao futura quando providers de coleta forem adicionados.
 
