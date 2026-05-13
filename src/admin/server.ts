@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import { JobPost, JobStatus } from '@prisma/client';
+import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
 import { publishPendingJobs } from '../services/publishPendingJobs';
 
@@ -14,6 +15,9 @@ type JobFormData = {
   location: string | null;
   modality: string | null;
   level: string | null;
+  stacks: string | null;
+  salaryRange: string | null;
+  shortDescription: string | null;
   url: string | null;
   source: string | null;
   rawText: string | null;
@@ -23,6 +27,20 @@ type JobFormData = {
 };
 
 app.use(express.urlencoded({ extended: false }));
+app.use((request, response, next) => {
+  const startedAt = Date.now();
+
+  response.on('finish', () => {
+    logger.info('Requisicao admin finalizada.', {
+      method: request.method,
+      path: request.path,
+      statusCode: response.statusCode,
+      durationMs: Date.now() - startedAt,
+    });
+  });
+
+  next();
+});
 
 app.get('/', (_request, response) => {
   response.redirect('/admin/jobs');
@@ -50,17 +68,25 @@ app.post('/admin/jobs', async (request, response) => {
   }
 
   const job = await prisma.jobPost.create({ data: form });
+  logger.info('Vaga criada no admin.', {
+    jobId: job.id,
+    title: job.title,
+    status: job.status,
+    useAi: job.useAi,
+  });
+
   response.redirect(`/admin/jobs/${job.id}`);
 });
 
 app.post('/admin/jobs/publish-pending', async (_request, response) => {
   try {
+    logger.info('Publicacao manual de vagas pendentes iniciada pelo admin.');
     const result = await publishPendingJobs();
     const message = `Publicacao concluida. Encontradas: ${result.total}. Enviadas: ${result.sent}. Erros: ${result.failed}.`;
 
     response.redirect(`/admin/jobs?message=${encodeURIComponent(message)}`);
   } catch (error) {
-    console.error('Erro ao publicar vagas pendentes:', error);
+    logger.error('Erro ao publicar vagas pendentes pelo admin.', error);
     response.redirect(`/admin/jobs?message=${encodeURIComponent('Erro ao publicar vagas pendentes.')}`);
   }
 });
@@ -112,6 +138,12 @@ app.post('/admin/jobs/:id', async (request, response) => {
     where: { id: job.id },
     data: form,
   });
+  logger.info('Vaga atualizada no admin.', {
+    jobId: job.id,
+    title: form.title,
+    status: form.status,
+    useAi: form.useAi,
+  });
 
   response.redirect(`/admin/jobs/${job.id}`);
 });
@@ -134,6 +166,10 @@ app.post('/admin/jobs/:id/pending', async (request, response) => {
     where: { id: job.id },
     data: { status: JobStatus.PENDING },
   });
+  logger.info('Vaga marcada como PENDING no admin.', {
+    jobId: job.id,
+    title: job.title,
+  });
 
   response.redirect('/admin/jobs');
 });
@@ -149,12 +185,16 @@ app.post('/admin/jobs/:id/archive', async (request, response) => {
     where: { id: job.id },
     data: { status: JobStatus.ARCHIVED },
   });
+  logger.info('Vaga arquivada no admin.', {
+    jobId: job.id,
+    title: job.title,
+  });
 
   response.redirect('/admin/jobs');
 });
 
 app.listen(port, () => {
-  console.log(`Painel admin rodando em http://localhost:${port}/admin/jobs`);
+  logger.info('Painel admin iniciado.', { url: `http://localhost:${port}/admin/jobs` });
 });
 
 function parseJobForm(body: unknown): JobFormData {
@@ -164,6 +204,9 @@ function parseJobForm(body: unknown): JobFormData {
     location: optionalText(body, 'location'),
     modality: optionalText(body, 'modality'),
     level: optionalText(body, 'level'),
+    stacks: optionalText(body, 'stacks'),
+    salaryRange: optionalText(body, 'salaryRange'),
+    shortDescription: optionalText(body, 'shortDescription'),
     url: optionalText(body, 'url'),
     source: optionalText(body, 'source'),
     rawText: optionalText(body, 'rawText'),
@@ -295,6 +338,8 @@ function renderJobDetails(job: JobPost, error?: string): string {
     ['Localizacao', job.location],
     ['Modalidade', job.modality],
     ['Nivel', job.level],
+    ['Stacks', job.stacks],
+    ['Faixa salarial', job.salaryRange],
     ['URL', job.url],
     ['Fonte', job.source],
     ['Usar IA', job.useAi ? 'Sim' : 'Nao'],
@@ -320,6 +365,7 @@ function renderJobDetails(job: JobPost, error?: string): string {
     <section>
       <dl>${details}</dl>
     </section>
+    ${renderLongText('Sobre a vaga', job.shortDescription)}
     ${renderLongText('Texto bruto', job.rawText)}
     ${renderLongText('Texto pronto', job.readyText)}
     ${renderLongText('Texto gerado por IA', job.aiGeneratedText)}
@@ -352,6 +398,9 @@ function renderJobForm(options: {
       ${renderInput('location', 'Localizacao', form.location)}
       ${renderInput('modality', 'Modalidade', form.modality)}
       ${renderInput('level', 'Nivel', form.level)}
+      ${renderInput('stacks', 'Stacks', form.stacks)}
+      ${renderInput('salaryRange', 'Faixa salarial', form.salaryRange)}
+      ${renderTextarea('shortDescription', 'Sobre a vaga', form.shortDescription, 4)}
       ${renderInput('url', 'URL', form.url)}
       ${renderInput('source', 'Fonte', form.source)}
       ${renderTextarea('rawText', 'Texto bruto', form.rawText)}
@@ -385,11 +434,14 @@ function formFromJob(job?: JobPost): JobFormData {
     location: job?.location ?? null,
     modality: job?.modality ?? null,
     level: job?.level ?? null,
+    stacks: job?.stacks ?? null,
+    salaryRange: job?.salaryRange ?? null,
+    shortDescription: job?.shortDescription ?? null,
     url: job?.url ?? null,
     source: job?.source ?? null,
     rawText: job?.rawText ?? null,
     readyText: job?.readyText ?? null,
-    useAi: job?.useAi ?? false,
+    useAi: job?.useAi ?? true,
     status: job?.status ?? JobStatus.DRAFT,
   };
 }
@@ -403,11 +455,11 @@ function renderInput(name: keyof JobFormData, label: string, value: string | nul
   `;
 }
 
-function renderTextarea(name: keyof JobFormData, label: string, value: string | null): string {
+function renderTextarea(name: keyof JobFormData, label: string, value: string | null, rows = 7): string {
   return `
     <label class="wide">
       ${escapeHtml(label)}
-      <textarea name="${escapeHtml(name)}" rows="7">${escapeHtml(value ?? '')}</textarea>
+      <textarea name="${escapeHtml(name)}" rows="${rows}">${escapeHtml(value ?? '')}</textarea>
     </label>
   `;
 }

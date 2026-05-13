@@ -1,4 +1,5 @@
 import { Client, GatewayIntentBits } from 'discord.js';
+import { logger } from '../lib/logger';
 
 export async function sendDiscordMessage(message: string): Promise<void> {
   const token = process.env.DISCORD_TOKEN;
@@ -13,6 +14,11 @@ export async function sendDiscordMessage(message: string): Promise<void> {
   });
 
   try {
+    logger.info('Conectando ao Discord para envio de mensagem.', {
+      channelId,
+      messageLength: message.length,
+    });
+
     await client.login(token);
     await waitUntilReady(client);
 
@@ -23,6 +29,10 @@ export async function sendDiscordMessage(message: string): Promise<void> {
     }
 
     await channel.send(message);
+    logger.info('Mensagem enviada ao Discord.', {
+      channelId,
+      messageLength: message.length,
+    });
   } finally {
     client.destroy();
   }

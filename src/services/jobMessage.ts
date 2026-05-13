@@ -20,11 +20,15 @@ export function buildDefaultJobMessage(job: JobPost): string {
   const lines = [
     '🚀 Fala, PDevs! Nova oportunidade passando no radar do Projeto Desenvolve.',
     '',
-    formatField('💼 Vaga', job.title),
-    formatField('🏢 Empresa', job.company),
-    formatField('📍 Local', job.location),
-    formatField('🎯 Nível', job.level),
-    formatField('🧭 Modalidade', job.modality),
+    formatField('💼 **Vaga**', job.title),
+    formatField('🏢 **Empresa**', job.company),
+    formatField('📍 **Local**', job.location),
+    formatField('🧭 **Modalidade**', job.modality),
+    formatField('🎯 **Nível**', job.level),
+    formatField('🛠️ **Stacks**', job.stacks),
+    formatField('💰 **Faixa salarial**', job.salaryRange),
+    '',
+    formatBlock('📝 **Sobre a vaga:**', job.shortDescription),
     '',
     formatLink(job.url),
     '',
@@ -47,7 +51,15 @@ function formatLink(url: string | null): string | null {
     return null;
   }
 
-  return `🔗 Link para candidatura:\n${url.trim()}`;
+  return `🔗 **Candidatura:**\n${url.trim()}`;
+}
+
+function formatBlock(label: string, value: string | null): string | null {
+  if (!value?.trim()) {
+    return null;
+  }
+
+  return `${label}\n${value.trim()}`;
 }
 
 function shouldKeepLine(line: string | null, index: number, allLines: Array<string | null>): line is string {
