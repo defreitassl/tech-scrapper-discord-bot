@@ -1,4 +1,5 @@
+import { githubJobsProvider } from './githubJobs.provider';
 import { mockJobsProvider } from './mockJobs.provider';
 import type { JobSourceProvider } from './types';
 
-export const activeJobProviders: JobSourceProvider[] = [mockJobsProvider];
+export const activeJobProviders: JobSourceProvider[] = [mockJobsProvider, githubJobsProvider];

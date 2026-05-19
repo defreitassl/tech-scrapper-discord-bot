@@ -1,19 +1,24 @@
 # Contrato de Providers
 
-Este documento define o contrato inicial para fontes de coleta de vagas. A implementacao atual possui apenas um provider mock/de teste em `src/providers/mockJobs.provider.ts`, sem scraping real e sem acesso a sites externos.
+Este documento define o contrato inicial para fontes de coleta de vagas. A implementacao atual possui um provider mock/de teste em `src/providers/mockJobs.provider.ts` e um provider real para issues publicas do GitHub em `src/providers/githubJobs.provider.ts`.
 
 ## Interface sugerida
 
 ```ts
 export interface JobSourceProvider {
   name: string;
-  collect(): Promise<CollectedJob[]>;
+  collect(): Promise<CollectedJob[] | ProviderCollectResult>;
 }
+
+export type ProviderCollectResult = {
+  jobs: CollectedJob[];
+  ignoredByLocation?: number;
+};
 ```
 
 O provider deve ser pequeno, testavel e responsavel por uma unica fonte ou familia de fontes.
 
-Providers ativos devem ser registrados em `src/providers/providerRegistry.ts`. O runner central fica em `src/providers/providerRunner.ts`.
+Providers ativos devem ser registrados em `src/providers/providerRegistry.ts`. O runner central fica em `src/providers/providerRunner.ts`. Rotas especificas podem chamar o runner com uma lista explicita de providers quando precisam executar apenas uma fonte, como a coleta mock ou a coleta GitHub.
 
 ## Tipo sugerido
 
@@ -79,6 +84,7 @@ O runner atual aplica exatamente essa regra:
 
 - URL duplicada bloqueia a criacao e incrementa `ignoredDuplicates`;
 - titulo + empresa iguais incrementam `possibleDuplicates`, mas a vaga ainda e criada como `DRAFT`.
+- providers podem retornar metadados de coleta, como `ignoredByLocation`, para aparecer no resumo operacional sem criar vagas no banco.
 
 ## Status sugerido apos coleta
 
@@ -101,3 +107,53 @@ Na implementacao atual, `runJobProviders()` cria vagas coletadas com:
 - sem `aiGeneratedText`.
 
 Isso garante que a coleta automatica nao dispare Gemini/IA nem publique vagas no Discord.
+
+## Provider GitHub
+
+O provider `githubJobsProvider` coleta vagas de repositorios GitHub que publicam oportunidades como issues. A lista inicial e:
+
+- `frontendbr/vagas`
+- `backend-br/vagas`
+
+Ele usa somente a API oficial do GitHub:
+
+```text
+GET https://api.github.com/repos/{owner}/{repo}/issues
+```
+
+Parametros usados:
+
+- `state=open`
+- `per_page=100`
+- `since=<data ISO de 30 dias atras>`
+
+O `since` da API pode considerar a ultima atualizacao da issue, nao a criacao. Por isso o provider tambem filtra manualmente `created_at` e so aceita issues criadas nos ultimos 30 dias.
+
+Headers enviados:
+
+- `Accept: application/vnd.github+json`
+- `X-GitHub-Api-Version: 2022-11-28`
+- `Authorization: Bearer <GITHUB_TOKEN>`, apenas quando `GITHUB_TOKEN` estiver configurado
+
+`GITHUB_TOKEN` e opcional, mas recomendado para aumentar o rate limit da API. Sem token, o provider registra um aviso e tenta coletar sem autenticacao.
+
+Regras do provider GitHub:
+
+- coleta apenas issues abertas;
+- ignora pull requests;
+- aceita apenas labels de entrada: `junior`, `júnior`, `jr`, `estagio`, `estágio`, `estagiario`, `estagiário`;
+- ignora labels de senioridade acima de entrada: `pleno`, `senior`, `sênior`, `especialista`, `tech lead`, `lead`, `staff`, `principal`;
+- aceita vagas remotas de qualquer cidade, estado ou pais;
+- aceita vagas hibridas ou presenciais somente quando a localizacao ou o corpo da issue indicam Minas Gerais;
+- quando a modalidade nao e identificada, aceita somente se a localizacao parecer Minas Gerais;
+- contabiliza issues ignoradas pelo filtro geografico em `ignoredByLocation`;
+- extrai localizacao do texto entre colchetes no titulo da issue;
+- tenta extrair empresa quando o titulo contem conectores como `na`, `no`, `na empresa` ou `para`;
+- se a empresa nao vier do titulo, tenta um campo confiavel no corpo, como `Empresa:`;
+- tenta extrair `shortDescription` de secoes como `Descricao da vaga`, `Sobre a vaga`, `Nossa empresa` e `Responsabilidades`;
+- tenta extrair `stacks` do corpo a partir de termos tecnicos conhecidos, sem inventar tecnologias;
+- salva o corpo da issue em `rawText` limitado a 300 palavras;
+- retorna `salaryRange` como `null` nesta primeira versao;
+- cria vagas apenas como `DRAFT` via runner;
+- nao chama IA;
+- nao envia ao Discord.

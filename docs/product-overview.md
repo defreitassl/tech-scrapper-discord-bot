@@ -19,7 +19,7 @@ O projeto resolve parte desse problema centralizando cadastro, organizacao, revi
 3. Se a IA falhar, a vaga continua pronta para envio e o preview usa o template padrao.
 4. Um administrador revisa os detalhes e o preview da mensagem.
 5. O admin pode enviar a vaga especifica pela pagina de detalhes, enviar vagas `PENDING` em lote ou deixar para o envio agendado.
-6. O admin tambem pode executar uma coleta de teste/mock, que cria vagas fake como `DRAFT` para validar a base de providers sem scraping real.
+6. O admin tambem pode executar uma coleta de teste/mock, que cria vagas fake como `DRAFT`, ou uma coleta GitHub, que cria rascunhos a partir de issues publicas recentes de repositorios de vagas.
 7. O envio manual em lote busca ate 5 vagas `PENDING`.
 8. Opcionalmente, o envio agendado configurado no painel tambem pode publicar vagas `PENDING`, respeitando o limite diario configurado. O admin escolhe de 1 a 10 vagas por dia e um horario para cada vaga; o timezone do sistema e `America/Sao_Paulo`.
 9. Para cada vaga, o sistema resolve a mensagem usando esta prioridade:
@@ -40,13 +40,14 @@ O projeto resolve parte desse problema centralizando cadastro, organizacao, revi
 - Envio manual de vagas `PENDING` para Discord.
 - Envio agendado de vagas `PENDING`, configurado no painel admin.
 - Base inicial de providers com coleta mock/de teste, salvando vagas como `DRAFT`.
+- Provider GitHub para coletar issues abertas e recentes de `frontendbr/vagas` e `backend-br/vagas`, filtrando labels de junior/estagio e salvando como `DRAFT`.
 - Geracao opcional de mensagem com Google AI Studio/Gemini.
 - Persistencia em PostgreSQL via Prisma.
 - Template padrao para mensagem quando IA nao e usada ou falha.
 
 ## Fora de escopo por enquanto
 
-- Scraping real de vagas.
+- Scraping HTML real de vagas.
 - Coleta automatica agendada de providers.
 - Autenticacao no painel admin.
 - Fila de publicacao avancada.

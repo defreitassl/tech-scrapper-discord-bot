@@ -5,6 +5,8 @@ import { prisma } from '../../lib/prisma';
 import { generateJobMessage } from '../../services/aiMessageGenerator';
 import { checkJobDuplicate } from '../../services/jobDeduplication';
 import { publishPendingJobs, publishSingleJob } from '../../services/publishPendingJobs';
+import { githubJobsProvider } from '../../providers/githubJobs.provider';
+import { mockJobsProvider } from '../../providers/mockJobs.provider';
 import { runJobProviders } from '../../providers/providerRunner';
 import { parseJobForm } from '../helpers/forms';
 import { getNoticeFromQuery, redirectWithNotice } from '../helpers/notifications';
@@ -138,7 +140,7 @@ export function createJobsRouter(): express.Router {
   router.post('/admin/jobs/collect', async (_request, response) => {
     try {
       logger.info('Coleta manual de vagas de teste iniciada pelo admin.');
-      const result = await runJobProviders();
+      const result = await runJobProviders([mockJobsProvider]);
       const message = `Coleta concluida: ${result.createdJobs} novas vagas, ${result.ignoredDuplicates} duplicatas ignoradas.`;
       const noticeType = result.errors.length > 0 ? 'warning' : result.createdJobs > 0 ? 'success' : 'info';
 
@@ -146,6 +148,20 @@ export function createJobsRouter(): express.Router {
     } catch (error) {
       logger.error('Erro ao coletar vagas de teste pelo admin.', error);
       redirectWithNotice(response, '/admin/jobs', 'Erro ao coletar vagas de teste.', 'error');
+    }
+  });
+
+  router.post('/admin/jobs/collect-github', async (_request, response) => {
+    try {
+      logger.info('Coleta manual de vagas GitHub iniciada pelo admin.');
+      const result = await runJobProviders([githubJobsProvider]);
+      const message = `Coleta GitHub concluída: ${result.createdJobs} novas, ${result.ignoredDuplicates} duplicatas, ${result.possibleDuplicates} possíveis duplicatas, ${result.ignoredByLocation} ignoradas por localização.`;
+      const noticeType = result.errors.length > 0 ? 'warning' : result.createdJobs > 0 ? 'success' : 'info';
+
+      redirectWithNotice(response, '/admin/jobs', message, noticeType);
+    } catch (error) {
+      logger.error('Erro ao coletar vagas GitHub pelo admin.', error);
+      redirectWithNotice(response, '/admin/jobs', 'Erro ao coletar vagas GitHub.', 'error');
     }
   });
 

@@ -2,7 +2,7 @@
 
 Bot de Discord em Node.js + TypeScript para enviar vagas de emprego para iniciantes em tecnologia em um canal especifico.
 
-Nesta etapa, o projeto conecta o bot no Discord, possui banco com Prisma e PostgreSQL, inclui um painel web simples para cadastrar, gerenciar e publicar vagas pendentes manualmente, pode gerar mensagens com IA usando Google AI Studio e possui uma base inicial de providers com coleta mock/de teste.
+Nesta etapa, o projeto conecta o bot no Discord, possui banco com Prisma e PostgreSQL, inclui um painel web simples para cadastrar, gerenciar e publicar vagas pendentes manualmente, pode gerar mensagens com IA usando Google AI Studio e possui uma base inicial de providers com coleta mock/de teste e coleta real via issues publicas do GitHub.
 
 ## Requisitos
 
@@ -33,7 +33,10 @@ DISCORD_TOKEN=token_do_seu_bot
 DISCORD_CHANNEL_ID=id_do_canal
 GOOGLE_AI_API_KEY=chave_do_google_ai_studio
 DATABASE_URL="postgresql://postgres:postgres@localhost:5432/discord_jobs_bot?schema=public"
+GITHUB_TOKEN=
 ```
+
+`GITHUB_TOKEN` e opcional. Sem ele, a coleta GitHub funciona sem autenticacao, mas fica sujeita a um rate limit menor da API. Com token, o painel envia `Authorization: Bearer <GITHUB_TOKEN>` para aumentar o limite disponivel.
 
 Crie o banco no PostgreSQL antes de rodar a migration. O nome usado no exemplo e `discord_jobs_bot`.
 
@@ -123,6 +126,25 @@ Essa coleta cria vagas fake como `DRAFT`, exibidas no painel como `Rascunho`. El
 
 Ao clicar novamente, vagas com a mesma URL normalizada sao ignoradas como duplicatas fortes.
 
+### Coleta GitHub
+
+A listagem tambem possui o botao `Coletar vagas do GitHub`. Ele executa apenas o provider `src/providers/githubJobs.provider.ts`, que usa a API oficial do GitHub para ler issues abertas dos repositorios:
+
+- `frontendbr/vagas`
+- `backend-br/vagas`
+
+O provider busca issues abertas atualizadas desde os ultimos 30 dias usando o parametro `since`, mas tambem filtra manualmente `created_at` para aceitar somente issues criadas nos ultimos 30 dias.
+
+A coleta aceita somente vagas cujas labels indiquem `junior`, `júnior`, `jr`, `estagio`, `estágio`, `estagiario` ou `estagiário`, e ignora labels como `pleno`, `senior`, `sênior`, `especialista`, `tech lead`, `lead`, `staff` e `principal`. Pull requests e issues antigas sao ignoradas.
+
+O filtro geografico aceita vagas remotas de qualquer lugar. Vagas hibridas ou presenciais so sao aceitas quando a localizacao ou o corpo da issue indicam Minas Gerais; vagas fora de MG, como uma vaga hibrida em Brasilia, sao ignoradas e contabilizadas no resumo como `ignoradas por localização`.
+
+O provider tenta preencher `shortDescription` a partir de secoes como `Descricao da vaga`, `Sobre a vaga`, `Nossa empresa` e `Responsabilidades`, mantendo um resumo curto. Ele tambem tenta extrair `stacks` do corpo da issue a partir de termos tecnicos conhecidos, sem inventar tecnologias.
+
+As vagas coletadas do GitHub sao normalizadas, passam pela deduplicacao existente e entram como `DRAFT`. Duplicatas fortes por URL sao ignoradas. Possiveis duplicatas por titulo + empresa sao criadas como rascunho e contabilizadas no resumo da coleta.
+
+Essa coleta nao chama Gemini/IA, nao marca vagas como `PENDING` e nao envia nada ao Discord.
+
 ## Envio agendado
 
 O envio agendado e configurado pelo painel admin, nao por `.env`.
@@ -182,5 +204,6 @@ npm run admin
 - Model `SchedulerSettings` para configuracao de envio agendado
 - Painel admin simples para cadastrar, listar, visualizar e editar vagas
 - Base inicial de providers com coleta mock/de teste
+- Provider GitHub para coletar issues publicas recentes de `frontendbr/vagas` e `backend-br/vagas`
 
-Ainda nao ha scraping real, coleta de fontes externas ou autenticacao.
+Ainda nao ha scraping HTML real, coleta agendada de providers ou autenticacao.

@@ -11,6 +11,7 @@
 - PostgreSQL + Prisma.
 - Mensagens com `readyText`, `aiGeneratedText`, IA ou template padrao.
 - Geracao de mensagem com Google AI Studio/Gemini.
+- Primeiro provider real via API oficial do GitHub, coletando issues abertas e recentes de `frontendbr/vagas` e `backend-br/vagas` como `DRAFT`.
 
 ## V1.1 documentacao + providers
 
@@ -23,11 +24,12 @@
 
 ## V1.2 primeiro provider real
 
-- Implementar o primeiro provider com fonte simples e publica.
-- Salvar vagas coletadas como `DRAFT`.
-- Registrar `source` e `url`.
-- Evitar publicacao automatica.
-- Validar deduplicacao basica.
+- Implementado provider GitHub com fonte simples e publica baseada em issues.
+- Salva vagas coletadas como `DRAFT`.
+- Registra `source` e `url`.
+- Evita publicacao automatica, IA automatica e mudanca para `PENDING`.
+- Reutiliza normalizacao e deduplicacao basica.
+- Filtra apenas issues abertas, criadas nos ultimos 30 dias, com labels de junior/estagio e sem labels de pleno/senior ou similares.
 
 ## V1.3 agendamento de coletas/providers
 

@@ -4,9 +4,9 @@
 
 O `tech-scrapper-discord-bot` e um bot/painel para cadastrar, organizar e publicar vagas de tecnologia para iniciantes no Discord da Projeto Desenvolve.
 
-Apesar do nome mencionar scraper, o projeto ainda nao implementa scraping. O estado atual e um painel admin manual com publicacao controlada para Discord.
+Apesar do nome mencionar scraper, o projeto nao faz scraping HTML nesta etapa. O estado atual e um painel admin manual com publicacao controlada para Discord e um primeiro provider real via API publica do GitHub.
 
-Existe uma base inicial de providers em `src/providers/`, mas somente com provider mock/de teste. Ela valida o fluxo de coleta sem acessar sites reais.
+Existe uma base inicial de providers em `src/providers/`, com provider mock/de teste e provider GitHub para issues publicas de repositorios de vagas.
 
 ## Stack
 
@@ -58,18 +58,30 @@ Existe uma base inicial de providers em `src/providers/`, mas somente com provid
 - Views e helpers nao devem acessar Prisma diretamente. Rotas podem chamar Prisma e services.
 - Feedback operacional do painel usa notificacoes temporarias renderizadas no HTML via query params `message` e `noticeType`. Nao existe tela de logs nem persistencia em banco para essas notificacoes.
 - A deduplicacao fica em `src/services/jobDeduplication.ts` para reuso futuro por providers. Nao ha unique constraint nem migration nesta etapa.
-- A listagem de vagas possui a acao `Coletar vagas de teste`, que chama `POST /admin/jobs/collect` e executa `runJobProviders()`.
+- A listagem de vagas possui a acao `Coletar vagas de teste`, que chama `POST /admin/jobs/collect` e executa `runJobProviders([mockJobsProvider])`.
+- A listagem tambem possui a acao `Coletar vagas do GitHub`, que chama `POST /admin/jobs/collect-github` e executa `runJobProviders([githubJobsProvider])`.
 
 ## Providers de coleta
 
 - O contrato fica em `src/providers/types.ts`.
 - A normalizacao fica em `src/providers/normalizeCollectedJob.ts`.
 - Providers ativos ficam em `src/providers/providerRegistry.ts`.
-- O provider atual e `src/providers/mockJobs.provider.ts`.
+- O provider mock e `src/providers/mockJobs.provider.ts`.
+- O provider GitHub e `src/providers/githubJobs.provider.ts`.
 - O runner central fica em `src/providers/providerRunner.ts`.
 - O runner percorre os providers ativos, normaliza vagas, reaproveita `checkJobDuplicate`, ignora duplicatas fortes por URL e cria as demais como `DRAFT`.
 - Possiveis duplicatas por titulo + empresa sao contabilizadas, mas nao bloqueiam criacao.
-- Nao ha scraping real, Cheerio, Playwright, LinkedIn, Gupy, Solides ou fonte externa nesta etapa.
+- O runner tambem aceita resultado de provider com metadados, como `ignoredByLocation`, para exibir resumo operacional sem criar registros.
+- `providerRegistry.ts` registra `mockJobsProvider` e `githubJobsProvider`.
+- O provider GitHub usa issues abertas de `frontendbr/vagas` e `backend-br/vagas` pela API oficial do GitHub.
+- O provider GitHub usa `state=open`, `per_page=100` e `since` com data ISO de 30 dias atras, mas tambem filtra `created_at` manualmente porque `since` pode considerar atualizacao.
+- Ele coleta apenas issues criadas nos ultimos 30 dias com labels de `junior`, `júnior`, `jr`, `estagio`, `estágio`, `estagiario` ou `estagiário`.
+- Ele ignora pull requests e labels de `pleno`, `senior`, `sênior`, `especialista`, `tech lead`, `lead`, `staff` e `principal`.
+- Ele aceita vagas remotas de qualquer lugar, mas vagas hibridas/presenciais apenas quando localizacao ou corpo indicam Minas Gerais. Se a modalidade nao for clara, so aceita quando parecer Minas Gerais.
+- Issues GitHub ignoradas pelo filtro geografico entram no resumo como `ignoredByLocation`.
+- O provider GitHub tenta preencher `shortDescription` a partir de secoes do corpo da issue e `stacks` a partir de termos tecnicos conhecidos, sem chamar IA.
+- `GITHUB_TOKEN` e opcional; quando configurado, aumenta o rate limit e e enviado como `Authorization: Bearer`.
+- Nao ha scraping HTML real, Cheerio, Playwright, LinkedIn, Gupy, Solides ou fontes protegidas nesta etapa.
 
 ## Proximos passos recomendados
 

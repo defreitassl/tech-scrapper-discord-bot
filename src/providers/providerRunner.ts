@@ -17,6 +17,7 @@ export type ProviderRunnerSummary = {
   createdJobs: number;
   ignoredDuplicates: number;
   possibleDuplicates: number;
+  ignoredByLocation: number;
   errors: ProviderRunnerError[];
 };
 
@@ -29,6 +30,7 @@ export async function runJobProviders(
     createdJobs: 0,
     ignoredDuplicates: 0,
     possibleDuplicates: 0,
+    ignoredByLocation: 0,
     errors: [],
   };
 
@@ -37,8 +39,11 @@ export async function runJobProviders(
 
     try {
       logger.info('Coleta de vagas iniciada.', { provider: provider.name });
-      const collectedJobs = await provider.collect();
+      const collectResult = await provider.collect();
+      const collectedJobs = Array.isArray(collectResult) ? collectResult : collectResult.jobs;
+
       summary.collectedJobs += collectedJobs.length;
+      summary.ignoredByLocation += Array.isArray(collectResult) ? 0 : (collectResult.ignoredByLocation ?? 0);
 
       for (const collectedJob of collectedJobs) {
         const normalizedJob = normalizeCollectedJob(collectedJob, provider.name);

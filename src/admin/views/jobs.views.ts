@@ -50,13 +50,16 @@ export function renderJobsList(jobs: JobPost[], notice?: AdminNotice): string {
         <form method="post" action="/admin/jobs/publish-pending">
           <button type="submit" class="primary-action" data-loading-label="Enviando...">Enviar vagas pendentes</button>
         </form>
+        <form method="post" action="/admin/jobs/collect-github">
+          <button type="submit" class="secondary" data-loading-label="Coletando...">Coletar vagas do GitHub</button>
+        </form>
         <form method="post" action="/admin/jobs/collect">
           <button type="submit" class="secondary" data-loading-label="Coletando...">Coletar vagas de teste</button>
         </form>
         <a class="button" href="/admin/jobs/new">Nova vaga</a>
       </div>
     </div>
-    <p class="collection-note">Coleta de teste/mock: cria apenas rascunhos para revisao e nao chama IA nem publica no Discord.</p>
+    <p class="collection-note">Coletas criam apenas rascunhos para revisao, nao chamam IA e nao publicam no Discord. GitHub coleta issues abertas recentes com labels de junior ou estagio.</p>
     ${renderNotification(notice)}
     <section class="card table-card">
       <div class="section-heading">

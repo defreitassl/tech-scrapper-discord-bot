@@ -24,6 +24,24 @@ APIs publicas ou autorizadas sao preferiveis a scraping. Elas tendem a ser mais 
 
 Repositorios, arquivos Markdown, listas publicas e curadorias abertas podem ser boas fontes. Devem ser tratados como dados semi-estruturados e sempre registrar URL de origem.
 
+Nesta etapa, o primeiro provider real usa issues publicas do GitHub nos repositorios `frontendbr/vagas` e `backend-br/vagas`. Essa escolha evita scraping HTML e usa uma API publica com contrato mais estavel.
+
+Regras atuais do provider GitHub:
+
+- usa a API oficial do GitHub para listar issues;
+- coleta apenas issues abertas;
+- coleta apenas issues criadas nos ultimos 30 dias;
+- filtra por labels de `junior`, `júnior`, `jr`, `estagio`, `estágio`, `estagiario` ou `estagiário`;
+- ignora labels de `pleno`, `senior`, `sênior`, `especialista`, `tech lead`, `lead`, `staff` e `principal`;
+- aceita vagas remotas de qualquer lugar;
+- aceita vagas hibridas ou presenciais somente quando indicam Minas Gerais;
+- ignora e contabiliza vagas hibridas/presenciais fora de Minas Gerais no resumo da coleta;
+- extrai `shortDescription` e `stacks` do corpo da issue quando ha informacao suficiente;
+- salva as vagas como `DRAFT`;
+- nao chama IA;
+- nao envia ao Discord;
+- aceita `GITHUB_TOKEN` opcional para aumentar o rate limit.
+
 ### Paginas publicas simples
 
 Paginas HTML estaticas ou pouco dinamicas podem ser coletadas com baixo risco usando parsing simples.
@@ -62,4 +80,3 @@ Comecar por fontes simples, publicas e revisaveis:
 - paginas HTML simples.
 
 Na fase inicial, qualquer vaga coletada automaticamente deve entrar como `DRAFT` ou equivalente para revisao humana antes de publicacao.
-

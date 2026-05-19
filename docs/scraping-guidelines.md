@@ -27,6 +27,8 @@ Cada provider deve ter intervalo conservador entre requisicoes. Para primeiras v
 
 Quando houver muitas fontes, usar fila ou controle central de rate limit.
 
+O provider GitHub atual nao faz scraping HTML; ele usa a API oficial do GitHub e aceita `GITHUB_TOKEN` opcional para aumentar o rate limit. Sem token, a coleta continua manual, mas deve ser usada com ainda mais parcimonia por causa do limite anonimo menor.
+
 ## Tratamento de falhas
 
 Scrapers quebram. O sistema deve tolerar:
@@ -53,4 +55,3 @@ O fluxo recomendado e:
 5. Revisar no painel.
 6. Marcar como `PENDING`.
 7. Publicar manualmente.
-

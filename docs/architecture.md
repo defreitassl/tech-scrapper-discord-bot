@@ -16,7 +16,7 @@
 - `src/admin/routes/schedule.routes.ts`: rotas de configuracao do envio agendado.
 - `src/admin/views/`: renderizacao server-side do painel. `layout.ts` contem o layout base, `styles.ts` contem o CSS inline, `components.ts` contem componentes HTML reutilizaveis, `jobs.views.ts` contem telas de vagas e `schedule.views.ts` contem a tela de agendamento.
 - `src/admin/helpers/`: helpers puros do painel. `forms.ts` concentra parse e normalizacao de formularios, `validators.ts` concentra validacoes de formulario/status, `status.ts` concentra labels de status, `formatters.ts` concentra formatacao visual simples e `notifications.ts` concentra notificacoes temporarias via query params.
-- `src/providers/`: base inicial de providers de coleta. Inclui contrato (`types.ts`), normalizacao (`normalizeCollectedJob.ts`), registry de providers ativos (`providerRegistry.ts`), provider mock (`mockJobs.provider.ts`) e runner (`providerRunner.ts`).
+- `src/providers/`: base inicial de providers de coleta. Inclui contrato (`types.ts`), normalizacao (`normalizeCollectedJob.ts`), registry de providers ativos (`providerRegistry.ts`), provider mock (`mockJobs.provider.ts`), provider GitHub (`githubJobs.provider.ts`) e runner (`providerRunner.ts`).
 - `src/services/publishPendingJobs.ts`: fluxo de publicacao de vagas, incluindo envio em lote de vagas `PENDING` e envio de uma unica vaga.
 - `src/services/jobDeduplication.ts`: primeira camada reutilizavel de deduplicacao de vagas. Bloqueia duplicata forte por URL normalizada e sinaliza possivel duplicata por titulo + empresa normalizados.
 - `src/services/schedulerSettings.ts`: leitura, criacao padrao, validacao e atualizacao das configuracoes de envio agendado.
@@ -54,24 +54,49 @@
 
 O envio individual nao reenvia vagas `SENT` e nao publica vagas `ARCHIVED`.
 
-## Fluxo de coleta de teste/providers
+## Fluxo de coleta/providers
 
-O projeto possui uma base inicial de providers em `src/providers/`, sem scraping real nesta etapa.
+O projeto possui uma base inicial de providers em `src/providers/`. A coleta continua manual pelo painel e cria apenas rascunhos para revisao humana.
 
-O fluxo atual e acionado manualmente no painel pela rota `POST /admin/jobs/collect`, exibida na listagem como `Coletar vagas de teste`.
+O fluxo de teste/mock e acionado pela rota `POST /admin/jobs/collect`, exibida na listagem como `Coletar vagas de teste`.
 
 1. O admin aciona a coleta de teste na listagem de vagas.
-2. `runJobProviders` percorre os providers registrados em `providerRegistry`.
-3. Cada provider executa `collect()` e retorna `CollectedJob[]`.
+2. A rota chama `runJobProviders([mockJobsProvider])`.
+3. Cada provider executa `collect()` e retorna `CollectedJob[]` ou um resultado com `jobs` e metadados operacionais.
 4. Cada vaga coletada passa por `normalizeCollectedJob`, que remove espacos duplicados em campos estruturados, transforma strings vazias em `null`, preserva `rawText` quando existir e garante `source`.
 5. Antes de criar no banco, o runner chama `checkJobDuplicate` em `src/services/jobDeduplication.ts`.
 6. Duplicata forte por URL normalizada bloqueia a criacao.
 7. Possivel duplicata por titulo + empresa e apenas contabilizada; a vaga ainda e criada como `DRAFT` para revisao humana.
 8. Vagas criadas automaticamente entram sempre como `DRAFT`, com `useAi = false`.
 9. A coleta nao chama Gemini/IA, nao marca vagas como `PENDING` e nao envia nada ao Discord.
-10. O painel redireciona de volta para `/admin/jobs` com um toast resumindo novas vagas e duplicatas por URL ignoradas.
+10. O painel redireciona de volta para `/admin/jobs` com um toast resumindo novas vagas, duplicatas por URL ignoradas e metadados especificos da coleta quando existirem.
 
-O provider ativo nesta etapa e apenas `mockJobsProvider`, que retorna vagas fake para validar arquitetura e fluxo operacional. Nao ha provider para LinkedIn, Gupy, Solides ou qualquer fonte real.
+O provider mock retorna vagas fake para validar arquitetura e fluxo operacional.
+
+## Fluxo de coleta GitHub
+
+A rota `POST /admin/jobs/collect-github`, exibida na listagem como `Coletar vagas do GitHub`, executa apenas `githubJobsProvider`.
+
+O provider GitHub usa a API oficial `GET https://api.github.com/repos/{owner}/{repo}/issues` para ler issues publicas abertas de:
+
+- `frontendbr/vagas`
+- `backend-br/vagas`
+
+Ele envia os headers `Accept: application/vnd.github+json` e `X-GitHub-Api-Version: 2022-11-28`. Quando `GITHUB_TOKEN` existe, tambem envia `Authorization: Bearer <GITHUB_TOKEN>`. Sem token, a coleta continua funcionando sem autenticacao, mas registra aviso sobre rate limit menor.
+
+O provider usa `state=open`, `per_page=100` e `since=<data ISO de 30 dias atras>`. Como o `since` da API considera atualizacao da issue, o provider tambem filtra manualmente `created_at` e aceita somente issues criadas nos ultimos 30 dias. Pull requests retornados pela API sao ignorados.
+
+A filtragem de nivel e baseada em labels. A issue so e coletada quando as labels indicam `junior`, `júnior`, `jr`, `estagio`, `estágio`, `estagiario` ou `estagiário`. Labels de `pleno`, `senior`, `sênior`, `especialista`, `tech lead`, `lead`, `staff` ou `principal` bloqueiam a coleta. Se o nivel nao puder ser identificado claramente como `Júnior` ou `Estágio`, a issue nao e coletada.
+
+O filtro geografico aceita vagas 100% remotas de qualquer cidade, estado ou pais. Vagas hibridas ou presenciais so sao aceitas quando a localizacao ou o corpo indicam Minas Gerais, incluindo referencias como `MG`, `Minas Gerais`, `Belo Horizonte`, `BH`, `Contagem`, `Betim`, `Nova Lima`, `Uberlandia`, `Juiz de Fora` e outras cidades mineiras mapeadas no provider. Quando a modalidade nao e identificada, a issue so e aceita se parecer ser de Minas Gerais. Issues rejeitadas por essa regra incrementam `ignoredByLocation` no resumo.
+
+O titulo da issue e interpretado a partir de formatos como `[Cidade/Remoto] Cargo na Empresa`: a localizacao vem do texto entre colchetes, o cargo fica em `title` e a empresa e extraida de conectores como `na`, `no`, `na empresa` ou `para`, quando possivel. Se a empresa nao vier do titulo, o provider tenta campos confiaveis no corpo, como `Empresa:`.
+
+O provider tambem tenta extrair `shortDescription` do corpo da issue a partir de secoes como `Descricao da vaga`, `Sobre a vaga`, `Nossa empresa` e `Responsabilidades`, mantendo um resumo curto de ate cerca de 80 palavras. As `stacks` sao extraidas por termos tecnicos conhecidos, como React, TypeScript, Node.js, SQL, Docker, Java, Python, PHP, HTML e CSS, sem inventar tecnologias. O corpo da issue tambem e salvo em `rawText` com limite de 300 palavras.
+
+Depois da coleta, o runner existente normaliza, deduplica e cria os registros como `DRAFT`, com `useAi = false`. Duplicatas fortes por URL sao ignoradas. Possiveis duplicatas por titulo + empresa sao contabilizadas no toast, mas ainda podem ser criadas como rascunho.
+
+A coleta GitHub nao chama IA, nao envia vagas ao Discord, nao transforma vagas em `PENDING` automaticamente e nao altera o agendamento.
 
 ## Fluxo de publicacao agendada
 

@@ -16,8 +16,13 @@ export type CollectedJob = {
 
 export interface JobSourceProvider {
   name: string;
-  collect(): Promise<CollectedJob[]>;
+  collect(): Promise<CollectedJob[] | ProviderCollectResult>;
 }
+
+export type ProviderCollectResult = {
+  jobs: CollectedJob[];
+  ignoredByLocation?: number;
+};
 
 export type NormalizedCollectedJob = {
   title: string | null;
