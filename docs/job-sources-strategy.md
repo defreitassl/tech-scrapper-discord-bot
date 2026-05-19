@@ -24,14 +24,16 @@ APIs publicas ou autorizadas sao preferiveis a scraping. Elas tendem a ser mais 
 
 Repositorios, arquivos Markdown, listas publicas e curadorias abertas podem ser boas fontes. Devem ser tratados como dados semi-estruturados e sempre registrar URL de origem.
 
-Nesta etapa, o primeiro provider real usa issues publicas do GitHub nos repositorios `frontendbr/vagas` e `backend-br/vagas`. Essa escolha evita scraping HTML e usa uma API publica com contrato mais estavel.
+Nesta etapa, o primeiro provider real usa issues publicas do GitHub nos repositorios `frontendbr/vagas`, `backend-br/vagas`, `react-brasil/vagas`, `qa-brasil/vagas`, `nodejsdevbr/vagas`, `dotnetdevbr/vagas`, `soujava/vagas-java`, `DevOps-Brasil/Vagas`, `programadores-br/geral`, `datascience-br/vagas`, `brasil-php/vagas`, `androiddevbr/vagas`, `CocoaHeadsBrasil/vagas` e `remotejobsbr/design-ux-vagas`. Essa escolha evita scraping HTML e usa uma API publica com contrato mais estavel.
 
 Regras atuais do provider GitHub:
 
 - usa a API oficial do GitHub para listar issues;
 - coleta apenas issues abertas;
 - coleta apenas issues criadas nos ultimos 30 dias;
-- filtra por labels de `junior`, `júnior`, `jr`, `estagio`, `estágio`, `estagiario` ou `estagiário`;
+- segue nos demais repositorios quando um repositorio falha e contabiliza o erro no resumo;
+- filtra por labels de `junior`, `júnior`, `jr`, `estagio`, `estágio`, `estagiario`, `estagiário` ou `trainee`;
+- trata `trainee` como nivel de entrada;
 - ignora labels de `pleno`, `senior`, `sênior`, `especialista`, `tech lead`, `lead`, `staff` e `principal`;
 - aceita vagas remotas de qualquer lugar;
 - aceita vagas hibridas ou presenciais somente quando indicam Minas Gerais;
@@ -41,6 +43,10 @@ Regras atuais do provider GitHub:
 - nao chama IA;
 - nao envia ao Discord;
 - aceita `GITHUB_TOKEN` opcional para aumentar o rate limit.
+
+Depois da coleta, a revisao humana continua obrigatoria. O admin pode usar `Preparar e colocar na fila` para gerar a mensagem com IA e transformar uma vaga revisada em `PENDING`.
+
+Alem da coleta manual no painel, o processo admin agenda a coleta dos providers reais diariamente as 08:00 em `America/Sao_Paulo`. Essa rotina nao executa providers de teste/mock, nao chama IA, nao publica no Discord e salva somente rascunhos `DRAFT`.
 
 ### Paginas publicas simples
 

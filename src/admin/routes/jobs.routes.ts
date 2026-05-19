@@ -5,7 +5,7 @@ import { prisma } from '../../lib/prisma';
 import { generateJobMessage } from '../../services/aiMessageGenerator';
 import { checkJobDuplicate } from '../../services/jobDeduplication';
 import { publishPendingJobs, publishSingleJob } from '../../services/publishPendingJobs';
-import { githubJobsProvider } from '../../providers/githubJobs.provider';
+import { runRealJobCollection } from '../../services/scheduledCollector';
 import { mockJobsProvider } from '../../providers/mockJobs.provider';
 import { runJobProviders } from '../../providers/providerRunner';
 import { parseJobForm } from '../helpers/forms';
@@ -154,8 +154,21 @@ export function createJobsRouter(): express.Router {
   router.post('/admin/jobs/collect-github', async (_request, response) => {
     try {
       logger.info('Coleta manual de vagas GitHub iniciada pelo admin.');
-      const result = await runJobProviders([githubJobsProvider]);
-      const message = `Coleta GitHub concluída: ${result.createdJobs} novas, ${result.ignoredDuplicates} duplicatas, ${result.possibleDuplicates} possíveis duplicatas, ${result.ignoredByLocation} ignoradas por localização.`;
+      const collectionResult = await runRealJobCollection('manual');
+
+      if (collectionResult.skipped || !collectionResult.summary) {
+        redirectWithNotice(
+          response,
+          '/admin/jobs',
+          'Coleta GitHub ignorada porque outra coleta ja esta em execucao.',
+          'warning',
+        );
+        return;
+      }
+
+      const result = collectionResult.summary;
+      const ignoredByLevel = result.ignoredBySeniority + result.ignoredByMissingEntryLevel;
+      const message = `Coleta GitHub: ${result.totalIssuesRead} issues analisadas, ${result.createdJobs} novas, ${result.ignoredDuplicates} duplicatas, ${result.possibleDuplicates} possíveis, ${result.ignoredByDate} antigas, ${result.ignoredByLocation} fora de localização, ${ignoredByLevel} fora do nível, ${result.repositoryErrors} ${result.repositoryErrors === 1 ? 'erro' : 'erros'}.`;
       const noticeType = result.errors.length > 0 ? 'warning' : result.createdJobs > 0 ? 'success' : 'info';
 
       redirectWithNotice(response, '/admin/jobs', message, noticeType);
@@ -286,6 +299,71 @@ export function createJobsRouter(): express.Router {
         response,
         `/admin/jobs/${job.id}`,
         'Erro ao gerar IA. Verifique os dados da vaga e tente novamente.',
+        'error',
+      );
+    }
+  });
+
+  router.post('/admin/jobs/:id/prepare', async (request, response) => {
+    const job = await findJobOrRenderNotFound(request.params.id, response);
+
+    if (!job) {
+      return;
+    }
+
+    if (job.status === JobStatus.SENT || job.status === JobStatus.ARCHIVED) {
+      redirectWithNotice(
+        response,
+        `/admin/jobs/${job.id}`,
+        'Esta vaga ja foi enviada ou arquivada e nao pode ser preparada para a fila.',
+        'warning',
+      );
+      return;
+    }
+
+    try {
+      logger.info('Preparacao de vaga com IA iniciada pelo admin.', {
+        jobId: job.id,
+        title: job.title,
+        status: job.status,
+      });
+      const generatedMessage = await generateJobMessage(job);
+
+      await prisma.jobPost.update({
+        where: { id: job.id },
+        data: {
+          aiGeneratedText: generatedMessage,
+          status: JobStatus.PENDING,
+          useAi: true,
+        },
+      });
+
+      logger.info('Vaga preparada e colocada na fila.', {
+        jobId: job.id,
+        previousStatus: job.status,
+        nextStatus: JobStatus.PENDING,
+        messageLength: generatedMessage.length,
+      });
+
+      redirectWithNotice(
+        response,
+        `/admin/jobs/${job.id}`,
+        job.status === JobStatus.PENDING
+          ? 'Mensagem com IA regenerada e vaga mantida na fila.'
+          : 'Vaga preparada com IA e colocada na fila de envio.',
+      );
+    } catch (error) {
+      logger.error('Erro ao preparar vaga com IA pelo admin.', error, {
+        jobId: job.id,
+        title: job.title,
+        status: job.status,
+      });
+      redirectWithNotice(
+        response,
+        `/admin/jobs/${job.id}`,
+        job.status === JobStatus.PENDING
+          ? 'Nao foi possivel regenerar a mensagem com IA agora. A vaga foi mantida como estava.'
+          : 'Nao foi possivel preparar a vaga com IA agora. A vaga foi mantida sem entrar na fila.',
         'error',
       );
     }

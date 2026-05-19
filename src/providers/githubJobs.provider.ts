@@ -1,5 +1,11 @@
 import { logger } from '../lib/logger';
-import type { CollectedJob, JobSourceProvider, ProviderCollectResult } from './types';
+import type {
+  CollectedJob,
+  JobSourceProvider,
+  ProviderCollectError,
+  ProviderCollectResult,
+  ProviderRepositorySummary,
+} from './types';
 
 const GITHUB_API_VERSION = '2022-11-28';
 const MAX_ISSUE_AGE_DAYS = 30;
@@ -7,6 +13,18 @@ const MAX_ISSUE_AGE_DAYS = 30;
 const GITHUB_JOB_REPOSITORIES = [
   { owner: 'frontendbr', repo: 'vagas' },
   { owner: 'backend-br', repo: 'vagas' },
+  { owner: 'react-brasil', repo: 'vagas' },
+  { owner: 'qa-brasil', repo: 'vagas' },
+  { owner: 'nodejsdevbr', repo: 'vagas' },
+  { owner: 'dotnetdevbr', repo: 'vagas' },
+  { owner: 'soujava', repo: 'vagas-java' },
+  { owner: 'DevOps-Brasil', repo: 'Vagas' },
+  { owner: 'programadores-br', repo: 'geral' },
+  { owner: 'datascience-br', repo: 'vagas' },
+  { owner: 'brasil-php', repo: 'vagas' },
+  { owner: 'androiddevbr', repo: 'vagas' },
+  { owner: 'CocoaHeadsBrasil', repo: 'vagas' },
+  { owner: 'remotejobsbr', repo: 'design-ux-vagas' },
 ];
 
 const DESCRIPTION_SECTION_TITLES = ['descrição da vaga', 'sobre a vaga', 'nossa empresa', 'responsabilidades'];
@@ -95,7 +113,8 @@ export const githubJobsProvider: JobSourceProvider = {
   name: 'github-jobs',
   async collect(): Promise<ProviderCollectResult> {
     const collectedJobs: CollectedJob[] = [];
-    let ignoredByLocation = 0;
+    const errors: ProviderCollectError[] = [];
+    const repositorySummaries: ProviderRepositorySummary[] = [];
     const since = getDateDaysAgo(MAX_ISSUE_AGE_DAYS);
     const token = process.env.GITHUB_TOKEN?.trim();
 
@@ -104,26 +123,55 @@ export const githubJobsProvider: JobSourceProvider = {
     }
 
     for (const repository of GITHUB_JOB_REPOSITORIES) {
-      const issues = await fetchRepositoryIssues(repository.owner, repository.repo, since, token);
+      const source = `${repository.owner}/${repository.repo}`;
+      const repositorySummary = createRepositorySummary(source);
+      repositorySummaries.push(repositorySummary);
+      let issues: GitHubIssue[];
+
+      try {
+        issues = await fetchRepositoryIssues(repository.owner, repository.repo, since, token);
+        repositorySummary.totalIssuesRead = issues.length;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Erro desconhecido ao coletar repositorio GitHub.';
+
+        repositorySummary.errors += 1;
+        errors.push({
+          provider: `github-jobs:${source}`,
+          message,
+        });
+        logger.error('Erro ao coletar issues de repositorio GitHub. Continuando nos demais repositorios.', error, {
+          repository: source,
+        });
+        continue;
+      }
 
       for (const issue of issues) {
         if (!isCollectableIssue(issue, since)) {
+          if (issue.created_at && !isIssueRecent(issue.created_at, MAX_ISSUE_AGE_DAYS, since)) {
+            repositorySummary.ignoredByDate += 1;
+          }
           continue;
         }
 
         const labels = getIssueLabelNames(issue.labels);
 
-        if (isDisallowedSeniority(labels) || !isEntryLevelIssue(labels)) {
+        if (isDisallowedSeniority(labels)) {
+          repositorySummary.ignoredBySeniority += 1;
+          continue;
+        }
+
+        if (!isEntryLevelIssue(labels)) {
+          repositorySummary.ignoredByMissingEntryLevel += 1;
           continue;
         }
 
         const level = extractLevel(labels);
 
         if (!level) {
+          repositorySummary.ignoredByMissingEntryLevel += 1;
           continue;
         }
 
-        const source = `${repository.owner}/${repository.repo}`;
         const issueTitle = issue.title ?? '';
         const body = issue.body ?? '';
         const parsedTitle = parseGitHubIssueTitle(issueTitle);
@@ -138,7 +186,7 @@ export const githubJobsProvider: JobSourceProvider = {
             modality,
           })
         ) {
-          ignoredByLocation += 1;
+          repositorySummary.ignoredByLocation += 1;
           continue;
         }
 
@@ -162,10 +210,38 @@ export const githubJobsProvider: JobSourceProvider = {
 
     return {
       jobs: collectedJobs,
-      ignoredByLocation,
+      totalIssuesRead: sumRepositoryMetric(repositorySummaries, 'totalIssuesRead'),
+      ignoredByDate: sumRepositoryMetric(repositorySummaries, 'ignoredByDate'),
+      ignoredBySeniority: sumRepositoryMetric(repositorySummaries, 'ignoredBySeniority'),
+      ignoredByMissingEntryLevel: sumRepositoryMetric(repositorySummaries, 'ignoredByMissingEntryLevel'),
+      ignoredByLocation: sumRepositoryMetric(repositorySummaries, 'ignoredByLocation'),
+      errors,
+      repositorySummaries,
     };
   },
 };
+
+function createRepositorySummary(source: string): ProviderRepositorySummary {
+  return {
+    source,
+    totalIssuesRead: 0,
+    ignoredByDate: 0,
+    ignoredBySeniority: 0,
+    ignoredByMissingEntryLevel: 0,
+    ignoredByLocation: 0,
+    ignoredDuplicates: 0,
+    possibleDuplicates: 0,
+    created: 0,
+    errors: 0,
+  };
+}
+
+function sumRepositoryMetric(
+  summaries: ProviderRepositorySummary[],
+  metric: keyof Omit<ProviderRepositorySummary, 'source'>,
+): number {
+  return summaries.reduce((total, summary) => total + summary[metric], 0);
+}
 
 async function fetchRepositoryIssues(
   owner: string,
@@ -232,7 +308,8 @@ function isEntryLevelIssue(labels: string[]): boolean {
       normalizedLabel.includes('junior') ||
       normalizedLabel.includes('jr') ||
       normalizedLabel.includes('estagio') ||
-      normalizedLabel.includes('estagiario')
+      normalizedLabel.includes('estagiario') ||
+      normalizedLabel.includes('trainee')
     );
   });
 }
@@ -369,6 +446,10 @@ function extractLevel(labels: string[]): string | null {
 
   if (normalizedLabels.some((label) => label.includes('estagio') || label.includes('estagiario'))) {
     return 'Estágio';
+  }
+
+  if (normalizedLabels.some((label) => label.includes('trainee'))) {
+    return 'Trainee';
   }
 
   if (normalizedLabels.some((label) => label.includes('junior') || label.includes('jr'))) {

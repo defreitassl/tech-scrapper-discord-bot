@@ -21,7 +21,31 @@ export interface JobSourceProvider {
 
 export type ProviderCollectResult = {
   jobs: CollectedJob[];
+  totalIssuesRead?: number;
+  ignoredByDate?: number;
+  ignoredBySeniority?: number;
+  ignoredByMissingEntryLevel?: number;
   ignoredByLocation?: number;
+  errors?: ProviderCollectError[];
+  repositorySummaries?: ProviderRepositorySummary[];
+};
+
+export type ProviderCollectError = {
+  provider: string;
+  message: string;
+};
+
+export type ProviderRepositorySummary = {
+  source: string;
+  totalIssuesRead: number;
+  ignoredByDate: number;
+  ignoredBySeniority: number;
+  ignoredByMissingEntryLevel: number;
+  ignoredByLocation: number;
+  ignoredDuplicates: number;
+  possibleDuplicates: number;
+  created: number;
+  errors: number;
 };
 
 export type NormalizedCollectedJob = {

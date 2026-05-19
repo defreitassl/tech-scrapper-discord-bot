@@ -11,7 +11,7 @@
 
 ## Principais modulos
 
-- `src/admin/server.ts`: ponto de entrada do painel admin. Cria o app Express, configura middlewares, registra rotas, inicia o servidor e inicia o `scheduledPublisher`.
+- `src/admin/server.ts`: ponto de entrada do painel admin. Cria o app Express, configura middlewares, registra rotas, inicia o servidor, inicia o `scheduledPublisher` e inicia o `scheduledCollector`.
 - `src/admin/routes/jobs.routes.ts`: rotas de vagas do painel admin, incluindo listagem, cadastro, detalhe, edicao, aprovacao, geracao manual de mensagem com IA, arquivamento e envio manual.
 - `src/admin/routes/schedule.routes.ts`: rotas de configuracao do envio agendado.
 - `src/admin/views/`: renderizacao server-side do painel. `layout.ts` contem o layout base, `styles.ts` contem o CSS inline, `components.ts` contem componentes HTML reutilizaveis, `jobs.views.ts` contem telas de vagas e `schedule.views.ts` contem a tela de agendamento.
@@ -25,6 +25,7 @@
 - `src/services/jobMessage.ts`: montagem de mensagem padrao e fallback de texto.
 - `src/services/aiMessageGenerator.ts`: integracao com Google AI Studio/Gemini para gerar mensagens curtas e formatadas para Discord.
 - `src/services/discordPublisher.ts`: conexao com Discord e envio da mensagem ao canal configurado.
+- `src/services/scheduledCollector.ts`: agendamento fixo da coleta automatica diaria dos providers reais, com lock simples em memoria para evitar execucoes concorrentes.
 - `src/lib/prisma.ts`: instancia compartilhada do Prisma Client.
 - `src/lib/logger.ts`: logger simples usado nos fluxos do projeto.
 - `prisma/schema.prisma`: modelo de dados do banco.
@@ -41,16 +42,18 @@
 8. Na pagina de detalhes, o painel exibe um preview da mensagem que seria enviada ao Discord. Ele usa `readyText`, depois `aiGeneratedText` valido e, se nenhum deles existir, o template padrao.
 9. Se quiser atualizar a mensagem, o admin pode acionar `Regenerar mensagem com IA`, que chama Gemini e salva o resultado em `aiGeneratedText` sem enviar ao Discord.
 10. Para vagas antigas ou rascunhos, o admin ainda pode usar `Aprovar para envio`, que internamente marca a vaga como `PENDING`.
-11. O admin pode acionar `Enviar esta vaga agora` na pagina de detalhes ou `Enviar vagas pendentes` na listagem.
-12. `publishPendingJobs` busca ate 5 vagas com status `PENDING`, ordenadas por criacao. O envio individual usa a mesma resolucao de mensagem para a vaga atual.
-13. Para cada vaga, o sistema resolve a mensagem:
+11. Para vagas coletadas como `DRAFT`, o admin pode usar `Preparar e colocar na fila`. Essa acao chama Gemini, salva `aiGeneratedText`, marca `useAi = true` e altera o status para `PENDING` somente se a IA gerar a mensagem com sucesso. A acao nao envia a vaga ao Discord.
+12. Se a vaga ja estiver `PENDING`, a mesma acao pode regenerar `aiGeneratedText` e manter a vaga na fila. Vagas `SENT` ou `ARCHIVED` nao sao preparadas.
+13. O admin pode acionar `Enviar esta vaga agora` na pagina de detalhes ou `Enviar vagas pendentes` na listagem.
+14. `publishPendingJobs` busca ate 5 vagas com status `PENDING`, ordenadas por criacao. O envio individual usa a mesma resolucao de mensagem para a vaga atual.
+15. Para cada vaga, o sistema resolve a mensagem:
    - usa `readyText` se existir;
    - reutiliza `aiGeneratedText` se existir e for valido;
    - chama a IA se `useAi` estiver habilitado;
    - usa template padrao se a IA falhar ou estiver desabilitada.
-14. `discordPublisher` envia a mensagem ao canal configurado por `DISCORD_CHANNEL_ID`.
-15. A vaga e marcada como `SENT` com `sentAt`.
-16. Em caso de erro, a vaga e marcada como `ERROR`.
+16. `discordPublisher` envia a mensagem ao canal configurado por `DISCORD_CHANNEL_ID`.
+17. A vaga e marcada como `SENT` com `sentAt`.
+18. Em caso de erro, a vaga e marcada como `ERROR`.
 
 O envio individual nao reenvia vagas `SENT` e nao publica vagas `ARCHIVED`.
 
@@ -81,12 +84,26 @@ O provider GitHub usa a API oficial `GET https://api.github.com/repos/{owner}/{r
 
 - `frontendbr/vagas`
 - `backend-br/vagas`
+- `react-brasil/vagas`
+- `qa-brasil/vagas`
+- `nodejsdevbr/vagas`
+- `dotnetdevbr/vagas`
+- `soujava/vagas-java`
+- `DevOps-Brasil/Vagas`
+- `programadores-br/geral`
+- `datascience-br/vagas`
+- `brasil-php/vagas`
+- `androiddevbr/vagas`
+- `CocoaHeadsBrasil/vagas`
+- `remotejobsbr/design-ux-vagas`
 
 Ele envia os headers `Accept: application/vnd.github+json` e `X-GitHub-Api-Version: 2022-11-28`. Quando `GITHUB_TOKEN` existe, tambem envia `Authorization: Bearer <GITHUB_TOKEN>`. Sem token, a coleta continua funcionando sem autenticacao, mas registra aviso sobre rate limit menor.
 
-O provider usa `state=open`, `per_page=100` e `since=<data ISO de 30 dias atras>`. Como o `since` da API considera atualizacao da issue, o provider tambem filtra manualmente `created_at` e aceita somente issues criadas nos ultimos 30 dias. Pull requests retornados pela API sao ignorados.
+O provider usa `state=open`, `per_page=100` e `since=<data ISO de 30 dias atras>`. Como o `since` da API considera atualizacao da issue, o provider tambem filtra manualmente `created_at` e aceita somente issues criadas nos ultimos 30 dias. Pull requests retornados pela API sao ignorados. Se um repositorio falhar, o erro e logado e contabilizado no resumo, mas a coleta continua nos demais repositorios.
 
-A filtragem de nivel e baseada em labels. A issue so e coletada quando as labels indicam `junior`, `júnior`, `jr`, `estagio`, `estágio`, `estagiario` ou `estagiário`. Labels de `pleno`, `senior`, `sênior`, `especialista`, `tech lead`, `lead`, `staff` ou `principal` bloqueiam a coleta. Se o nivel nao puder ser identificado claramente como `Júnior` ou `Estágio`, a issue nao e coletada.
+Durante a coleta, o provider contabiliza `totalIssuesRead`, `ignoredByDate`, `ignoredBySeniority`, `ignoredByMissingEntryLevel`, `ignoredByLocation` e erros por repositorio. O runner complementa o diagnostico com `ignoredDuplicates`, `possibleDuplicates` e `created`, porque esses dados dependem da deduplicacao e da escrita no banco.
+
+A filtragem de nivel e baseada em labels. A issue so e coletada quando as labels indicam `junior`, `júnior`, `jr`, `estagio`, `estágio`, `estagiario`, `estagiário` ou `trainee`. `Trainee` e tratado como nivel de entrada. Labels de `pleno`, `senior`, `sênior`, `especialista`, `tech lead`, `lead`, `staff` ou `principal` bloqueiam a coleta. Se o nivel nao puder ser identificado claramente como `Júnior`, `Estágio` ou `Trainee`, a issue nao e coletada.
 
 O filtro geografico aceita vagas 100% remotas de qualquer cidade, estado ou pais. Vagas hibridas ou presenciais so sao aceitas quando a localizacao ou o corpo indicam Minas Gerais, incluindo referencias como `MG`, `Minas Gerais`, `Belo Horizonte`, `BH`, `Contagem`, `Betim`, `Nova Lima`, `Uberlandia`, `Juiz de Fora` e outras cidades mineiras mapeadas no provider. Quando a modalidade nao e identificada, a issue so e aceita se parecer ser de Minas Gerais. Issues rejeitadas por essa regra incrementam `ignoredByLocation` no resumo.
 
@@ -96,7 +113,28 @@ O provider tambem tenta extrair `shortDescription` do corpo da issue a partir de
 
 Depois da coleta, o runner existente normaliza, deduplica e cria os registros como `DRAFT`, com `useAi = false`. Duplicatas fortes por URL sao ignoradas. Possiveis duplicatas por titulo + empresa sao contabilizadas no toast, mas ainda podem ser criadas como rascunho.
 
-A coleta GitHub nao chama IA, nao envia vagas ao Discord, nao transforma vagas em `PENDING` automaticamente e nao altera o agendamento.
+A coleta GitHub nao chama IA, nao envia vagas ao Discord, nao transforma vagas em `PENDING` automaticamente e nao altera o agendamento. O toast da rota mostra um resumo temporario com issues analisadas, novas vagas, duplicatas, possiveis duplicatas, antigas, fora de localizacao, fora do nivel e erros. O terminal registra tambem um resumo estruturado por repositorio. Nao ha tabela, pagina ou persistencia de logs de coleta.
+
+## Fluxo de coleta automatica
+
+O painel admin inicia `scheduledCollector` junto com o processo de `npm run admin`.
+
+A coleta automatica roda diariamente as 08:00 no timezone `America/Sao_Paulo`, usando `node-cron` com a expressao `0 8 * * *`.
+
+Ela executa apenas os providers reais registrados em `realJobProviders`, atualmente o `githubJobsProvider`. O `mockJobsProvider` fica em `testJobProviders` e nao roda automaticamente.
+
+A coleta automatica chama o mesmo runner de providers, entao preserva as regras centrais:
+
+- cria vagas coletadas apenas como `DRAFT`;
+- salva `useAi = false`;
+- nao chama Gemini/IA;
+- nao marca vagas como `PENDING`;
+- nao envia ao Discord;
+- reaproveita normalizacao e deduplicacao.
+
+O servico possui um lock simples em memoria (`isCollecting`). Se uma coleta manual GitHub ou automatica ja estiver em execucao, a nova execucao e ignorada com log amigavel. Esse lock evita concorrencia dentro do mesmo processo admin e nao cria estado no banco.
+
+Falhas na coleta automatica sao capturadas e registradas no logger. O processo do painel nao deve cair por erro de provider.
 
 ## Fluxo de publicacao agendada
 

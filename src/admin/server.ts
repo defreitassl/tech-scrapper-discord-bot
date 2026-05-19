@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import { logger } from '../lib/logger';
+import { startScheduledCollector } from '../services/scheduledCollector';
 import { startScheduledPublisher } from '../services/scheduledPublisher';
 import { createJobsRouter } from './routes/jobs.routes';
 import { createScheduleRouter } from './routes/schedule.routes';
@@ -33,6 +34,7 @@ app.use(createJobsRouter());
 
 app.listen(port, () => {
   logger.info('Painel admin iniciado.', { url: `http://localhost:${port}/admin/jobs` });
+  startScheduledCollector();
   startScheduledPublisher().catch((error) => {
     logger.error('Erro ao iniciar agendamento de envio.', error);
   });

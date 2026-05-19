@@ -12,13 +12,37 @@ export interface JobSourceProvider {
 
 export type ProviderCollectResult = {
   jobs: CollectedJob[];
+  totalIssuesRead?: number;
+  ignoredByDate?: number;
+  ignoredBySeniority?: number;
+  ignoredByMissingEntryLevel?: number;
   ignoredByLocation?: number;
+  errors?: ProviderCollectError[];
+  repositorySummaries?: ProviderRepositorySummary[];
+};
+
+export type ProviderCollectError = {
+  provider: string;
+  message: string;
+};
+
+export type ProviderRepositorySummary = {
+  source: string;
+  totalIssuesRead: number;
+  ignoredByDate: number;
+  ignoredBySeniority: number;
+  ignoredByMissingEntryLevel: number;
+  ignoredByLocation: number;
+  ignoredDuplicates: number;
+  possibleDuplicates: number;
+  created: number;
+  errors: number;
 };
 ```
 
 O provider deve ser pequeno, testavel e responsavel por uma unica fonte ou familia de fontes.
 
-Providers ativos devem ser registrados em `src/providers/providerRegistry.ts`. O runner central fica em `src/providers/providerRunner.ts`. Rotas especificas podem chamar o runner com uma lista explicita de providers quando precisam executar apenas uma fonte, como a coleta mock ou a coleta GitHub.
+Providers ativos devem ser registrados em `src/providers/providerRegistry.ts`. O registry separa `testJobProviders` e `realJobProviders`; a coleta automatica usa somente providers reais. O runner central fica em `src/providers/providerRunner.ts`. Rotas especificas podem chamar o runner com uma lista explicita de providers quando precisam executar apenas uma fonte, como a coleta mock ou a coleta GitHub.
 
 ## Tipo sugerido
 
@@ -85,6 +109,8 @@ O runner atual aplica exatamente essa regra:
 - URL duplicada bloqueia a criacao e incrementa `ignoredDuplicates`;
 - titulo + empresa iguais incrementam `possibleDuplicates`, mas a vaga ainda e criada como `DRAFT`.
 - providers podem retornar metadados de coleta, como `ignoredByLocation`, para aparecer no resumo operacional sem criar vagas no banco.
+- providers podem retornar erros internos, como falha por repositorio, sem interromper a execucao dos demais itens.
+- providers podem retornar `repositorySummaries` para o runner completar dados que dependem do banco, como duplicatas e vagas criadas.
 
 ## Status sugerido apos coleta
 
@@ -108,12 +134,26 @@ Na implementacao atual, `runJobProviders()` cria vagas coletadas com:
 
 Isso garante que a coleta automatica nao dispare Gemini/IA nem publique vagas no Discord.
 
+A coleta automatica diaria em `src/services/scheduledCollector.ts` reaproveita o mesmo runner e executa apenas `realJobProviders`. Ela roda as 08:00 em `America/Sao_Paulo` enquanto o processo admin estiver ativo, nao executa o provider mock e usa lock simples em memoria para ignorar execucoes concorrentes.
+
 ## Provider GitHub
 
 O provider `githubJobsProvider` coleta vagas de repositorios GitHub que publicam oportunidades como issues. A lista inicial e:
 
 - `frontendbr/vagas`
 - `backend-br/vagas`
+- `react-brasil/vagas`
+- `qa-brasil/vagas`
+- `nodejsdevbr/vagas`
+- `dotnetdevbr/vagas`
+- `soujava/vagas-java`
+- `DevOps-Brasil/Vagas`
+- `programadores-br/geral`
+- `datascience-br/vagas`
+- `brasil-php/vagas`
+- `androiddevbr/vagas`
+- `CocoaHeadsBrasil/vagas`
+- `remotejobsbr/design-ux-vagas`
 
 Ele usa somente a API oficial do GitHub:
 
@@ -140,8 +180,11 @@ Headers enviados:
 Regras do provider GitHub:
 
 - coleta apenas issues abertas;
+- se um repositorio falhar, registra erro, contabiliza no resumo e continua nos demais repositorios;
+- contabiliza issues lidas e motivos de descarte: data antiga, senioridade acima de entrada, ausencia de label de entrada e localizacao;
 - ignora pull requests;
-- aceita apenas labels de entrada: `junior`, `júnior`, `jr`, `estagio`, `estágio`, `estagiario`, `estagiário`;
+- aceita apenas labels de entrada: `junior`, `júnior`, `jr`, `estagio`, `estágio`, `estagiario`, `estagiário`, `trainee`;
+- trata `trainee` como nivel de entrada e preenche `level` como `Trainee`;
 - ignora labels de senioridade acima de entrada: `pleno`, `senior`, `sênior`, `especialista`, `tech lead`, `lead`, `staff`, `principal`;
 - aceita vagas remotas de qualquer cidade, estado ou pais;
 - aceita vagas hibridas ou presenciais somente quando a localizacao ou o corpo da issue indicam Minas Gerais;
@@ -157,3 +200,25 @@ Regras do provider GitHub:
 - cria vagas apenas como `DRAFT` via runner;
 - nao chama IA;
 - nao envia ao Discord.
+
+O toast da coleta GitHub mostra um resumo compacto e temporario, sem persistir logs em banco:
+
+```text
+Coleta GitHub: 48 issues analisadas, 2 novas, 4 duplicatas, 0 possíveis, 5 antigas, 8 fora de localização, 21 fora do nível, 1 erro.
+```
+
+O terminal recebe tambem um log estruturado por repositorio com lidas, criadas, descartes por data/nivel/localizacao, duplicatas e erros. Esse diagnostico e operacional e nao cria tela de logs nem tabela de eventos.
+
+## Preparacao de vaga coletada
+
+Vagas coletadas continuam entrando como `DRAFT`, com `useAi = false`, sem `aiGeneratedText` e fora da fila de publicacao.
+
+O painel possui a acao manual `Preparar e colocar na fila`, voltada principalmente para vagas `DRAFT` revisadas pelo admin. Ela:
+
+- chama `generateJobMessage(job)` com Gemini;
+- salva o resultado em `aiGeneratedText`;
+- marca `useAi = true`;
+- altera o status para `PENDING`;
+- nao envia a vaga ao Discord.
+
+Se a IA falhar, a vaga permanece como estava, especialmente sem transformar `DRAFT` em `PENDING`. Para vagas ja `PENDING`, a acao pode regenerar `aiGeneratedText` e manter a vaga na fila. Vagas `SENT` ou `ARCHIVED` nao sao preparadas.

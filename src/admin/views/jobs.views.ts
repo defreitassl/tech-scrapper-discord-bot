@@ -1,4 +1,4 @@
-import { JobPost } from '@prisma/client';
+import { JobPost, JobStatus } from '@prisma/client';
 import { JobFormData, formFromJob } from '../helpers/forms';
 import { escapeHtml, formatDate } from '../helpers/formatters';
 import type { AdminNotice } from '../helpers/notifications';
@@ -31,6 +31,7 @@ export function renderJobsList(jobs: JobPost[], notice?: AdminNotice): string {
           <td><span class="date-cell">${job.sentAt ? formatDate(job.sentAt) : '-'}</span></td>
           <td class="actions">
             <a class="button secondary" href="/admin/jobs/${escapeHtml(job.id)}/edit">Editar</a>
+            ${job.status === JobStatus.DRAFT ? renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/prepare`, 'Preparar', 'secondary', 'Preparando...') : ''}
             ${renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/pending`, 'Aprovar para envio', 'secondary', 'Salvando...')}
             ${renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/archive`, 'Arquivar', 'secondary', 'Salvando...')}
           </td>
@@ -143,6 +144,7 @@ export function renderJobDetails(job: JobPost, feedback: { notice?: AdminNotice 
       ${renderLongText('Texto gerado por IA', job.aiGeneratedText)}
     </div>
     <div class="actions footer-actions">
+      ${job.status === JobStatus.DRAFT || job.status === JobStatus.PENDING ? renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/prepare`, 'Preparar e colocar na fila', 'primary-action', 'Preparando...') : ''}
       ${renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/publish`, 'Enviar esta vaga agora', 'primary-action', 'Enviando...')}
       ${renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/generate-ai-message`, 'Regenerar mensagem com IA', 'secondary', 'Gerando...')}
       ${renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/pending`, 'Aprovar para envio', 'secondary', 'Salvando...')}

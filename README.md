@@ -112,6 +112,8 @@ Tambem e possivel usar a acao `Regenerar mensagem com IA` nos detalhes da vaga. 
 
 Para vagas antigas ou rascunhos, a acao `Aprovar para envio` continua disponivel. Internamente o status continua sendo `PENDING`, mas no painel ele aparece como `Pronta para envio`.
 
+Para vagas coletadas como rascunho, use `Preparar e colocar na fila` nos detalhes da vaga. Essa acao gera `aiGeneratedText` com Google AI Studio/Gemini, marca `useAi = true` e altera o status para `PENDING`, sem enviar a vaga ao Discord. Se a IA falhar, a vaga permanece como `DRAFT` e o painel mostra um aviso de erro.
+
 Para enviar vagas pendentes ao Discord, use o botao `Enviar vagas pendentes` na listagem. O painel busca ate 5 vagas com status `PENDING`, envia no canal configurado em `DISCORD_CHANNEL_ID` e atualiza cada vaga enviada para `SENT`.
 
 Para enviar uma vaga especifica, acesse os detalhes e use `Enviar esta vaga agora`. Vagas ja enviadas nao sao reenviadas e vagas arquivadas nao sao publicadas.
@@ -132,10 +134,22 @@ A listagem tambem possui o botao `Coletar vagas do GitHub`. Ele executa apenas o
 
 - `frontendbr/vagas`
 - `backend-br/vagas`
+- `react-brasil/vagas`
+- `qa-brasil/vagas`
+- `nodejsdevbr/vagas`
+- `dotnetdevbr/vagas`
+- `soujava/vagas-java`
+- `DevOps-Brasil/Vagas`
+- `programadores-br/geral`
+- `datascience-br/vagas`
+- `brasil-php/vagas`
+- `androiddevbr/vagas`
+- `CocoaHeadsBrasil/vagas`
+- `remotejobsbr/design-ux-vagas`
 
 O provider busca issues abertas atualizadas desde os ultimos 30 dias usando o parametro `since`, mas tambem filtra manualmente `created_at` para aceitar somente issues criadas nos ultimos 30 dias.
 
-A coleta aceita somente vagas cujas labels indiquem `junior`, `júnior`, `jr`, `estagio`, `estágio`, `estagiario` ou `estagiário`, e ignora labels como `pleno`, `senior`, `sênior`, `especialista`, `tech lead`, `lead`, `staff` e `principal`. Pull requests e issues antigas sao ignoradas.
+A coleta aceita somente vagas cujas labels indiquem `junior`, `júnior`, `jr`, `estagio`, `estágio`, `estagiario`, `estagiário` ou `trainee`. `Trainee` e tratado como nivel de entrada. Labels como `pleno`, `senior`, `sênior`, `especialista`, `tech lead`, `lead`, `staff` e `principal` sao ignoradas. Pull requests e issues antigas sao ignoradas.
 
 O filtro geografico aceita vagas remotas de qualquer lugar. Vagas hibridas ou presenciais so sao aceitas quando a localizacao ou o corpo da issue indicam Minas Gerais; vagas fora de MG, como uma vaga hibrida em Brasilia, sao ignoradas e contabilizadas no resumo como `ignoradas por localização`.
 
@@ -143,7 +157,19 @@ O provider tenta preencher `shortDescription` a partir de secoes como `Descricao
 
 As vagas coletadas do GitHub sao normalizadas, passam pela deduplicacao existente e entram como `DRAFT`. Duplicatas fortes por URL sao ignoradas. Possiveis duplicatas por titulo + empresa sao criadas como rascunho e contabilizadas no resumo da coleta.
 
+Se um repositorio GitHub falhar, o provider registra o erro e continua nos demais repositorios. O resumo da coleta informa novas vagas criadas, duplicatas ignoradas, possiveis duplicatas, vagas ignoradas por localizacao e quantidade de erros.
+
 Essa coleta nao chama Gemini/IA, nao marca vagas como `PENDING` e nao envia nada ao Discord.
+
+### Coleta automatica diaria
+
+Quando o painel admin esta rodando com `npm run admin`, o sistema agenda automaticamente a coleta dos providers reais todos os dias as 08:00 no timezone `America/Sao_Paulo`.
+
+Essa rotina executa apenas providers reais, como o GitHub. O provider mock/de teste nao roda automaticamente.
+
+A coleta automatica segue as mesmas regras da coleta manual de providers: cria vagas apenas como `DRAFT`, com `useAi = false`, nao chama Gemini/IA, nao marca vagas como `PENDING` e nao envia nada ao Discord.
+
+Se uma coleta manual ou automatica ja estiver em execucao, uma nova execucao e ignorada e registrada em log para evitar concorrencia.
 
 ## Envio agendado
 
@@ -204,6 +230,7 @@ npm run admin
 - Model `SchedulerSettings` para configuracao de envio agendado
 - Painel admin simples para cadastrar, listar, visualizar e editar vagas
 - Base inicial de providers com coleta mock/de teste
-- Provider GitHub para coletar issues publicas recentes de `frontendbr/vagas` e `backend-br/vagas`
+- Provider GitHub para coletar issues publicas recentes de repositorios brasileiros de vagas no GitHub
+- Coleta automatica diaria dos providers reais as 08:00, criando apenas rascunhos
 
-Ainda nao ha scraping HTML real, coleta agendada de providers ou autenticacao.
+Ainda nao ha scraping HTML real ou autenticacao.
