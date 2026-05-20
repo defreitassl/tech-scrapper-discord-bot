@@ -20,6 +20,17 @@ Quando disponivel, RSS e uma boa fonte para coleta automatica. Tem formato estru
 
 APIs publicas ou autorizadas sao preferiveis a scraping. Elas tendem a ser mais estaveis, possuem contratos claros e podem oferecer metadados melhores.
 
+Nesta etapa, foram adicionados quatro providers externos por APIs publicas JSON:
+
+- Himalayas, via `https://himalayas.app/jobs/api/search`;
+- Jobicy, via `https://jobicy.com/api/v2/remote-jobs`;
+- RemoteOK, via `https://remoteok.com/api`;
+- Remotive, via `https://remotive.com/api/remote-jobs`.
+
+Esses providers nao usam Playwright, Cheerio, login, captcha ou scraping com navegador. Eles fazem poucas chamadas por execucao, filtram vagas dos ultimos 30 dias, aceitam somente sinais claros de junior/entry-level/intern/estagio/trainee e rejeitam senioridade alta ou intermediaria. Como sao fontes remotas, a coleta aceita apenas vagas com localidade global ou compativel com Brasil, LATAM ou Americas.
+
+Jobicy, RemoteOK e Remotive exigem atribuicao/linkback. O projeto preserva a URL original da vaga e registra `source` para que a revisao humana mantenha a origem visivel na publicacao.
+
 ### GitHub e listas publicas
 
 Repositorios, arquivos Markdown, listas publicas e curadorias abertas podem ser boas fontes. Devem ser tratados como dados semi-estruturados e sempre registrar URL de origem.
@@ -32,12 +43,13 @@ Regras atuais do provider GitHub:
 - coleta apenas issues abertas;
 - coleta apenas issues criadas nos ultimos 30 dias;
 - segue nos demais repositorios quando um repositorio falha e contabiliza o erro no resumo;
-- filtra por labels de `junior`, `júnior`, `jr`, `estagio`, `estágio`, `estagiario`, `estagiário` ou `trainee`;
+- filtra por labels de `junior`, `júnior`, `jr`, `estagio`, `estágio`, `estagiario`, `estagiário` ou `trainee`, incluindo labels compostas como `estágio remoto`;
 - trata `trainee` como nivel de entrada;
 - ignora labels de `pleno`, `senior`, `sênior`, `especialista`, `tech lead`, `lead`, `staff` e `principal`;
 - aceita vagas remotas de qualquer lugar;
 - aceita vagas hibridas ou presenciais somente quando indicam Minas Gerais;
 - ignora e contabiliza vagas hibridas/presenciais fora de Minas Gerais no resumo da coleta;
+- aplica filtro deterministico de qualidade antes de salvar, rejeitando vagas sem titulo, sem canal claro de candidatura (URL ou e-mail no texto), sem descricao util, vagas com sinais fortes de senioridade/experiencia alta ou vagas fora de tecnologia;
 - extrai `shortDescription` e `stacks` do corpo da issue quando ha informacao suficiente;
 - salva as vagas como `DRAFT`;
 - nao chama IA;
@@ -46,7 +58,9 @@ Regras atuais do provider GitHub:
 
 Depois da coleta, a revisao humana continua obrigatoria. O admin pode usar `Preparar e colocar na fila` para gerar a mensagem com IA e transformar uma vaga revisada em `PENDING`.
 
-Alem da coleta manual no painel, o processo admin agenda a coleta dos providers reais diariamente as 08:00 em `America/Sao_Paulo`. Essa rotina nao executa providers de teste/mock, nao chama IA, nao publica no Discord e salva somente rascunhos `DRAFT`.
+O filtro de qualidade nao substitui a revisao humana. Ele apenas reduz ruido antes da criacao do rascunho e registra rejeicoes em `ignoredByQuality` com os motivos no terminal.
+
+Alem da coleta manual no painel, o processo admin agenda a coleta dos providers reais diariamente as 08:00 em `America/Sao_Paulo`. Essa rotina executa GitHub e as APIs externas registradas, nao executa providers de teste/mock, nao chama IA, nao publica no Discord e salva somente rascunhos `DRAFT`.
 
 ### Paginas publicas simples
 
@@ -86,3 +100,5 @@ Comecar por fontes simples, publicas e revisaveis:
 - paginas HTML simples.
 
 Na fase inicial, qualquer vaga coletada automaticamente deve entrar como `DRAFT` ou equivalente para revisao humana antes de publicacao.
+
+Fontes como Arbeitnow, Findwork, Jobdata, LinkedIn, Gupy, Solides, Programathor e Remotar continuam fora desta etapa por menor aderencia, necessidade de chave/login, uso comercial, captcha, protecoes anti-bot ou risco de scraping pesado.

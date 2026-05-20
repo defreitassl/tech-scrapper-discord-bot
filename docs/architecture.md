@@ -16,9 +16,10 @@
 - `src/admin/routes/schedule.routes.ts`: rotas de configuracao do envio agendado.
 - `src/admin/views/`: renderizacao server-side do painel. `layout.ts` contem o layout base, `styles.ts` contem o CSS inline, `components.ts` contem componentes HTML reutilizaveis, `jobs.views.ts` contem telas de vagas e `schedule.views.ts` contem a tela de agendamento.
 - `src/admin/helpers/`: helpers puros do painel. `forms.ts` concentra parse e normalizacao de formularios, `validators.ts` concentra validacoes de formulario/status, `status.ts` concentra labels de status, `formatters.ts` concentra formatacao visual simples e `notifications.ts` concentra notificacoes temporarias via query params.
-- `src/providers/`: base inicial de providers de coleta. Inclui contrato (`types.ts`), normalizacao (`normalizeCollectedJob.ts`), registry de providers ativos (`providerRegistry.ts`), provider mock (`mockJobs.provider.ts`), provider GitHub (`githubJobs.provider.ts`) e runner (`providerRunner.ts`).
+- `src/providers/`: base de providers de coleta. Inclui contrato (`types.ts`), normalizacao (`normalizeCollectedJob.ts`), registry de providers ativos (`providerRegistry.ts`), provider mock (`mockJobs.provider.ts`), provider GitHub (`githubJobs.provider.ts`), providers externos por APIs publicas JSON (`himalayas.provider.ts`, `jobicy.provider.ts`, `remoteOk.provider.ts`, `remotive.provider.ts`), helpers compartilhados e runner (`providerRunner.ts`).
 - `src/services/publishPendingJobs.ts`: fluxo de publicacao de vagas, incluindo envio em lote de vagas `PENDING` e envio de uma unica vaga.
 - `src/services/jobDeduplication.ts`: primeira camada reutilizavel de deduplicacao de vagas. Bloqueia duplicata forte por URL normalizada e sinaliza possivel duplicata por titulo + empresa normalizados.
+- `src/services/jobQualityFilter.ts`: filtro deterministico de qualidade para vagas coletadas por providers. Rejeita vagas antes da criacao no banco quando faltam dados essenciais, falta canal claro de candidatura (URL ou e-mail no texto), ha sinais fortes de senioridade/experiencia alta ou a vaga parece fora de tecnologia.
 - `src/services/schedulerSettings.ts`: leitura, criacao padrao, validacao e atualizacao das configuracoes de envio agendado.
 - `src/services/schedulerOperations.ts`: consultas operacionais do agendamento, como limite restante do dia e proximas vagas `PENDING`.
 - `src/services/scheduledPublisher.ts`: registro dos crons de publicacao e aplicacao do limite diario antes de chamar `publishPendingJobs`.
@@ -67,12 +68,14 @@ O fluxo de teste/mock e acionado pela rota `POST /admin/jobs/collect`, exibida n
 2. A rota chama `runJobProviders([mockJobsProvider])`.
 3. Cada provider executa `collect()` e retorna `CollectedJob[]` ou um resultado com `jobs` e metadados operacionais.
 4. Cada vaga coletada passa por `normalizeCollectedJob`, que remove espacos duplicados em campos estruturados, transforma strings vazias em `null`, preserva `rawText` quando existir e garante `source`.
-5. Antes de criar no banco, o runner chama `checkJobDuplicate` em `src/services/jobDeduplication.ts`.
-6. Duplicata forte por URL normalizada bloqueia a criacao.
-7. Possivel duplicata por titulo + empresa e apenas contabilizada; a vaga ainda e criada como `DRAFT` para revisao humana.
-8. Vagas criadas automaticamente entram sempre como `DRAFT`, com `useAi = false`.
-9. A coleta nao chama Gemini/IA, nao marca vagas como `PENDING` e nao envia nada ao Discord.
-10. O painel redireciona de volta para `/admin/jobs` com um toast resumindo novas vagas, duplicatas por URL ignoradas e metadados especificos da coleta quando existirem.
+5. Antes de criar no banco, o runner chama `evaluateCollectedJobQuality` em `src/services/jobQualityFilter.ts`.
+6. Vagas rejeitadas pelo filtro de qualidade nao sao criadas, incrementam `ignoredByQuality` e registram os motivos no terminal.
+7. Para vagas aceitas por qualidade, o runner chama `checkJobDuplicate` em `src/services/jobDeduplication.ts`.
+8. Duplicata forte por URL normalizada bloqueia a criacao.
+9. Possivel duplicata por titulo + empresa e apenas contabilizada; a vaga ainda e criada como `DRAFT` para revisao humana.
+10. Vagas criadas automaticamente entram sempre como `DRAFT`, com `useAi = false`.
+11. A coleta nao chama Gemini/IA, nao marca vagas como `PENDING` e nao envia nada ao Discord.
+12. O painel redireciona de volta para `/admin/jobs` com um toast resumindo novas vagas, duplicatas por URL ignoradas e metadados especificos da coleta quando existirem.
 
 O provider mock retorna vagas fake para validar arquitetura e fluxo operacional.
 
@@ -101,9 +104,9 @@ Ele envia os headers `Accept: application/vnd.github+json` e `X-GitHub-Api-Versi
 
 O provider usa `state=open`, `per_page=100` e `since=<data ISO de 30 dias atras>`. Como o `since` da API considera atualizacao da issue, o provider tambem filtra manualmente `created_at` e aceita somente issues criadas nos ultimos 30 dias. Pull requests retornados pela API sao ignorados. Se um repositorio falhar, o erro e logado e contabilizado no resumo, mas a coleta continua nos demais repositorios.
 
-Durante a coleta, o provider contabiliza `totalIssuesRead`, `ignoredByDate`, `ignoredBySeniority`, `ignoredByMissingEntryLevel`, `ignoredByLocation` e erros por repositorio. O runner complementa o diagnostico com `ignoredDuplicates`, `possibleDuplicates` e `created`, porque esses dados dependem da deduplicacao e da escrita no banco.
+Durante a coleta, o provider contabiliza `totalIssuesRead`, `ignoredByDate`, `ignoredBySeniority`, `ignoredByMissingEntryLevel`, `ignoredByLocation` e erros por repositorio. O runner complementa o diagnostico com `ignoredByQuality`, `ignoredDuplicates`, `possibleDuplicates` e `created`, porque esses dados dependem da avaliacao de qualidade, da deduplicacao e da escrita no banco.
 
-A filtragem de nivel e baseada em labels. A issue so e coletada quando as labels indicam `junior`, `júnior`, `jr`, `estagio`, `estágio`, `estagiario`, `estagiário` ou `trainee`. `Trainee` e tratado como nivel de entrada. Labels de `pleno`, `senior`, `sênior`, `especialista`, `tech lead`, `lead`, `staff` ou `principal` bloqueiam a coleta. Se o nivel nao puder ser identificado claramente como `Júnior`, `Estágio` ou `Trainee`, a issue nao e coletada.
+A filtragem de nivel e baseada em labels. A issue so e coletada quando as labels indicam `junior`, `júnior`, `jr`, `estagio`, `estágio`, `estagiario`, `estagiário` ou `trainee`, incluindo labels compostas como `estágio remoto`. `Trainee` e tratado como nivel de entrada. Labels de `pleno`, `senior`, `sênior`, `especialista`, `tech lead`, `lead`, `staff` ou `principal` bloqueiam a coleta. Se o nivel nao puder ser identificado claramente como `Júnior`, `Estágio` ou `Trainee`, a issue nao e coletada.
 
 O filtro geografico aceita vagas 100% remotas de qualquer cidade, estado ou pais. Vagas hibridas ou presenciais so sao aceitas quando a localizacao ou o corpo indicam Minas Gerais, incluindo referencias como `MG`, `Minas Gerais`, `Belo Horizonte`, `BH`, `Contagem`, `Betim`, `Nova Lima`, `Uberlandia`, `Juiz de Fora` e outras cidades mineiras mapeadas no provider. Quando a modalidade nao e identificada, a issue so e aceita se parecer ser de Minas Gerais. Issues rejeitadas por essa regra incrementam `ignoredByLocation` no resumo.
 
@@ -111,9 +114,32 @@ O titulo da issue e interpretado a partir de formatos como `[Cidade/Remoto] Carg
 
 O provider tambem tenta extrair `shortDescription` do corpo da issue a partir de secoes como `Descricao da vaga`, `Sobre a vaga`, `Nossa empresa` e `Responsabilidades`, mantendo um resumo curto de ate cerca de 80 palavras. As `stacks` sao extraidas por termos tecnicos conhecidos, como React, TypeScript, Node.js, SQL, Docker, Java, Python, PHP, HTML e CSS, sem inventar tecnologias. O corpo da issue tambem e salvo em `rawText` com limite de 300 palavras.
 
-Depois da coleta, o runner existente normaliza, deduplica e cria os registros como `DRAFT`, com `useAi = false`. Duplicatas fortes por URL sao ignoradas. Possiveis duplicatas por titulo + empresa sao contabilizadas no toast, mas ainda podem ser criadas como rascunho.
+Depois da coleta, o runner existente normaliza, aplica o filtro de qualidade, deduplica e cria os registros como `DRAFT`, com `useAi = false`. Vagas rejeitadas por qualidade nao sao criadas e aparecem no diagnostico como `ignoredByQuality`. Duplicatas fortes por URL sao ignoradas. Possiveis duplicatas por titulo + empresa sao contabilizadas no toast, mas ainda podem ser criadas como rascunho.
 
-A coleta GitHub nao chama IA, nao envia vagas ao Discord, nao transforma vagas em `PENDING` automaticamente e nao altera o agendamento. O toast da rota mostra um resumo temporario com issues analisadas, novas vagas, duplicatas, possiveis duplicatas, antigas, fora de localizacao, fora do nivel e erros. O terminal registra tambem um resumo estruturado por repositorio. Nao ha tabela, pagina ou persistencia de logs de coleta.
+A coleta GitHub nao chama IA, nao envia vagas ao Discord, nao transforma vagas em `PENDING` automaticamente e nao altera o agendamento. O toast da rota mostra um resumo temporario com issues analisadas, novas vagas, duplicatas, possiveis duplicatas, antigas, fora de localizacao, fora do nivel, rejeitadas por qualidade e erros. O terminal registra tambem um resumo estruturado por repositorio e logs das rejeicoes de qualidade com `reasons`. Nao ha tabela, pagina ou persistencia de logs de coleta.
+
+## Fluxo de coleta de fontes externas
+
+A rota `POST /admin/jobs/collect-external`, exibida na listagem como `Coletar fontes externas`, executa apenas os providers externos registrados em `externalJobProviders`:
+
+- `himalayasProvider`, usando `https://himalayas.app/jobs/api/search`;
+- `jobicyProvider`, usando `https://jobicy.com/api/v2/remote-jobs`;
+- `remoteOkProvider`, usando `https://remoteok.com/api`;
+- `remotiveProvider`, usando `https://remotive.com/api/remote-jobs`.
+
+Esses providers usam apenas APIs JSON publicas. Nao usam Playwright, Cheerio, login, captcha ou scraping HTML com navegador. Cada provider faz chamadas conservadoras, com poucas queries por execucao, e retorna vagas mais metadados operacionais para o runner. Falha em uma busca ou provider e registrada no resumo e nos logs, mas nao interrompe os demais providers.
+
+As fontes externas aplicam filtro antes do runner para reduzir ruido:
+
+- data de publicacao nos ultimos 30 dias;
+- sinais claros de nivel iniciante, como `junior`, `entry-level`, `intern`, `estagio` ou `trainee`;
+- rejeicao de `senior`, `mid-level`, `lead`, `staff`, `principal`, `manager`, `director` e similares;
+- vagas claramente remotas com localidade global ou compativel com Brasil, LATAM ou Americas;
+- restricoes regionais incompatíveis com Brasil sao ignoradas.
+
+Depois desse filtro, o mesmo runner central normaliza, aplica `evaluateCollectedJobQuality`, deduplica por URL e cria registros como `DRAFT` com `useAi = false`. A coleta externa nao chama Gemini/IA, nao envia vagas ao Discord e nao muda vagas para `PENDING`.
+
+Jobicy, RemoteOK e Remotive exigem atribuicao/linkback. A implementacao preserva a URL original sempre que fornecida, registra `source` com o nome do provider e deixa a revisao final para o admin antes da publicacao.
 
 ## Fluxo de coleta automatica
 
@@ -121,7 +147,7 @@ O painel admin inicia `scheduledCollector` junto com o processo de `npm run admi
 
 A coleta automatica roda diariamente as 08:00 no timezone `America/Sao_Paulo`, usando `node-cron` com a expressao `0 8 * * *`.
 
-Ela executa apenas os providers reais registrados em `realJobProviders`, atualmente o `githubJobsProvider`. O `mockJobsProvider` fica em `testJobProviders` e nao roda automaticamente.
+Ela executa apenas os providers reais registrados em `realJobProviders`, atualmente GitHub, Himalayas, Jobicy, RemoteOK e Remotive. O `mockJobsProvider` fica em `testJobProviders` e nao roda automaticamente.
 
 A coleta automatica chama o mesmo runner de providers, entao preserva as regras centrais:
 
@@ -130,9 +156,9 @@ A coleta automatica chama o mesmo runner de providers, entao preserva as regras 
 - nao chama Gemini/IA;
 - nao marca vagas como `PENDING`;
 - nao envia ao Discord;
-- reaproveita normalizacao e deduplicacao.
+- reaproveita normalizacao, filtro de qualidade e deduplicacao.
 
-O servico possui um lock simples em memoria (`isCollecting`). Se uma coleta manual GitHub ou automatica ja estiver em execucao, a nova execucao e ignorada com log amigavel. Esse lock evita concorrencia dentro do mesmo processo admin e nao cria estado no banco.
+O servico possui um lock simples em memoria (`isCollecting`). Se uma coleta manual GitHub, externa ou automatica ja estiver em execucao, a nova execucao e ignorada com log amigavel. Esse lock evita concorrencia dentro do mesmo processo admin e nao cria estado no banco.
 
 Falhas na coleta automatica sao capturadas e registradas no logger. O processo do painel nao deve cair por erro de provider.
 

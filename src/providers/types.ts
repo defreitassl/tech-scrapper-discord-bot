@@ -26,6 +26,7 @@ export type ProviderCollectResult = {
   ignoredBySeniority?: number;
   ignoredByMissingEntryLevel?: number;
   ignoredByLocation?: number;
+  ignoredByQuality?: number;
   errors?: ProviderCollectError[];
   repositorySummaries?: ProviderRepositorySummary[];
 };
@@ -42,6 +43,7 @@ export type ProviderRepositorySummary = {
   ignoredBySeniority: number;
   ignoredByMissingEntryLevel: number;
   ignoredByLocation: number;
+  ignoredByQuality: number;
   ignoredDuplicates: number;
   possibleDuplicates: number;
   created: number;

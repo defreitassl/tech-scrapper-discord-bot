@@ -6,7 +6,10 @@ import { generateJobMessage } from '../../services/aiMessageGenerator';
 import { checkJobDuplicate } from '../../services/jobDeduplication';
 import { publishPendingJobs, publishSingleJob } from '../../services/publishPendingJobs';
 import { runRealJobCollection } from '../../services/scheduledCollector';
+import { externalJobProviders } from '../../providers/providerRegistry';
+import { githubJobsProvider } from '../../providers/githubJobs.provider';
 import { mockJobsProvider } from '../../providers/mockJobs.provider';
+import type { ProviderRunnerSummary } from '../../providers/providerRunner';
 import { runJobProviders } from '../../providers/providerRunner';
 import { parseJobForm } from '../helpers/forms';
 import { getNoticeFromQuery, redirectWithNotice } from '../helpers/notifications';
@@ -154,7 +157,7 @@ export function createJobsRouter(): express.Router {
   router.post('/admin/jobs/collect-github', async (_request, response) => {
     try {
       logger.info('Coleta manual de vagas GitHub iniciada pelo admin.');
-      const collectionResult = await runRealJobCollection('manual');
+      const collectionResult = await runRealJobCollection('manual', [githubJobsProvider]);
 
       if (collectionResult.skipped || !collectionResult.summary) {
         redirectWithNotice(
@@ -168,13 +171,39 @@ export function createJobsRouter(): express.Router {
 
       const result = collectionResult.summary;
       const ignoredByLevel = result.ignoredBySeniority + result.ignoredByMissingEntryLevel;
-      const message = `Coleta GitHub: ${result.totalIssuesRead} issues analisadas, ${result.createdJobs} novas, ${result.ignoredDuplicates} duplicatas, ${result.possibleDuplicates} possíveis, ${result.ignoredByDate} antigas, ${result.ignoredByLocation} fora de localização, ${ignoredByLevel} fora do nível, ${result.repositoryErrors} ${result.repositoryErrors === 1 ? 'erro' : 'erros'}.`;
+      const message = `Coleta GitHub: ${result.totalIssuesRead} issues analisadas, ${result.createdJobs} novas, ${result.ignoredDuplicates} duplicatas, ${result.possibleDuplicates} possíveis, ${result.ignoredByDate} antigas, ${result.ignoredByLocation} fora de localização, ${ignoredByLevel} fora do nível, ${result.ignoredByQuality} por qualidade, ${result.repositoryErrors} ${result.repositoryErrors === 1 ? 'erro' : 'erros'}.`;
       const noticeType = result.errors.length > 0 ? 'warning' : result.createdJobs > 0 ? 'success' : 'info';
 
       redirectWithNotice(response, '/admin/jobs', message, noticeType);
     } catch (error) {
       logger.error('Erro ao coletar vagas GitHub pelo admin.', error);
       redirectWithNotice(response, '/admin/jobs', 'Erro ao coletar vagas GitHub.', 'error');
+    }
+  });
+
+  router.post('/admin/jobs/collect-external', async (_request, response) => {
+    try {
+      logger.info('Coleta manual de providers externos iniciada pelo admin.');
+      const collectionResult = await runRealJobCollection('manual', externalJobProviders);
+
+      if (collectionResult.skipped || !collectionResult.summary) {
+        redirectWithNotice(
+          response,
+          '/admin/jobs',
+          'Coleta externa ignorada porque outra coleta ja esta em execucao.',
+          'warning',
+        );
+        return;
+      }
+
+      const result = collectionResult.summary;
+      const message = buildProviderCollectionNotice('Coleta externa', result);
+      const noticeType = result.errors.length > 0 ? 'warning' : result.createdJobs > 0 ? 'success' : 'info';
+
+      redirectWithNotice(response, '/admin/jobs', message, noticeType);
+    } catch (error) {
+      logger.error('Erro ao coletar providers externos pelo admin.', error);
+      redirectWithNotice(response, '/admin/jobs', 'Erro ao coletar fontes externas.', 'error');
     }
   });
 
@@ -421,4 +450,10 @@ function getJobCreatedNoticeMessage(message: string, possibleDuplicate: { id: st
   }
 
   return 'Possivel duplicata detectada: ja existe uma vaga com mesmo titulo e empresa.';
+}
+
+function buildProviderCollectionNotice(prefix: string, result: ProviderRunnerSummary): string {
+  const ignoredByLevel = result.ignoredBySeniority + result.ignoredByMissingEntryLevel;
+
+  return `${prefix}: ${result.totalIssuesRead} itens analisados, ${result.createdJobs} novas, ${result.ignoredDuplicates} duplicatas, ${result.possibleDuplicates} possíveis, ${result.ignoredByDate} antigas, ${result.ignoredByLocation} fora de localização, ${ignoredByLevel} fora do nível, ${result.ignoredByQuality} por qualidade, ${result.repositoryErrors} ${result.repositoryErrors === 1 ? 'erro' : 'erros'}.`;
 }

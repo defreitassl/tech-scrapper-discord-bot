@@ -54,13 +54,16 @@ export function renderJobsList(jobs: JobPost[], notice?: AdminNotice): string {
         <form method="post" action="/admin/jobs/collect-github">
           <button type="submit" class="secondary" data-loading-label="Coletando...">Coletar vagas do GitHub</button>
         </form>
+        <form method="post" action="/admin/jobs/collect-external">
+          <button type="submit" class="secondary" data-loading-label="Coletando...">Coletar fontes externas</button>
+        </form>
         <form method="post" action="/admin/jobs/collect">
           <button type="submit" class="secondary" data-loading-label="Coletando...">Coletar vagas de teste</button>
         </form>
         <a class="button" href="/admin/jobs/new">Nova vaga</a>
       </div>
     </div>
-    <p class="collection-note">Coletas criam apenas rascunhos para revisao, nao chamam IA e nao publicam no Discord. GitHub coleta issues abertas recentes com labels de junior ou estagio.</p>
+    <p class="collection-note">Coletas criam apenas rascunhos para revisao, nao chamam IA e nao publicam no Discord. GitHub coleta issues abertas recentes; fontes externas usam APIs publicas remotas com filtro conservador de nivel.</p>
     ${renderNotification(notice)}
     <section class="card table-card">
       <div class="section-heading">

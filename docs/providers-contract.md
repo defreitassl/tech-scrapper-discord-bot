@@ -1,6 +1,6 @@
 # Contrato de Providers
 
-Este documento define o contrato inicial para fontes de coleta de vagas. A implementacao atual possui um provider mock/de teste em `src/providers/mockJobs.provider.ts` e um provider real para issues publicas do GitHub em `src/providers/githubJobs.provider.ts`.
+Este documento define o contrato inicial para fontes de coleta de vagas. A implementacao atual possui um provider mock/de teste em `src/providers/mockJobs.provider.ts`, um provider real para issues publicas do GitHub em `src/providers/githubJobs.provider.ts` e providers externos por APIs publicas JSON em `src/providers/himalayas.provider.ts`, `src/providers/jobicy.provider.ts`, `src/providers/remoteOk.provider.ts` e `src/providers/remotive.provider.ts`.
 
 ## Interface sugerida
 
@@ -17,6 +17,7 @@ export type ProviderCollectResult = {
   ignoredBySeniority?: number;
   ignoredByMissingEntryLevel?: number;
   ignoredByLocation?: number;
+  ignoredByQuality?: number;
   errors?: ProviderCollectError[];
   repositorySummaries?: ProviderRepositorySummary[];
 };
@@ -33,6 +34,7 @@ export type ProviderRepositorySummary = {
   ignoredBySeniority: number;
   ignoredByMissingEntryLevel: number;
   ignoredByLocation: number;
+  ignoredByQuality: number;
   ignoredDuplicates: number;
   possibleDuplicates: number;
   created: number;
@@ -42,7 +44,7 @@ export type ProviderRepositorySummary = {
 
 O provider deve ser pequeno, testavel e responsavel por uma unica fonte ou familia de fontes.
 
-Providers ativos devem ser registrados em `src/providers/providerRegistry.ts`. O registry separa `testJobProviders` e `realJobProviders`; a coleta automatica usa somente providers reais. O runner central fica em `src/providers/providerRunner.ts`. Rotas especificas podem chamar o runner com uma lista explicita de providers quando precisam executar apenas uma fonte, como a coleta mock ou a coleta GitHub.
+Providers ativos devem ser registrados em `src/providers/providerRegistry.ts`. O registry separa `testJobProviders`, `externalJobProviders` e `realJobProviders`; a coleta automatica usa somente providers reais. O runner central fica em `src/providers/providerRunner.ts`. Rotas especificas podem chamar o runner com uma lista explicita de providers quando precisam executar apenas uma familia de fontes, como a coleta mock, a coleta GitHub ou a coleta externa.
 
 ## Tipo sugerido
 
@@ -108,9 +110,33 @@ O runner atual aplica exatamente essa regra:
 
 - URL duplicada bloqueia a criacao e incrementa `ignoredDuplicates`;
 - titulo + empresa iguais incrementam `possibleDuplicates`, mas a vaga ainda e criada como `DRAFT`.
+- filtro de qualidade rejeita vagas coletadas antes da criacao no banco e incrementa `ignoredByQuality`;
 - providers podem retornar metadados de coleta, como `ignoredByLocation`, para aparecer no resumo operacional sem criar vagas no banco.
 - providers podem retornar erros internos, como falha por repositorio, sem interromper a execucao dos demais itens.
 - providers podem retornar `repositorySummaries` para o runner completar dados que dependem do banco, como duplicatas e vagas criadas.
+
+## Filtro de qualidade
+
+Antes de salvar uma vaga coletada, o runner executa `evaluateCollectedJobQuality(job)` em `src/services/jobQualityFilter.ts`. O filtro e deterministico, barato e nao chama IA.
+
+O resultado contem:
+
+- `accepted`: indica se a vaga pode seguir para deduplicacao e criacao como `DRAFT`;
+- `reasons`: motivos estaveis de rejeicao, registrados no terminal;
+- `score`: pontuacao simples para diagnostico operacional.
+
+A vaga e rejeitada quando:
+
+- falta `title`;
+- falta canal claro de candidatura, ou seja, nao ha `url` nem e-mail no texto da vaga;
+- falta texto util em `rawText` ou `shortDescription`;
+- o texto contem sinais fortes de senioridade alta, como `pleno`, `senior`, `sênior`, `tech lead`, `lead developer`, `lead`, `especialista`, `staff`, `principal` ou `arquitetura avançada`;
+- o texto exige experiencia forte, como `3 anos`, `4 anos`, `5 anos`, `mais de 3 anos`, `experiência sólida`, `sólida experiência`, `forte experiência` ou `domínio avançado`;
+- a vaga nao parece ser de tecnologia.
+
+Para o perfil de tecnologia, o filtro aceita vagas com termos como `desenvolvimento`, `desenvolvedor`, `frontend`, `backend`, `fullstack`, `software`, `suporte técnico`, `QA`, `dados`, `tecnologia`, `programação`, `React`, `Node`, `Java`, `Python`, `SQL` ou `cloud`.
+
+Esse filtro nao altera schema, nao cria migrations, nao chama Gemini, nao marca vagas como `PENDING` e nao publica no Discord.
 
 ## Status sugerido apos coleta
 
@@ -181,9 +207,9 @@ Regras do provider GitHub:
 
 - coleta apenas issues abertas;
 - se um repositorio falhar, registra erro, contabiliza no resumo e continua nos demais repositorios;
-- contabiliza issues lidas e motivos de descarte: data antiga, senioridade acima de entrada, ausencia de label de entrada e localizacao;
+- contabiliza issues lidas e motivos de descarte: data antiga, senioridade acima de entrada, ausencia de label de entrada, localizacao e qualidade;
 - ignora pull requests;
-- aceita apenas labels de entrada: `junior`, `júnior`, `jr`, `estagio`, `estágio`, `estagiario`, `estagiário`, `trainee`;
+- aceita apenas labels de entrada: `junior`, `júnior`, `jr`, `estagio`, `estágio`, `estagiario`, `estagiário`, `trainee`, incluindo labels compostas como `estágio remoto` quando contem um desses termos;
 - trata `trainee` como nivel de entrada e preenche `level` como `Trainee`;
 - ignora labels de senioridade acima de entrada: `pleno`, `senior`, `sênior`, `especialista`, `tech lead`, `lead`, `staff`, `principal`;
 - aceita vagas remotas de qualquer cidade, estado ou pais;
@@ -197,17 +223,51 @@ Regras do provider GitHub:
 - tenta extrair `stacks` do corpo a partir de termos tecnicos conhecidos, sem inventar tecnologias;
 - salva o corpo da issue em `rawText` limitado a 300 palavras;
 - retorna `salaryRange` como `null` nesta primeira versao;
-- cria vagas apenas como `DRAFT` via runner;
+- cria vagas apenas como `DRAFT` via runner quando tambem passam pelo filtro de qualidade;
 - nao chama IA;
 - nao envia ao Discord.
 
 O toast da coleta GitHub mostra um resumo compacto e temporario, sem persistir logs em banco:
 
 ```text
-Coleta GitHub: 48 issues analisadas, 2 novas, 4 duplicatas, 0 possíveis, 5 antigas, 8 fora de localização, 21 fora do nível, 1 erro.
+Coleta GitHub: 48 issues analisadas, 2 novas, 4 duplicatas, 0 possíveis, 5 antigas, 8 fora de localização, 21 fora do nível, 3 por qualidade, 1 erro.
 ```
 
 O terminal recebe tambem um log estruturado por repositorio com lidas, criadas, descartes por data/nivel/localizacao, duplicatas e erros. Esse diagnostico e operacional e nao cria tela de logs nem tabela de eventos.
+
+## Providers externos por API publica
+
+Os providers `himalayasProvider`, `jobicyProvider`, `remoteOkProvider` e `remotiveProvider` seguem o mesmo contrato e nunca salvam diretamente no banco. Eles apenas consultam APIs JSON publicas, filtram ruido evidente e retornam vagas para o runner central.
+
+Arquivos:
+
+- `src/providers/himalayas.provider.ts`: usa `https://himalayas.app/jobs/api/search`, com poucas buscas e limite de 20 itens por busca.
+- `src/providers/jobicy.provider.ts`: usa `https://jobicy.com/api/v2/remote-jobs`, com poucas tags e `count=50`.
+- `src/providers/remoteOk.provider.ts`: usa `https://remoteok.com/api`, uma chamada unica por execucao.
+- `src/providers/remotive.provider.ts`: usa `https://remotive.com/api/remote-jobs`, com poucas buscas em `category=software-dev`.
+
+Regras comuns:
+
+- aceitar apenas vagas publicadas nos ultimos 30 dias;
+- aceitar apenas sinais claros de entrada: `junior`, `jr`, `entry-level`, `intern`, `internship`, `estagio`, `estagiario` ou `trainee`;
+- rejeitar sinais como `pleno`, `mid-level`, `senior`, `lead`, `staff`, `principal`, `manager`, `director`, `executive` e similares;
+- aceitar apenas vagas remotas com localidade global ou compativel com Brasil, LATAM ou Americas;
+- ignorar restricoes regionais incompatíveis com Brasil;
+- limpar HTML simples das descricoes com helper local, sem Cheerio e sem navegador;
+- preencher `source` com o nome do provider;
+- preservar URL original para candidatura/linkback quando fornecida;
+- retornar metadados de diagnostico para o runner contabilizar lidas, antigas, fora de nivel, fora de localizacao, qualidade e erros.
+
+Jobicy, RemoteOK e Remotive exigem atribuicao ou linkback. A implementacao preserva `url` e `source`; a revisao humana deve manter o link original ao preparar/publicar a vaga. Himalayas tambem usa a URL original quando disponivel.
+
+Os helpers compartilhados ficam em:
+
+- `src/providers/providerTextUtils.ts`: limpeza de HTML simples, resumo, truncamento e extracao de stacks;
+- `src/providers/providerDateUtils.ts`: filtro de data recente e parse seguro;
+- `src/providers/providerSeniorityUtils.ts`: deteccao de nivel iniciante e bloqueio de senioridade;
+- `src/providers/providerLocationUtils.ts`: avaliacao conservadora de localidade remota;
+- `src/providers/providerSalaryUtils.ts`: formatacao simples de faixa salarial;
+- `src/providers/providerSummaryUtils.ts`: criacao de resumo operacional por fonte.
 
 ## Preparacao de vaga coletada
 

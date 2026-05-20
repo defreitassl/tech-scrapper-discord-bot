@@ -2,7 +2,7 @@
 
 Bot de Discord em Node.js + TypeScript para enviar vagas de emprego para iniciantes em tecnologia em um canal especifico.
 
-Nesta etapa, o projeto conecta o bot no Discord, possui banco com Prisma e PostgreSQL, inclui um painel web simples para cadastrar, gerenciar e publicar vagas pendentes manualmente, pode gerar mensagens com IA usando Google AI Studio e possui uma base inicial de providers com coleta mock/de teste e coleta real via issues publicas do GitHub.
+Nesta etapa, o projeto conecta o bot no Discord, possui banco com Prisma e PostgreSQL, inclui um painel web simples para cadastrar, gerenciar e publicar vagas pendentes manualmente, pode gerar mensagens com IA usando Google AI Studio e possui providers com coleta mock/de teste, coleta real via issues publicas do GitHub e fontes externas por APIs publicas JSON.
 
 ## Requisitos
 
@@ -149,23 +149,40 @@ A listagem tambem possui o botao `Coletar vagas do GitHub`. Ele executa apenas o
 
 O provider busca issues abertas atualizadas desde os ultimos 30 dias usando o parametro `since`, mas tambem filtra manualmente `created_at` para aceitar somente issues criadas nos ultimos 30 dias.
 
-A coleta aceita somente vagas cujas labels indiquem `junior`, `júnior`, `jr`, `estagio`, `estágio`, `estagiario`, `estagiário` ou `trainee`. `Trainee` e tratado como nivel de entrada. Labels como `pleno`, `senior`, `sênior`, `especialista`, `tech lead`, `lead`, `staff` e `principal` sao ignoradas. Pull requests e issues antigas sao ignoradas.
+A coleta aceita somente vagas cujas labels indiquem `junior`, `júnior`, `jr`, `estagio`, `estágio`, `estagiario`, `estagiário` ou `trainee`, incluindo labels compostas como `estágio remoto`. `Trainee` e tratado como nivel de entrada. Labels como `pleno`, `senior`, `sênior`, `especialista`, `tech lead`, `lead`, `staff` e `principal` sao ignoradas. Pull requests e issues antigas sao ignoradas.
 
 O filtro geografico aceita vagas remotas de qualquer lugar. Vagas hibridas ou presenciais so sao aceitas quando a localizacao ou o corpo da issue indicam Minas Gerais; vagas fora de MG, como uma vaga hibrida em Brasilia, sao ignoradas e contabilizadas no resumo como `ignoradas por localização`.
 
 O provider tenta preencher `shortDescription` a partir de secoes como `Descricao da vaga`, `Sobre a vaga`, `Nossa empresa` e `Responsabilidades`, mantendo um resumo curto. Ele tambem tenta extrair `stacks` do corpo da issue a partir de termos tecnicos conhecidos, sem inventar tecnologias.
 
-As vagas coletadas do GitHub sao normalizadas, passam pela deduplicacao existente e entram como `DRAFT`. Duplicatas fortes por URL sao ignoradas. Possiveis duplicatas por titulo + empresa sao criadas como rascunho e contabilizadas no resumo da coleta.
+As vagas coletadas do GitHub sao normalizadas, passam por um filtro deterministico de qualidade, passam pela deduplicacao existente e entram como `DRAFT`. O filtro rejeita vagas sem titulo, sem canal claro de candidatura (URL ou e-mail no texto), sem descricao util, com sinais fortes de senioridade ou experiencia alta, ou que nao parecam ser de tecnologia. Duplicatas fortes por URL sao ignoradas. Possiveis duplicatas por titulo + empresa sao criadas como rascunho e contabilizadas no resumo da coleta.
 
-Se um repositorio GitHub falhar, o provider registra o erro e continua nos demais repositorios. O resumo da coleta informa novas vagas criadas, duplicatas ignoradas, possiveis duplicatas, vagas ignoradas por localizacao e quantidade de erros.
+Se um repositorio GitHub falhar, o provider registra o erro e continua nos demais repositorios. O resumo da coleta informa novas vagas criadas, duplicatas ignoradas, possiveis duplicatas, vagas ignoradas por localizacao, vagas ignoradas por qualidade e quantidade de erros. Os motivos de rejeicao por qualidade aparecem nos logs do terminal.
 
 Essa coleta nao chama Gemini/IA, nao marca vagas como `PENDING` e nao envia nada ao Discord.
+
+### Coleta de fontes externas
+
+A listagem tambem possui o botao `Coletar fontes externas`. Ele executa providers baseados em APIs publicas JSON, sem Playwright, Cheerio ou scraping com navegador:
+
+- Himalayas: `https://himalayas.app/jobs/api/search`
+- Jobicy: `https://jobicy.com/api/v2/remote-jobs`
+- RemoteOK: `https://remoteok.com/api`
+- Remotive: `https://remotive.com/api/remote-jobs`
+
+Esses providers fazem poucas chamadas por execucao, filtram vagas publicadas nos ultimos 30 dias, aceitam apenas sinais claros de perfil iniciante (`junior`, `entry-level`, `intern`, `estagio` ou `trainee`) e rejeitam sinais de senioridade alta ou intermediaria, como `senior`, `mid-level`, `lead`, `staff`, `principal`, `manager` e similares.
+
+Como as fontes sao majoritariamente remotas, a coleta externa aceita apenas vagas remotas com localidade global ou compativel com Brasil/LATAM/Americas. Quando a API indica restricao incompatível com o Brasil, a vaga e ignorada.
+
+Jobicy, RemoteOK e Remotive exigem atribuicao/linkback. Por isso a URL original da vaga e preservada, a fonte fica registrada em `source` e o admin deve manter o link original ao revisar/publicar a vaga. A coleta respeita abordagem conservadora de rate limit: Himalayas usa limite de 20 por busca, Jobicy usa poucas buscas com `count=50`, RemoteOK faz uma chamada unica e Remotive faz poucas buscas para respeitar a recomendacao de baixa frequencia.
+
+As vagas coletadas dessas fontes sao normalizadas, passam pelo filtro de qualidade e pela deduplicacao existente e entram como `DRAFT`, com `useAi = false`. A coleta externa nao chama Gemini/IA, nao marca vagas como `PENDING` e nao envia nada ao Discord. Para publicar, revise a vaga e use `Preparar e colocar na fila`.
 
 ### Coleta automatica diaria
 
 Quando o painel admin esta rodando com `npm run admin`, o sistema agenda automaticamente a coleta dos providers reais todos os dias as 08:00 no timezone `America/Sao_Paulo`.
 
-Essa rotina executa apenas providers reais, como o GitHub. O provider mock/de teste nao roda automaticamente.
+Essa rotina executa apenas providers reais, incluindo GitHub, Himalayas, Jobicy, RemoteOK e Remotive. O provider mock/de teste nao roda automaticamente.
 
 A coleta automatica segue as mesmas regras da coleta manual de providers: cria vagas apenas como `DRAFT`, com `useAi = false`, nao chama Gemini/IA, nao marca vagas como `PENDING` e nao envia nada ao Discord.
 
@@ -231,6 +248,7 @@ npm run admin
 - Painel admin simples para cadastrar, listar, visualizar e editar vagas
 - Base inicial de providers com coleta mock/de teste
 - Provider GitHub para coletar issues publicas recentes de repositorios brasileiros de vagas no GitHub
+- Providers externos por APIs publicas JSON: Himalayas, Jobicy, RemoteOK e Remotive
 - Coleta automatica diaria dos providers reais as 08:00, criando apenas rascunhos
 
 Ainda nao ha scraping HTML real ou autenticacao.

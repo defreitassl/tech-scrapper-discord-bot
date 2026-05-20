@@ -29,6 +29,8 @@ Quando houver muitas fontes, usar fila ou controle central de rate limit.
 
 O provider GitHub atual nao faz scraping HTML; ele usa a API oficial do GitHub e aceita `GITHUB_TOKEN` opcional para aumentar o rate limit. Sem token, a coleta continua manual, mas deve ser usada com ainda mais parcimonia por causa do limite anonimo menor.
 
+Os providers Himalayas, Jobicy, RemoteOK e Remotive tambem nao fazem scraping HTML. Eles usam APIs JSON publicas, poucas chamadas por execucao e filtros locais antes de entregar vagas ao runner. Remotive deve continuar com baixa frequencia de chamadas; Jobicy, RemoteOK e Remotive exigem atribuicao/linkback por meio da URL original.
+
 ## Tratamento de falhas
 
 Scrapers quebram. O sistema deve tolerar:
@@ -50,8 +52,9 @@ O fluxo recomendado e:
 
 1. Coletar.
 2. Normalizar.
-3. Deduplicar.
-4. Salvar como `DRAFT`.
-5. Revisar no painel.
-6. Marcar como `PENDING`.
-7. Publicar manualmente.
+3. Aplicar filtros determinísticos de qualidade quando existirem.
+4. Deduplicar.
+5. Salvar como `DRAFT`.
+6. Revisar no painel.
+7. Marcar como `PENDING`.
+8. Publicar manualmente.

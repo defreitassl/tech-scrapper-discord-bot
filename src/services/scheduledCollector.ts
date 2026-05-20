@@ -2,6 +2,7 @@ import cron, { ScheduledTask } from 'node-cron';
 import { logger } from '../lib/logger';
 import { realJobProviders } from '../providers/providerRegistry';
 import { runJobProviders, ProviderRunnerSummary } from '../providers/providerRunner';
+import type { JobSourceProvider } from '../providers/types';
 
 const COLLECTOR_TIME = '08:00';
 const COLLECTOR_TIMEZONE = 'America/Sao_Paulo';
@@ -45,7 +46,10 @@ export function stopScheduledCollector(): void {
   scheduledCollectorTask = null;
 }
 
-export async function runRealJobCollection(trigger: JobCollectionTrigger): Promise<JobCollectionRunResult> {
+export async function runRealJobCollection(
+  trigger: JobCollectionTrigger,
+  providers: JobSourceProvider[] = realJobProviders,
+): Promise<JobCollectionRunResult> {
   if (isCollecting) {
     logger.info('Coleta de providers ignorada porque outra coleta ja esta em execucao.', { trigger });
 
@@ -60,13 +64,14 @@ export async function runRealJobCollection(trigger: JobCollectionTrigger): Promi
   try {
     logger.info('Coleta de providers reais iniciada.', {
       trigger,
-      providers: realJobProviders.map((provider) => provider.name),
+      providers: providers.map((provider) => provider.name),
     });
 
-    const summary = await runJobProviders(realJobProviders);
+    const summary = await runJobProviders(providers);
 
     logger.info('Coleta de providers reais finalizada.', {
       trigger,
+      providers: providers.map((provider) => provider.name),
       providersExecuted: summary.providersExecuted,
       totalIssuesRead: summary.totalIssuesRead,
       createdJobs: summary.createdJobs,
@@ -76,6 +81,7 @@ export async function runRealJobCollection(trigger: JobCollectionTrigger): Promi
       ignoredBySeniority: summary.ignoredBySeniority,
       ignoredByMissingEntryLevel: summary.ignoredByMissingEntryLevel,
       ignoredByLocation: summary.ignoredByLocation,
+      ignoredByQuality: summary.ignoredByQuality,
       repositoryErrors: summary.repositoryErrors,
       errors: summary.errors.length,
     });

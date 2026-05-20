@@ -12,6 +12,7 @@
 - Mensagens com `readyText`, `aiGeneratedText`, IA ou template padrao.
 - Geracao de mensagem com Google AI Studio/Gemini.
 - Primeiro provider real via API oficial do GitHub, coletando issues abertas e recentes de repositorios brasileiros de vagas como `DRAFT`.
+- Providers externos por APIs publicas JSON: Himalayas, Jobicy, RemoteOK e Remotive.
 - Acao manual para preparar rascunhos coletados com IA e coloca-los na fila como `PENDING`.
 - Coleta automatica diaria dos providers reais as 08:00, criando apenas `DRAFT`.
 
@@ -32,6 +33,7 @@
 - Evita publicacao automatica, IA automatica e mudanca para `PENDING`.
 - Reutiliza normalizacao e deduplicacao basica.
 - Filtra apenas issues abertas, criadas nos ultimos 30 dias, com labels de junior/estagio/trainee e sem labels de pleno/senior ou similares.
+- Aplica filtro deterministico de qualidade antes de salvar rascunhos, sem IA.
 - Isola falhas por repositorio para continuar a coleta nas demais fontes.
 - Mantem coleta sem IA; a preparacao com Gemini ocorre apenas por acao manual do admin.
 
@@ -45,7 +47,16 @@
 
 Observacao: o envio agendado de vagas `PENDING` ja existe e e configurado no painel. O agendamento de coleta/providers e separado e nao publica vagas.
 
-## V1.4 autenticacao simples
+## V1.4 providers externos por API
+
+- Implementados providers Himalayas, Jobicy, RemoteOK e Remotive usando APIs publicas JSON.
+- Adicionada coleta manual separada `Coletar fontes externas`.
+- Registrados como providers reais para coleta automatica diaria.
+- Mantidas regras de seguranca: vagas entram como `DRAFT`, `useAi = false`, sem Gemini, sem Discord e sem `PENDING` automatico.
+- Adicionados filtros conservadores de data, senioridade e localidade remota.
+- Preservada URL original para atribuicao/linkback de Jobicy, RemoteOK e Remotive.
+
+## V1.5 autenticacao simples
 
 - Proteger painel admin com autenticacao simples.
 - Considerar senha via variavel de ambiente ou solucao equivalente.

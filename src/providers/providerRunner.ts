@@ -2,6 +2,7 @@ import { JobStatus } from '@prisma/client';
 import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
 import { checkJobDuplicate } from '../services/jobDeduplication';
+import { evaluateCollectedJobQuality } from '../services/jobQualityFilter';
 import { normalizeCollectedJob } from './normalizeCollectedJob';
 import { activeJobProviders } from './providerRegistry';
 import type { JobSourceProvider, ProviderRepositorySummary } from './types';
@@ -23,6 +24,7 @@ export type ProviderRunnerSummary = {
   ignoredDuplicates: number;
   possibleDuplicates: number;
   ignoredByLocation: number;
+  ignoredByQuality: number;
   repositoryErrors: number;
   errors: ProviderRunnerError[];
   repositorySummaries: ProviderRepositorySummary[];
@@ -43,6 +45,7 @@ export async function runJobProviders(
     ignoredDuplicates: 0,
     possibleDuplicates: 0,
     ignoredByLocation: 0,
+    ignoredByQuality: 0,
     repositoryErrors: 0,
     errors: [],
     repositorySummaries: [],
@@ -65,6 +68,7 @@ export async function runJobProviders(
         summary.ignoredBySeniority += collectResult.ignoredBySeniority ?? 0;
         summary.ignoredByMissingEntryLevel += collectResult.ignoredByMissingEntryLevel ?? 0;
         summary.ignoredByLocation += collectResult.ignoredByLocation ?? 0;
+        summary.ignoredByQuality += collectResult.ignoredByQuality ?? 0;
         summary.repositoryErrors += collectResult.errors?.length ?? 0;
         summary.errors.push(...(collectResult.errors ?? []));
         for (const repositorySummary of collectResult.repositorySummaries ?? []) {
@@ -74,8 +78,29 @@ export async function runJobProviders(
 
       for (const collectedJob of collectedJobs) {
         const normalizedJob = normalizeCollectedJob(collectedJob, provider.name);
-        const duplicateCheck = await checkJobDuplicate(normalizedJob);
         const repositorySummary = repositorySummaries.get(normalizedJob.source);
+        const qualityResult = evaluateCollectedJobQuality({
+          ...normalizedJob,
+          collectedAt: collectedJob.collectedAt ?? new Date(),
+        });
+
+        if (!qualityResult.accepted) {
+          summary.ignoredByQuality += 1;
+          if (repositorySummary) {
+            repositorySummary.ignoredByQuality += 1;
+          }
+          logger.info('Vaga coletada ignorada por filtro de qualidade.', {
+            provider: provider.name,
+            source: normalizedJob.source,
+            title: normalizedJob.title,
+            url: normalizedJob.url,
+            reasons: qualityResult.reasons,
+            score: qualityResult.score,
+          });
+          continue;
+        }
+
+        const duplicateCheck = await checkJobDuplicate(normalizedJob);
 
         if (duplicateCheck.duplicateByUrl) {
           summary.ignoredDuplicates += 1;
@@ -120,15 +145,16 @@ export async function runJobProviders(
 
       for (const repositorySummary of repositorySummaries.values()) {
         summary.repositorySummaries.push(repositorySummary);
-        logger.info('Resumo da coleta GitHub por repositorio.', {
+        logger.info('Resumo da coleta por fonte do provider.', {
           provider: provider.name,
-          repository: repositorySummary.source,
-          totalIssuesRead: repositorySummary.totalIssuesRead,
+          source: repositorySummary.source,
+          totalRead: repositorySummary.totalIssuesRead,
           created: repositorySummary.created,
           ignoredByDate: repositorySummary.ignoredByDate,
           ignoredBySeniority: repositorySummary.ignoredBySeniority,
           ignoredByMissingEntryLevel: repositorySummary.ignoredByMissingEntryLevel,
           ignoredByLocation: repositorySummary.ignoredByLocation,
+          ignoredByQuality: repositorySummary.ignoredByQuality,
           ignoredDuplicates: repositorySummary.ignoredDuplicates,
           possibleDuplicates: repositorySummary.possibleDuplicates,
           errors: repositorySummary.errors,

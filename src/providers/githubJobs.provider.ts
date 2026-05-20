@@ -27,6 +27,16 @@ const GITHUB_JOB_REPOSITORIES = [
   { owner: 'remotejobsbr', repo: 'design-ux-vagas' },
 ];
 
+const ENTRY_LEVEL_LABEL_TERMS = ['junior', 'jr', 'estagio', 'estagiario', 'trainee'];
+const DISALLOWED_SENIORITY_LABEL_TERMS = [
+  'pleno',
+  'senior',
+  'especialista',
+  'tech lead',
+  'lead',
+  'staff',
+  'principal',
+];
 const DESCRIPTION_SECTION_TITLES = ['descrição da vaga', 'sobre a vaga', 'nossa empresa', 'responsabilidades'];
 const COMPANY_SECTION_TITLES = ['nossa empresa'];
 const STACK_TERMS = [
@@ -215,6 +225,7 @@ export const githubJobsProvider: JobSourceProvider = {
       ignoredBySeniority: sumRepositoryMetric(repositorySummaries, 'ignoredBySeniority'),
       ignoredByMissingEntryLevel: sumRepositoryMetric(repositorySummaries, 'ignoredByMissingEntryLevel'),
       ignoredByLocation: sumRepositoryMetric(repositorySummaries, 'ignoredByLocation'),
+      ignoredByQuality: sumRepositoryMetric(repositorySummaries, 'ignoredByQuality'),
       errors,
       repositorySummaries,
     };
@@ -229,6 +240,7 @@ function createRepositorySummary(source: string): ProviderRepositorySummary {
     ignoredBySeniority: 0,
     ignoredByMissingEntryLevel: 0,
     ignoredByLocation: 0,
+    ignoredByQuality: 0,
     ignoredDuplicates: 0,
     possibleDuplicates: 0,
     created: 0,
@@ -304,13 +316,7 @@ function isEntryLevelIssue(labels: string[]): boolean {
   return labels.some((label) => {
     const normalizedLabel = normalizeLabel(label);
 
-    return (
-      normalizedLabel.includes('junior') ||
-      normalizedLabel.includes('jr') ||
-      normalizedLabel.includes('estagio') ||
-      normalizedLabel.includes('estagiario') ||
-      normalizedLabel.includes('trainee')
-    );
+    return ENTRY_LEVEL_LABEL_TERMS.some((term) => containsSearchTerm(normalizedLabel, term));
   });
 }
 
@@ -318,15 +324,7 @@ function isDisallowedSeniority(labels: string[]): boolean {
   return labels.some((label) => {
     const normalizedLabel = normalizeLabel(label);
 
-    return (
-      normalizedLabel.includes('pleno') ||
-      normalizedLabel.includes('senior') ||
-      normalizedLabel.includes('especialista') ||
-      normalizedLabel.includes('tech lead') ||
-      normalizedLabel.includes('lead') ||
-      normalizedLabel.includes('staff') ||
-      normalizedLabel.includes('principal')
-    );
+    return DISALLOWED_SENIORITY_LABEL_TERMS.some((term) => containsSearchTerm(normalizedLabel, term));
   });
 }
 
@@ -444,15 +442,15 @@ function extractModality(title: string, labels: string[], body: string): string 
 function extractLevel(labels: string[]): string | null {
   const normalizedLabels = labels.map(normalizeLabel);
 
-  if (normalizedLabels.some((label) => label.includes('estagio') || label.includes('estagiario'))) {
+  if (normalizedLabels.some((label) => containsSearchTerm(label, 'estagio') || containsSearchTerm(label, 'estagiario'))) {
     return 'Estágio';
   }
 
-  if (normalizedLabels.some((label) => label.includes('trainee'))) {
+  if (normalizedLabels.some((label) => containsSearchTerm(label, 'trainee'))) {
     return 'Trainee';
   }
 
-  if (normalizedLabels.some((label) => label.includes('junior') || label.includes('jr'))) {
+  if (normalizedLabels.some((label) => containsSearchTerm(label, 'junior') || containsSearchTerm(label, 'jr'))) {
     return 'Júnior';
   }
 

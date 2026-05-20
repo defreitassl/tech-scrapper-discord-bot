@@ -4,9 +4,9 @@
 
 O `tech-scrapper-discord-bot` e um bot/painel para cadastrar, organizar e publicar vagas de tecnologia para iniciantes no Discord da Projeto Desenvolve.
 
-Apesar do nome mencionar scraper, o projeto nao faz scraping HTML nesta etapa. O estado atual e um painel admin manual com publicacao controlada para Discord e um primeiro provider real via API publica do GitHub.
+Apesar do nome mencionar scraper, o projeto nao faz scraping HTML nesta etapa. O estado atual e um painel admin manual com publicacao controlada para Discord, um provider real via API publica do GitHub e providers externos via APIs JSON publicas.
 
-Existe uma base inicial de providers em `src/providers/`, com provider mock/de teste e provider GitHub para issues publicas de repositorios de vagas.
+Existe uma base de providers em `src/providers/`, com provider mock/de teste, provider GitHub para issues publicas de repositorios de vagas e providers externos para Himalayas, Jobicy, RemoteOK e Remotive.
 
 ## Stack
 
@@ -62,8 +62,10 @@ Existe uma base inicial de providers em `src/providers/`, com provider mock/de t
 - Views e helpers nao devem acessar Prisma diretamente. Rotas podem chamar Prisma e services.
 - Feedback operacional do painel usa notificacoes temporarias renderizadas no HTML via query params `message` e `noticeType`. Nao existe tela de logs nem persistencia em banco para essas notificacoes.
 - A deduplicacao fica em `src/services/jobDeduplication.ts` para reuso futuro por providers. Nao ha unique constraint nem migration nesta etapa.
+- O filtro de qualidade de providers fica em `src/services/jobQualityFilter.ts`; ele e deterministico, nao usa IA e rejeita coletas antes do banco quando faltam dados essenciais, falta canal claro de candidatura (URL ou e-mail no texto), ha senioridade/experiencia alta ou a vaga parece fora de tecnologia.
 - A listagem de vagas possui a acao `Coletar vagas de teste`, que chama `POST /admin/jobs/collect` e executa `runJobProviders([mockJobsProvider])`.
-- A listagem tambem possui a acao `Coletar vagas do GitHub`, que chama `POST /admin/jobs/collect-github` e executa `runRealJobCollection('manual')`.
+- A listagem tambem possui a acao `Coletar vagas do GitHub`, que chama `POST /admin/jobs/collect-github` e executa apenas `githubJobsProvider` pelo lock de `runRealJobCollection`.
+- A listagem possui a acao `Coletar fontes externas`, que chama `POST /admin/jobs/collect-external` e executa `externalJobProviders` pelo mesmo lock.
 - A listagem exibe `Preparar` para vagas `DRAFT`; os detalhes exibem `Preparar e colocar na fila` para vagas `DRAFT` ou `PENDING`.
 
 ## Providers de coleta
@@ -74,24 +76,30 @@ Existe uma base inicial de providers em `src/providers/`, com provider mock/de t
 - `providerRegistry.ts` separa `testJobProviders` de `realJobProviders`. O mock fica apenas nos providers de teste; a coleta automatica usa somente providers reais.
 - O provider mock e `src/providers/mockJobs.provider.ts`.
 - O provider GitHub e `src/providers/githubJobs.provider.ts`.
+- Os providers externos sao `src/providers/himalayas.provider.ts`, `src/providers/jobicy.provider.ts`, `src/providers/remoteOk.provider.ts` e `src/providers/remotive.provider.ts`.
+- Helpers compartilhados para providers externos ficam em `providerTextUtils.ts`, `providerDateUtils.ts`, `providerSeniorityUtils.ts`, `providerLocationUtils.ts`, `providerSalaryUtils.ts` e `providerSummaryUtils.ts`.
 - O runner central fica em `src/providers/providerRunner.ts`.
-- O runner percorre os providers ativos, normaliza vagas, reaproveita `checkJobDuplicate`, ignora duplicatas fortes por URL e cria as demais como `DRAFT`.
+- O runner percorre os providers ativos, normaliza vagas, aplica `evaluateCollectedJobQuality`, reaproveita `checkJobDuplicate`, ignora duplicatas fortes por URL e cria as demais como `DRAFT`.
+- Vagas rejeitadas por qualidade incrementam `ignoredByQuality` e geram log `Vaga coletada ignorada por filtro de qualidade` com `reasons` e `score`.
 - Possiveis duplicatas por titulo + empresa sao contabilizadas, mas nao bloqueiam criacao.
 - O runner tambem aceita resultado de provider com metadados, como `ignoredByLocation`, para exibir resumo operacional sem criar registros.
 - O runner tambem propaga erros internos retornados por providers, como falhas de repositorio no GitHub provider.
-- O diagnostico GitHub inclui `totalIssuesRead`, `ignoredByDate`, `ignoredBySeniority`, `ignoredByMissingEntryLevel`, `ignoredByLocation`, `ignoredDuplicates`, `possibleDuplicates`, `created` e `repositoryErrors`.
+- O diagnostico GitHub inclui `totalIssuesRead`, `ignoredByDate`, `ignoredBySeniority`, `ignoredByMissingEntryLevel`, `ignoredByLocation`, `ignoredByQuality`, `ignoredDuplicates`, `possibleDuplicates`, `created` e `repositoryErrors`.
 - O toast da coleta GitHub mostra um resumo compacto e temporario. Detalhes por repositorio sao logados no terminal em eventos `Resumo da coleta GitHub por repositorio`; nao ha tela de logs nem persistencia em banco.
-- `providerRegistry.ts` registra `mockJobsProvider` e `githubJobsProvider`.
+- `providerRegistry.ts` registra `mockJobsProvider`, `githubJobsProvider`, `externalJobProviders` e `realJobProviders`. A coleta automatica roda todos os providers reais; a coleta externa manual roda apenas Himalayas, Jobicy, RemoteOK e Remotive.
 - O provider GitHub usa issues abertas de `frontendbr/vagas`, `backend-br/vagas`, `react-brasil/vagas`, `qa-brasil/vagas`, `nodejsdevbr/vagas`, `dotnetdevbr/vagas`, `soujava/vagas-java`, `DevOps-Brasil/Vagas`, `programadores-br/geral`, `datascience-br/vagas`, `brasil-php/vagas`, `androiddevbr/vagas`, `CocoaHeadsBrasil/vagas` e `remotejobsbr/design-ux-vagas` pela API oficial do GitHub.
 - Se um repositorio GitHub falhar, o provider loga o erro, adiciona erro ao resumo e continua nos demais repositorios.
 - O provider GitHub usa `state=open`, `per_page=100` e `since` com data ISO de 30 dias atras, mas tambem filtra `created_at` manualmente porque `since` pode considerar atualizacao.
-- Ele coleta apenas issues criadas nos ultimos 30 dias com labels de `junior`, `júnior`, `jr`, `estagio`, `estágio`, `estagiario`, `estagiário` ou `trainee`; `trainee` e tratado como nivel de entrada.
+- Ele coleta apenas issues criadas nos ultimos 30 dias com labels de `junior`, `júnior`, `jr`, `estagio`, `estágio`, `estagiario`, `estagiário` ou `trainee`, incluindo labels compostas como `estágio remoto`; `trainee` e tratado como nivel de entrada.
 - Ele ignora pull requests e labels de `pleno`, `senior`, `sênior`, `especialista`, `tech lead`, `lead`, `staff` e `principal`.
 - Ele aceita vagas remotas de qualquer lugar, mas vagas hibridas/presenciais apenas quando localizacao ou corpo indicam Minas Gerais. Se a modalidade nao for clara, so aceita quando parecer Minas Gerais.
 - Issues GitHub ignoradas pelo filtro geografico entram no resumo como `ignoredByLocation`.
 - O provider GitHub tenta preencher `shortDescription` a partir de secoes do corpo da issue e `stacks` a partir de termos tecnicos conhecidos, sem chamar IA.
 - `GITHUB_TOKEN` e opcional; quando configurado, aumenta o rate limit e e enviado como `Authorization: Bearer`.
 - Nao ha scraping HTML real, Cheerio, Playwright, LinkedIn, Gupy, Solides ou fontes protegidas nesta etapa.
+- Himalayas usa `https://himalayas.app/jobs/api/search`; Jobicy usa `https://jobicy.com/api/v2/remote-jobs`; RemoteOK usa `https://remoteok.com/api`; Remotive usa `https://remotive.com/api/remote-jobs`.
+- Os providers externos filtram vagas dos ultimos 30 dias, exigem sinal claro de nivel iniciante, rejeitam senioridade alta/intermediaria e aceitam apenas vagas remotas globais ou compativeis com Brasil/LATAM/Americas.
+- Jobicy, RemoteOK e Remotive exigem atribuicao/linkback; preserve a URL original e o `source` ao revisar/publicar vagas coletadas.
 
 ## Coleta automatica
 
@@ -99,7 +107,7 @@ Existe uma base inicial de providers em `src/providers/`, com provider mock/de t
 - Ela roda junto com `npm run admin`; se o painel admin nao estiver rodando, a coleta automatica nao executa.
 - Usa `node-cron` e chama `runJobProviders(realJobProviders)`.
 - Nao executa `mockJobsProvider` automaticamente.
-- Usa lock simples em memoria (`isCollecting`) compartilhado com a rota manual GitHub por meio de `runRealJobCollection`.
+- Usa lock simples em memoria (`isCollecting`) compartilhado com as rotas manuais GitHub e fontes externas por meio de `runRealJobCollection`.
 - Se uma coleta ja estiver rodando, a nova tentativa e ignorada com log.
 - Falhas sao logadas e nao derrubam o processo.
 - Esse agendamento e separado do envio agendado de vagas `PENDING`.
