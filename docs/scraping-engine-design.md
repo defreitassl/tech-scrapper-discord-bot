@@ -42,7 +42,7 @@ Browser scraping deve ser ultimo caso. Ele so deve ser considerado quando:
 - nao ha login, captcha, paywall ou bloqueio conhecido;
 - a coleta respeita termos, frequencia baixa e revisao humana.
 
-Playwright nao deve ser adicionado antes de uma fonte concreta justificar o custo.
+Playwright agora existe apenas como infraestrutura base isolada para futuras paginas publicas dinamicas. Isso nao autoriza implementar uma plataforma real: cada fonte concreta ainda precisa justificar o custo, passar pela politica e comecar manualmente, desligada da coleta automatica.
 
 ## Quando usar Cheerio
 
@@ -53,6 +53,15 @@ Antes de adicionar Cheerio, valide se os helpers existentes em `src/scraping/htm
 ## Quando usar Playwright
 
 Use Playwright somente se a fonte for publica, permitida pela politica e realmente depender de JavaScript para renderizar os dados. Mesmo nesse caso, o scraper deve ser pequeno, ter timeout, baixa frequencia, logs claros e nunca simular login ou contornar bloqueios.
+
+A base tecnica fica em `src/scraping/browser/`:
+
+- `types.ts`: `BrowserScrapingConfig`, `BrowserScrapingResult`, `BrowserExtractedJob` e `BrowserScrapingStats`.
+- `browserPolicy.ts`: bloqueia pagina nao publica, login, captcha, bypass, credenciais, cookies customizados, proxy e rotacao de IP.
+- `browserClient.ts`: cria contexto Playwright com `headless: true` por padrao, timeout conservador, User-Agent identificavel, sem cookies customizados e sem proxy.
+- `pageUtils.ts`: helpers para navegar, aguardar seletores, extrair texto, links e normalizar texto.
+
+O provider `src/providers/playwrightSmokeTest.provider.ts` existe apenas para smoke test em pagina publica simples. Ele nao esta registrado no registry de providers, nao entra na coleta automatica, nao cria vagas, nao chama IA e nao envia ao Discord.
 
 ## Riscos de plataformas com login/captcha
 
@@ -77,6 +86,7 @@ Toda fonte dificil deve passar por decisao explicita antes de virar provider. A 
 - Captcha: bloqueado.
 - Necessidade de bypass anti-bot: bloqueada.
 - Termos explicitamente incompativeis registrados: bloqueado.
+- Credenciais, cookies customizados, proxy e rotacao de IP: bloqueados para browser scraping.
 
 ## Contrato com providerRunner
 

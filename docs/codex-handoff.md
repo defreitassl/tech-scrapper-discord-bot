@@ -4,11 +4,11 @@
 
 O `tech-scrapper-discord-bot` e um bot/painel para cadastrar, organizar e publicar vagas de tecnologia para iniciantes no Discord da Projeto Desenvolve.
 
-Apesar do nome mencionar scraper, o projeto nao faz scraping HTML nesta etapa. O estado atual e um painel admin manual com publicacao controlada para Discord, um provider real via API publica do GitHub, providers externos via APIs JSON publicas e providers manuais para ATS publicos via JSON.
+Apesar do nome mencionar scraper, o projeto nao faz scraping HTML real de plataformas nesta etapa. O estado atual e um painel admin manual com publicacao controlada para Discord, um provider real via API publica do GitHub, providers externos via APIs JSON publicas, providers manuais para ATS publicos via JSON e uma base Playwright isolada para validar paginas publicas dinamicas no futuro.
 
 Existe uma base de providers em `src/providers/`, com provider mock/de teste, provider GitHub para issues publicas de repositorios de vagas, providers externos para Himalayas, Jobicy, RemoteOK e Remotive, e providers ATS para Greenhouse, Lever e Ashby.
 
-Tambem existe uma camada inicial em `src/scraping/` para preparar futuras fontes publicas mais dificeis. Ela ainda nao esta conectada ao `providerRunner`, nao cria provider novo, nao usa Cheerio/Playwright e nao altera fluxo do admin. A intencao e isolar tipos, politica de permissao, helpers HTML e cliente publico simples antes de qualquer scraper real.
+Tambem existe uma camada inicial em `src/scraping/` para preparar futuras fontes publicas mais dificeis. Ela ainda nao esta conectada ao `providerRunner` para scraping real e nao altera fluxo do admin. A intencao e isolar tipos, politica de permissao, helpers HTML, cliente publico simples e utilitarios Playwright antes de qualquer scraper real.
 
 ## Stack
 
@@ -86,7 +86,9 @@ Tambem existe uma camada inicial em `src/scraping/` para preparar futuras fontes
 - A lista controlada de empresas-alvo ATS fica em `src/providers/companyTargets.ts`. A lista inicial e GitLab no Greenhouse (`gitlab`), Kepler Communications no Lever (`kepler`) e Ashby no Ashby (`ashby`).
 - Helpers compartilhados para providers externos ficam em `providerTextUtils.ts`, `providerDateUtils.ts`, `providerSeniorityUtils.ts`, `providerLocationUtils.ts`, `providerSalaryUtils.ts` e `providerSummaryUtils.ts`.
 - Helpers especificos da primeira leva ATS ficam em `src/providers/atsProviderUtils.ts` e tratam politica publica `api`, limpeza leve de HTML retornado nos JSONs, datas recentes e filtro conservador de localizacao.
-- A camada preparatoria para scraping fica em `src/scraping/`: `types.ts`, `scrapingPolicy.ts`, `htmlUtils.ts` e `scrapingClient.ts`. Use-a para avaliar e buscar fontes publicas permitidas antes de criar providers novos.
+- A camada preparatoria para scraping fica em `src/scraping/`: `types.ts`, `scrapingPolicy.ts`, `htmlUtils.ts`, `scrapingClient.ts` e a subpasta `browser/` para Playwright. Use-a para avaliar e buscar fontes publicas permitidas antes de criar providers novos.
+- A base Playwright inclui `src/scraping/browser/types.ts`, `browserPolicy.ts`, `browserClient.ts` e `pageUtils.ts`. Ela bloqueia login, captcha, bypass, credenciais, cookies customizados, proxy e rotacao de IP, e deve ser usada somente para paginas publicas dinamicas quando API/RSS/HTML simples nao bastarem.
+- `src/providers/playwrightSmokeTest.provider.ts` e um provider experimental para validar a infraestrutura Playwright em pagina publica simples. Ele nao esta registrado em `providerRegistry.ts`, nao entra em `realJobProviders`, nao roda automaticamente, nao cria vagas, nao chama IA e nao envia ao Discord.
 - O runner central fica em `src/providers/providerRunner.ts`.
 - O runner percorre os providers ativos, normaliza vagas, aplica `evaluateCollectedJobQuality`, reaproveita `checkJobDuplicate`, ignora duplicatas fortes por URL e cria as demais como `DRAFT`.
 - Vagas rejeitadas por qualidade incrementam `ignoredByQuality` e geram log `Vaga coletada ignorada por filtro de qualidade` com `reasons` e `score`.
@@ -105,7 +107,7 @@ Tambem existe uma camada inicial em `src/scraping/` para preparar futuras fontes
 - Issues GitHub ignoradas pelo filtro geografico entram no resumo como `ignoredByLocation`.
 - O provider GitHub tenta preencher `shortDescription` a partir de secoes do corpo da issue e `stacks` a partir de termos tecnicos conhecidos, sem chamar IA.
 - `GITHUB_TOKEN` e opcional; quando configurado, aumenta o rate limit e e enviado como `Authorization: Bearer`.
-- Nao ha scraping HTML real, Cheerio, Playwright, LinkedIn, Gupy, Solides ou fontes protegidas nesta etapa.
+- Nao ha scraping HTML real de plataformas, Cheerio, LinkedIn, Gupy, Solides ou fontes protegidas nesta etapa. Playwright esta instalado apenas como infraestrutura isolada e smoke test nao registrado.
 - A politica de scraping bloqueia fontes que exigem login, captcha, bypass anti-bot, credenciais pessoais, simulacao de usuario autenticado ou termos explicitamente incompativeis. Browser scraping so pode ser considerado como ultimo caso para pagina publica sem esses bloqueios.
 - Himalayas usa `https://himalayas.app/jobs/api/search`; Jobicy usa `https://jobicy.com/api/v2/remote-jobs`; RemoteOK usa `https://remoteok.com/api`; Remotive usa `https://remotive.com/api/remote-jobs`.
 - Os providers externos filtram vagas dos ultimos 30 dias, exigem sinal claro de nivel iniciante, rejeitam senioridade alta/intermediaria e aceitam apenas vagas remotas globais ou compativeis com Brasil/LATAM/Americas.

@@ -4,6 +4,8 @@ Scraping deve ser tratado como ultimo recurso quando nao houver cadastro manual,
 
 Futuras fontes mais dificeis devem usar a camada isolada `src/scraping/` e seguir `docs/scraping-engine-design.md`. Essa camada existe para manter politica, cliente publico e utilitarios de HTML fora do painel admin, do Prisma, do envio ao Discord e do runner de providers.
 
+A infraestrutura Playwright fica em `src/scraping/browser/` e e documentada em `docs/playwright-scraping.md`. Ela deve ser usada apenas como ultimo recurso para paginas publicas dinamicas, depois de descartar API, RSS e HTML simples.
+
 ## Principios
 
 - Prefira fontes publicas simples.
@@ -24,6 +26,7 @@ Futuras fontes mais dificeis devem usar a camada isolada `src/scraping/` e segui
 - Publicar dados sem URL de origem.
 - Usar browser para contornar login, captcha, Cloudflare, paywalls ou bloqueios anti-bot.
 - Usar credenciais pessoais ou simular usuario autenticado.
+- Usar cookies autenticados, proxy ou rotacao de IP.
 
 ## Rate limit e frequencia
 
@@ -51,6 +54,8 @@ Scrapers quebram. O sistema deve tolerar:
 Falhas de coleta nao devem afetar o painel admin nem a publicacao manual de vagas ja cadastradas.
 
 Se a fonte retornar sinais de bloqueio, captcha, exigencia de login ou termos explicitamente incompativeis, a coleta deve ser interrompida e a fonte deve ser marcada como nao permitida. O projeto nao deve implementar bypass.
+
+Para browser scraping, a politica tambem deve bloquear uso de credenciais, cookies customizados, proxy e rotacao de IP. O contexto Playwright deve usar User-Agent identificavel, `headless: true` por padrao e timeout conservador.
 
 ## Revisao antes de publicar
 
