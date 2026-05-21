@@ -114,6 +114,8 @@ Tambem existe uma camada inicial em `src/scraping/` para preparar futuras fontes
 - Himalayas usa `https://himalayas.app/jobs/api/search`; Jobicy usa `https://jobicy.com/api/v2/remote-jobs`; RemoteOK usa `https://remoteok.com/api`; Remotive usa `https://remotive.com/api/remote-jobs`.
 - Os providers externos filtram vagas dos ultimos 30 dias, exigem sinal claro de nivel iniciante, rejeitam senioridade alta/intermediaria e aceitam apenas vagas remotas globais ou compativeis com Brasil/LATAM/Americas.
 - O provider Gupy consulta poucas buscas publicas, exige sinal de entrada, rejeita senioridade intermediaria/alta, aceita remoto de qualquer lugar, aceita hibrido/presencial apenas em Minas Gerais/Belo Horizonte/regiao, limita a 20 vagas por execucao e salva apenas `DRAFT` via runner.
+- O diagnostico Gupy e por termo de busca. Cada termo retorna um `repositorySummary` com `source` no formato `gupy:<termo>`, `term`, `totalIssuesRead`, `returnedByProvider`, descartes por data/senioridade/falta de nivel/localizacao e erros. O runner completa qualidade, duplicidade e criacao nesse mesmo summary.
+- O toast da coleta Gupy usa resumo compacto: novas, analisadas, descartes por localizacao/nivel/qualidade, duplicatas, erros e ate quatro termos que retornaram vagas pelo provider.
 - O toast da coleta externa manual mostra totais compactos e um resumo por provider, por exemplo `Himalayas: 1 nova; Jobicy: 0; RemoteOK: 0; Remotive: 1`, sem criar tela, tabela ou persistencia de logs.
 - Jobicy, RemoteOK e Remotive exigem atribuicao/linkback; preserve a URL original e o `source` ao revisar/publicar vagas coletadas.
 

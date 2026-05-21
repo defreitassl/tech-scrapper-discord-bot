@@ -5,6 +5,7 @@ import type {
   ProviderCollectError,
   ProviderCollectResult,
   ProviderRepositorySummary,
+  ProviderRepositorySummaryNumericMetric,
 } from './types';
 
 const GITHUB_API_VERSION = '2022-11-28';
@@ -250,9 +251,9 @@ function createRepositorySummary(source: string): ProviderRepositorySummary {
 
 function sumRepositoryMetric(
   summaries: ProviderRepositorySummary[],
-  metric: keyof Omit<ProviderRepositorySummary, 'source'>,
+  metric: ProviderRepositorySummaryNumericMetric,
 ): number {
-  return summaries.reduce((total, summary) => total + summary[metric], 0);
+  return summaries.reduce((total, summary) => total + (summary[metric] ?? 0), 0);
 }
 
 async function fetchRepositoryIssues(

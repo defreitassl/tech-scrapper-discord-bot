@@ -98,6 +98,22 @@ O provider experimental nao depende desses seletores enquanto o JSON publico est
 
 Na implementacao inicial, o provider usa poucos termos publicos e filtra localmente para evitar depender demais de parametros nao documentados.
 
+## Diagnostico por termo
+
+O provider experimental retorna um `repositorySummary` por termo de busca, usando `source` no formato `gupy:<termo>` e o campo opcional `term` com o termo original. Isso permite que o `providerRunner` atribua qualidade, duplicidade e criacao ao termo correto sem mudar o runner.
+
+Cada termo contabiliza:
+
+- vagas analisadas (`totalIssuesRead`);
+- vagas retornadas pelo provider apos filtros internos (`returnedByProvider`);
+- ignoradas por localizacao;
+- ignoradas por senioridade;
+- ignoradas por falta de nivel;
+- ignoradas por data;
+- erros.
+
+O painel mostra um toast compacto com os totais e os termos que geraram vagas retornadas pelo provider. Os detalhes completos por termo continuam nos logs do terminal.
+
 ## Riscos
 
 - O endpoint e publico, mas nao ha contrato formal documentado no projeto.

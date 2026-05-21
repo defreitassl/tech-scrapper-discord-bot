@@ -1,4 +1,4 @@
-import type { ProviderRepositorySummary } from './types';
+import type { ProviderRepositorySummary, ProviderRepositorySummaryNumericMetric } from './types';
 
 export function createProviderSummary(source: string): ProviderRepositorySummary {
   return {
@@ -18,7 +18,7 @@ export function createProviderSummary(source: string): ProviderRepositorySummary
 
 export function sumProviderMetric(
   summaries: ProviderRepositorySummary[],
-  metric: keyof Omit<ProviderRepositorySummary, 'source'>,
+  metric: ProviderRepositorySummaryNumericMetric,
 ): number {
-  return summaries.reduce((total, summary) => total + summary[metric], 0);
+  return summaries.reduce((total, summary) => total + (summary[metric] ?? 0), 0);
 }

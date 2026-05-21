@@ -52,8 +52,14 @@ export function buildGithubCollectionNotice(summary: ProviderRunnerSummary): str
 
 export function buildGupyCollectionNotice(summary: ProviderRunnerSummary): string {
   const ignoredByLevel = summary.ignoredBySeniority + summary.ignoredByMissingEntryLevel;
+  const termBreakdown = buildGupyTermBreakdown(summary);
+  const baseMessage = `Gupy: ${summary.createdJobs} novas, ${summary.totalIssuesRead} analisadas, ${summary.ignoredByLocation} localização, ${ignoredByLevel} nível, ${summary.ignoredByQuality} qualidade, ${summary.ignoredDuplicates} duplicatas, ${summary.repositoryErrors} ${summary.repositoryErrors === 1 ? 'erro' : 'erros'}.`;
 
-  return `Coleta Gupy: ${summary.totalIssuesRead} vagas analisadas, ${summary.createdJobs} novas, ${summary.ignoredByLocation} fora de localização, ${ignoredByLevel} fora do nível, ${summary.ignoredByQuality} por qualidade, ${summary.ignoredDuplicates} duplicatas, ${summary.repositoryErrors} ${summary.repositoryErrors === 1 ? 'erro' : 'erros'}.`;
+  if (!termBreakdown) {
+    return baseMessage;
+  }
+
+  return `${baseMessage} Termos: ${termBreakdown}.`;
 }
 
 function getBreakdownSources(
@@ -86,4 +92,22 @@ function formatSourceSummary(summary: ProviderRepositorySummary): string {
   const errors = summary.errors > 0 ? `, ${summary.errors} ${summary.errors === 1 ? 'erro' : 'erros'}` : '';
 
   return `${summary.source}: ${created}${errors}`;
+}
+
+function buildGupyTermBreakdown(summary: ProviderRunnerSummary): string {
+  const terms = summary.repositorySummaries
+    .filter((source) => source.term && (source.returnedByProvider ?? source.created) > 0)
+    .sort((a, b) => {
+      const returnedDiff = (b.returnedByProvider ?? b.created) - (a.returnedByProvider ?? a.created);
+
+      if (returnedDiff !== 0) {
+        return returnedDiff;
+      }
+
+      return (a.term ?? a.source).localeCompare(b.term ?? b.source);
+    })
+    .slice(0, 4)
+    .map((source) => `${source.term}: ${source.returnedByProvider ?? source.created}`);
+
+  return terms.join('; ');
 }

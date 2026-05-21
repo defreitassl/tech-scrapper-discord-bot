@@ -38,7 +38,9 @@ export type ProviderCollectError = {
 
 export type ProviderRepositorySummary = {
   source: string;
+  term?: string;
   totalIssuesRead: number;
+  returnedByProvider?: number;
   ignoredByDate: number;
   ignoredBySeniority: number;
   ignoredByMissingEntryLevel: number;
@@ -49,6 +51,19 @@ export type ProviderRepositorySummary = {
   created: number;
   errors: number;
 };
+
+export type ProviderRepositorySummaryNumericMetric =
+  | 'totalIssuesRead'
+  | 'returnedByProvider'
+  | 'ignoredByDate'
+  | 'ignoredBySeniority'
+  | 'ignoredByMissingEntryLevel'
+  | 'ignoredByLocation'
+  | 'ignoredByQuality'
+  | 'ignoredDuplicates'
+  | 'possibleDuplicates'
+  | 'created'
+  | 'errors';
 
 export type NormalizedCollectedJob = {
   title: string | null;

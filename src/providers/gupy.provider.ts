@@ -1,3 +1,4 @@
+import { logger } from '../lib/logger';
 import { fetchPublicJson } from '../scraping/scrapingClient';
 import { detectEntryLevel, hasDisallowedSeniority } from './providerSeniorityUtils';
 import {
@@ -72,14 +73,20 @@ type GupyApiResponse = {
 export const gupyProvider: JobSourceProvider = {
   name: SOURCE,
   async collect(): Promise<ProviderCollectResult> {
-    const startedAt = new Date();
-    const summary = createSummary();
     const jobs: CollectedJob[] = [];
     const seenIds = new Set<number>();
     const errors: ProviderCollectResult['errors'] = [];
+    const termSummaries = SEARCH_TERMS.map((term) => createTermSummary(term));
+
     for (const term of SEARCH_TERMS) {
       if (jobs.length >= MAX_JOBS_PER_RUN) {
         break;
+      }
+
+      const termSummary = termSummaries.find((summary) => summary.term === term);
+
+      if (!termSummary) {
+        continue;
       }
 
       try {
@@ -90,7 +97,7 @@ export const gupyProvider: JobSourceProvider = {
         }
 
         for (const apiJob of response.data) {
-          summary.totalIssuesRead += 1;
+          termSummary.totalIssuesRead += 1;
 
           if (seenIds.has(apiJob.id)) {
             continue;
@@ -101,7 +108,7 @@ export const gupyProvider: JobSourceProvider = {
           const collectedJob = mapGupyJob(apiJob);
 
           if (!isRecentJob(apiJob.publishedDate)) {
-            summary.ignoredByDate += 1;
+            termSummary.ignoredByDate += 1;
             continue;
           }
 
@@ -109,73 +116,108 @@ export const gupyProvider: JobSourceProvider = {
           const levelText = compactJoin([apiJob.name, apiJob.description, apiJob.type], ' ');
 
           if (hasDisallowedSeniority(levelText)) {
-            summary.ignoredBySeniority += 1;
+            termSummary.ignoredBySeniority += 1;
             continue;
           }
 
           if (!level) {
-            summary.ignoredByMissingEntryLevel += 1;
+            termSummary.ignoredByMissingEntryLevel += 1;
             continue;
           }
 
           if (!isAllowedLocation(apiJob)) {
-            summary.ignoredByLocation += 1;
+            termSummary.ignoredByLocation += 1;
             continue;
           }
 
           jobs.push({
             ...collectedJob,
             level,
+            source: termSummary.source,
           });
+          termSummary.returnedByProvider = (termSummary.returnedByProvider ?? 0) + 1;
 
           if (jobs.length >= MAX_JOBS_PER_RUN) {
             break;
           }
         }
       } catch (error) {
-        summary.errors += 1;
+        termSummary.errors += 1;
         errors.push({
           provider: SOURCE,
-          message: error instanceof Error ? error.message : `Erro desconhecido ao consultar termo "${term}".`,
+          message:
+            error instanceof Error
+              ? `Termo "${term}": ${error.message}`
+              : `Erro desconhecido ao consultar termo "${term}".`,
         });
       }
+
+      logger.info('Resumo da coleta Gupy por termo.', {
+        term,
+        totalRead: termSummary.totalIssuesRead,
+        returnedByProvider: termSummary.returnedByProvider ?? 0,
+        ignoredByDate: termSummary.ignoredByDate,
+        ignoredBySeniority: termSummary.ignoredBySeniority,
+        ignoredByMissingEntryLevel: termSummary.ignoredByMissingEntryLevel,
+        ignoredByLocation: termSummary.ignoredByLocation,
+        errors: termSummary.errors,
+      });
     }
+
+    const activeTermSummaries = termSummaries.filter(
+      (summary) =>
+        summary.totalIssuesRead > 0 ||
+        (summary.returnedByProvider ?? 0) > 0 ||
+        summary.ignoredByDate > 0 ||
+        summary.ignoredBySeniority > 0 ||
+        summary.ignoredByMissingEntryLevel > 0 ||
+        summary.ignoredByLocation > 0 ||
+        summary.errors > 0,
+    );
 
     return {
       jobs,
-      totalIssuesRead: summary.totalIssuesRead,
-      ignoredByDate: summary.ignoredByDate,
-      ignoredBySeniority: summary.ignoredBySeniority,
-      ignoredByMissingEntryLevel: summary.ignoredByMissingEntryLevel,
-      ignoredByLocation: summary.ignoredByLocation,
+      totalIssuesRead: sumTermSummaries(activeTermSummaries, 'totalIssuesRead'),
+      ignoredByDate: sumTermSummaries(activeTermSummaries, 'ignoredByDate'),
+      ignoredBySeniority: sumTermSummaries(activeTermSummaries, 'ignoredBySeniority'),
+      ignoredByMissingEntryLevel: sumTermSummaries(activeTermSummaries, 'ignoredByMissingEntryLevel'),
+      ignoredByLocation: sumTermSummaries(activeTermSummaries, 'ignoredByLocation'),
       errors,
-      repositorySummaries: [
-        {
-          ...summary,
-          source: SOURCE,
-          ignoredByQuality: 0,
-          ignoredDuplicates: 0,
-          possibleDuplicates: 0,
-          created: 0,
-          errors: errors.length,
-        },
-      ],
+      repositorySummaries: activeTermSummaries,
     };
   },
 };
 
-function createSummary(): Omit<
-  ProviderRepositorySummary,
-  'source' | 'ignoredByQuality' | 'ignoredDuplicates' | 'possibleDuplicates' | 'created'
-> {
+function createTermSummary(term: string): ProviderRepositorySummary {
   return {
+    source: formatTermSource(term),
+    term,
     totalIssuesRead: 0,
+    returnedByProvider: 0,
     ignoredByDate: 0,
     ignoredBySeniority: 0,
     ignoredByMissingEntryLevel: 0,
     ignoredByLocation: 0,
+    ignoredByQuality: 0,
+    ignoredDuplicates: 0,
+    possibleDuplicates: 0,
+    created: 0,
     errors: 0,
   };
+}
+
+function sumTermSummaries(
+  summaries: ProviderRepositorySummary[],
+  field: keyof Pick<
+    ProviderRepositorySummary,
+    'totalIssuesRead' | 'ignoredByDate' | 'ignoredBySeniority' | 'ignoredByMissingEntryLevel' | 'ignoredByLocation'
+  >,
+): number {
+  return summaries.reduce((total, summary) => total + summary[field], 0);
+}
+
+function formatTermSource(term: string): string {
+  return `${SOURCE}:${term}`;
 }
 
 function buildSearchUrl(term: string): string {

@@ -29,7 +29,9 @@ export type ProviderCollectError = {
 
 export type ProviderRepositorySummary = {
   source: string;
+  term?: string;
   totalIssuesRead: number;
+  returnedByProvider?: number;
   ignoredByDate: number;
   ignoredBySeniority: number;
   ignoredByMissingEntryLevel: number;
@@ -116,6 +118,7 @@ O runner atual aplica exatamente essa regra:
 - providers podem retornar metadados de coleta, como `ignoredByLocation`, para aparecer no resumo operacional sem criar vagas no banco.
 - providers podem retornar erros internos, como falha por repositorio, sem interromper a execucao dos demais itens.
 - providers podem retornar `repositorySummaries` para o runner completar dados que dependem do banco, como duplicatas e vagas criadas.
+- providers podem usar `term` e `returnedByProvider` em `repositorySummaries` quando a fonte executa varias buscas internas, como a Gupy. Nesses casos, `source` deve continuar unico por subfonte/termo para o runner atribuir qualidade, duplicidade e criacao ao summary correto.
 
 ## Filtro de qualidade
 
@@ -178,7 +181,7 @@ Regras obrigatorias:
 
 A coleta automatica diaria em `src/services/scheduledCollector.ts` reaproveita o mesmo runner e executa apenas `realJobProviders`. Ela roda as 08:00 em `America/Sao_Paulo` enquanto o processo admin estiver ativo, nao executa o provider mock e usa lock simples em memoria para ignorar execucoes concorrentes.
 
-Os providers ATS publicos ficam em `atsJobProviders` e nao entram na coleta automatica diaria nesta etapa. O provider Gupy fica em `experimentalJobProviders` e tambem nao entra na coleta automatica. Eles podem ser executados manualmente pelo painel e usam o mesmo lock de coletas reais.
+Os providers ATS publicos ficam em `atsJobProviders` e nao entram na coleta automatica diaria nesta etapa. O provider Gupy fica em `experimentalJobProviders` e tambem nao entra na coleta automatica. Eles podem ser executados manualmente pelo painel e usam o mesmo lock de coletas reais. A Gupy retorna diagnostico por termo de busca em `repositorySummaries`, com `source` como `gupy:<termo>`, `term` e `returnedByProvider`.
 
 ## Provider GitHub
 

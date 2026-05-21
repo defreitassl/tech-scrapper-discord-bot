@@ -51,9 +51,9 @@ O projeto resolve parte desse problema centralizando cadastro, organizacao, revi
 ## Fora de escopo por enquanto
 
 - Scraping HTML real de vagas.
-- Scraping com navegador, Cheerio ou Playwright.
+- Scraping com navegador, Cheerio ou Playwright em fluxo automatico ou sem avaliacao especifica.
 - Autenticacao no painel admin.
 - Fila de publicacao avancada.
 - Moderacao multiusuario.
-- Integracao com LinkedIn, Gupy, Solides ou plataformas protegidas.
+- Integracao automatica com LinkedIn, Gupy, Solides ou plataformas protegidas. A Gupy existe apenas como coleta experimental manual por endpoint publico validado.
 - Publicacao automatica sem revisao humana.
