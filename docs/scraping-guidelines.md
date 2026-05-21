@@ -2,6 +2,8 @@
 
 Scraping deve ser tratado como ultimo recurso quando nao houver cadastro manual, RSS, API ou pagina publica simples com estrutura estavel.
 
+Futuras fontes mais dificeis devem usar a camada isolada `src/scraping/` e seguir `docs/scraping-engine-design.md`. Essa camada existe para manter politica, cliente publico e utilitarios de HTML fora do painel admin, do Prisma, do envio ao Discord e do runner de providers.
+
 ## Principios
 
 - Prefira fontes publicas simples.
@@ -20,6 +22,8 @@ Scraping deve ser tratado como ultimo recurso quando nao houver cadastro manual,
 - Coleta em alta frequencia.
 - Raspar plataformas que proíbem automacao nos termos de uso.
 - Publicar dados sem URL de origem.
+- Usar browser para contornar login, captcha, Cloudflare, paywalls ou bloqueios anti-bot.
+- Usar credenciais pessoais ou simular usuario autenticado.
 
 ## Rate limit e frequencia
 
@@ -30,6 +34,8 @@ Quando houver muitas fontes, usar fila ou controle central de rate limit.
 O provider GitHub atual nao faz scraping HTML; ele usa a API oficial do GitHub e aceita `GITHUB_TOKEN` opcional para aumentar o rate limit. Sem token, a coleta continua manual, mas deve ser usada com ainda mais parcimonia por causa do limite anonimo menor.
 
 Os providers Himalayas, Jobicy, RemoteOK e Remotive tambem nao fazem scraping HTML. Eles usam APIs JSON publicas, poucas chamadas por execucao e filtros locais antes de entregar vagas ao runner. Remotive deve continuar com baixa frequencia de chamadas; Jobicy, RemoteOK e Remotive exigem atribuicao/linkback por meio da URL original.
+
+Os providers Greenhouse, Lever e Ashby tambem nao fazem scraping HTML pesado. Eles usam somente endpoints JSON publicos de ATS por empresa cadastrada, via coleta manual no painel. Nao usam Playwright, Cheerio, login, cookies, credenciais pessoais, proxy, captcha, Cloudflare bypass ou bypass anti-bot. Nesta etapa, eles nao entram na coleta automatica diaria.
 
 ## Tratamento de falhas
 
@@ -43,6 +49,8 @@ Scrapers quebram. O sistema deve tolerar:
 - dados incompletos.
 
 Falhas de coleta nao devem afetar o painel admin nem a publicacao manual de vagas ja cadastradas.
+
+Se a fonte retornar sinais de bloqueio, captcha, exigencia de login ou termos explicitamente incompativeis, a coleta deve ser interrompida e a fonte deve ser marcada como nao permitida. O projeto nao deve implementar bypass.
 
 ## Revisao antes de publicar
 
@@ -58,3 +66,5 @@ O fluxo recomendado e:
 6. Revisar no painel.
 7. Marcar como `PENDING`.
 8. Publicar manualmente.
+
+No futuro, pode existir auto-avaliacao para promover vagas boas para `PENDING`, mas isso deve ser uma decisao separada do scraper bruto, com logs, criterios claros e preservacao da revisao humana quando houver duvida.

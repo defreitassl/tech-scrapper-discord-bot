@@ -2,7 +2,7 @@
 
 Bot de Discord em Node.js + TypeScript para enviar vagas de emprego para iniciantes em tecnologia em um canal especifico.
 
-Nesta etapa, o projeto conecta o bot no Discord, possui banco com Prisma e PostgreSQL, inclui um painel web simples para cadastrar, gerenciar e publicar vagas pendentes manualmente, pode gerar mensagens com IA usando Google AI Studio e possui providers com coleta mock/de teste, coleta real via issues publicas do GitHub e fontes externas por APIs publicas JSON.
+Nesta etapa, o projeto conecta o bot no Discord, possui banco com Prisma e PostgreSQL, inclui um painel web simples para cadastrar, gerenciar e publicar vagas pendentes manualmente, pode gerar mensagens com IA usando Google AI Studio e possui providers com coleta mock/de teste, coleta real via issues publicas do GitHub, fontes externas por APIs publicas JSON e primeira leva manual de ATS publicos.
 
 ## Requisitos
 
@@ -178,11 +178,31 @@ Jobicy, RemoteOK e Remotive exigem atribuicao/linkback. Por isso a URL original 
 
 As vagas coletadas dessas fontes sao normalizadas, passam pelo filtro de qualidade e pela deduplicacao existente e entram como `DRAFT`, com `useAi = false`. A coleta externa nao chama Gemini/IA, nao marca vagas como `PENDING` e nao envia nada ao Discord. Para publicar, revise a vaga e use `Preparar e colocar na fila`.
 
+### Coleta de ATS publicos
+
+A listagem tambem possui o botao `Coletar ATS publicos`. Ele executa providers baseados em endpoints publicos de ATS, sem Playwright, Cheerio, login, cookies, credenciais pessoais, proxy, captcha ou bypass anti-bot:
+
+- Greenhouse: `https://boards-api.greenhouse.io/v1/boards/{empresa}/jobs?content=true`
+- Lever: `https://api.lever.co/v0/postings/{empresa}?mode=json`
+- Ashby: `https://api.ashbyhq.com/posting-api/job-board/{empresa}`
+
+A lista inicial controlada de empresas-alvo fica em `src/providers/companyTargets.ts` e comeca pequena para validar a arquitetura:
+
+- GitLab, via Greenhouse (`gitlab`);
+- Kepler Communications, via Lever (`kepler`);
+- Ashby, via Ashby (`ashby`).
+
+Esses providers buscam apenas empresas cadastradas nessa lista. Se uma empresa falhar ou o endpoint publico nao estiver acessivel, o erro e registrado e a coleta continua nos demais alvos do mesmo provider.
+
+A coleta ATS filtra vagas publicadas nos ultimos 30 dias quando o ATS fornece data, exige sinal claro de perfil iniciante (`junior`, `jr`, `entry-level`, `intern`, `internship`, `estagio` ou `trainee`), rejeita senioridade intermediaria/alta e aceita remoto apenas quando for global, Brasil, LATAM ou Americas, ou sem restricao incompatível. Vagas hibridas ou presenciais sao aceitas somente em Minas Gerais.
+
+As vagas coletadas de ATS sao normalizadas, passam pelo filtro de qualidade e pela deduplicacao existente e entram como `DRAFT`, com `useAi = false`. A coleta ATS nao chama Gemini/IA, nao marca vagas como `PENDING` e nao envia nada ao Discord.
+
 ### Coleta automatica diaria
 
 Quando o painel admin esta rodando com `npm run admin`, o sistema agenda automaticamente a coleta dos providers reais todos os dias as 08:00 no timezone `America/Sao_Paulo`.
 
-Essa rotina executa apenas providers reais, incluindo GitHub, Himalayas, Jobicy, RemoteOK e Remotive. O provider mock/de teste nao roda automaticamente.
+Essa rotina executa apenas providers reais de baixa frequencia ja habilitados para agendamento, incluindo GitHub, Himalayas, Jobicy, RemoteOK e Remotive. O provider mock/de teste e os providers ATS publicos nao rodam automaticamente nesta etapa.
 
 A coleta automatica segue as mesmas regras da coleta manual de providers: cria vagas apenas como `DRAFT`, com `useAi = false`, nao chama Gemini/IA, nao marca vagas como `PENDING` e nao envia nada ao Discord.
 
@@ -249,6 +269,7 @@ npm run admin
 - Base inicial de providers com coleta mock/de teste
 - Provider GitHub para coletar issues publicas recentes de repositorios brasileiros de vagas no GitHub
 - Providers externos por APIs publicas JSON: Himalayas, Jobicy, RemoteOK e Remotive
+- Providers manuais de ATS publicos: Greenhouse, Lever e Ashby
 - Coleta automatica diaria dos providers reais as 08:00, criando apenas rascunhos
 
-Ainda nao ha scraping HTML real ou autenticacao.
+Ainda nao ha scraping HTML real, browser automation ou autenticacao.

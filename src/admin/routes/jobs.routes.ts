@@ -6,16 +6,16 @@ import { generateJobMessage } from '../../services/aiMessageGenerator';
 import { checkJobDuplicate } from '../../services/jobDeduplication';
 import { publishPendingJobs, publishSingleJob } from '../../services/publishPendingJobs';
 import { runRealJobCollection } from '../../services/scheduledCollector';
-import { externalJobProviders } from '../../providers/providerRegistry';
+import { atsJobProviders, externalJobProviders } from '../../providers/providerRegistry';
 import { githubJobsProvider } from '../../providers/githubJobs.provider';
 import { mockJobsProvider } from '../../providers/mockJobs.provider';
-import type { ProviderRunnerSummary } from '../../providers/providerRunner';
 import { runJobProviders } from '../../providers/providerRunner';
 import { parseJobForm } from '../helpers/forms';
 import { getNoticeFromQuery, redirectWithNotice } from '../helpers/notifications';
+import { buildGithubCollectionNotice, buildProviderCollectionNotice } from '../helpers/providerSummary';
 import { validateJob, validatePending } from '../helpers/validators';
 import { renderLayout } from '../views/layout';
-import { renderJobDetails, renderJobForm, renderJobsList } from '../views/jobs.views';
+import { renderJobDetails, renderJobForm, renderJobsList, type JobsByStatus } from '../views/jobs.views';
 
 export function createJobsRouter(): express.Router {
   const router = express.Router();
@@ -25,7 +25,7 @@ export function createJobsRouter(): express.Router {
       orderBy: { createdAt: 'desc' },
     });
 
-    response.send(renderJobsList(jobs, getNoticeFromQuery(request.query)));
+    response.send(renderJobsList(groupJobsByStatus(jobs), getNoticeFromQuery(request.query)));
   });
 
   router.get('/admin/jobs/new', (_request, response) => {
@@ -170,8 +170,7 @@ export function createJobsRouter(): express.Router {
       }
 
       const result = collectionResult.summary;
-      const ignoredByLevel = result.ignoredBySeniority + result.ignoredByMissingEntryLevel;
-      const message = `Coleta GitHub: ${result.totalIssuesRead} issues analisadas, ${result.createdJobs} novas, ${result.ignoredDuplicates} duplicatas, ${result.possibleDuplicates} possíveis, ${result.ignoredByDate} antigas, ${result.ignoredByLocation} fora de localização, ${ignoredByLevel} fora do nível, ${result.ignoredByQuality} por qualidade, ${result.repositoryErrors} ${result.repositoryErrors === 1 ? 'erro' : 'erros'}.`;
+      const message = buildGithubCollectionNotice(result);
       const noticeType = result.errors.length > 0 ? 'warning' : result.createdJobs > 0 ? 'success' : 'info';
 
       redirectWithNotice(response, '/admin/jobs', message, noticeType);
@@ -204,6 +203,32 @@ export function createJobsRouter(): express.Router {
     } catch (error) {
       logger.error('Erro ao coletar providers externos pelo admin.', error);
       redirectWithNotice(response, '/admin/jobs', 'Erro ao coletar fontes externas.', 'error');
+    }
+  });
+
+  router.post('/admin/jobs/collect-ats', async (_request, response) => {
+    try {
+      logger.info('Coleta manual de providers ATS publicos iniciada pelo admin.');
+      const collectionResult = await runRealJobCollection('manual', atsJobProviders);
+
+      if (collectionResult.skipped || !collectionResult.summary) {
+        redirectWithNotice(
+          response,
+          '/admin/jobs',
+          'Coleta ATS ignorada porque outra coleta ja esta em execucao.',
+          'warning',
+        );
+        return;
+      }
+
+      const result = collectionResult.summary;
+      const message = buildProviderCollectionNotice('Coleta ATS', result);
+      const noticeType = result.errors.length > 0 ? 'warning' : result.createdJobs > 0 ? 'success' : 'info';
+
+      redirectWithNotice(response, '/admin/jobs', message, noticeType);
+    } catch (error) {
+      logger.error('Erro ao coletar providers ATS pelo admin.', error);
+      redirectWithNotice(response, '/admin/jobs', 'Erro ao coletar ATS publicos.', 'error');
     }
   });
 
@@ -452,8 +477,11 @@ function getJobCreatedNoticeMessage(message: string, possibleDuplicate: { id: st
   return 'Possivel duplicata detectada: ja existe uma vaga com mesmo titulo e empresa.';
 }
 
-function buildProviderCollectionNotice(prefix: string, result: ProviderRunnerSummary): string {
-  const ignoredByLevel = result.ignoredBySeniority + result.ignoredByMissingEntryLevel;
-
-  return `${prefix}: ${result.totalIssuesRead} itens analisados, ${result.createdJobs} novas, ${result.ignoredDuplicates} duplicatas, ${result.possibleDuplicates} possíveis, ${result.ignoredByDate} antigas, ${result.ignoredByLocation} fora de localização, ${ignoredByLevel} fora do nível, ${result.ignoredByQuality} por qualidade, ${result.repositoryErrors} ${result.repositoryErrors === 1 ? 'erro' : 'erros'}.`;
+function groupJobsByStatus(jobs: JobPost[]): JobsByStatus {
+  return {
+    draft: jobs.filter((job) => job.status === JobStatus.DRAFT),
+    pending: jobs.filter((job) => job.status === JobStatus.PENDING),
+    history: jobs.filter((job) => job.status === JobStatus.SENT || job.status === JobStatus.ERROR),
+    archived: jobs.filter((job) => job.status === JobStatus.ARCHIVED),
+  };
 }

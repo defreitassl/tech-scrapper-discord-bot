@@ -1,6 +1,9 @@
+import { ashbyProvider } from './ashby.provider';
+import { greenhouseProvider } from './greenhouse.provider';
 import { githubJobsProvider } from './githubJobs.provider';
 import { himalayasProvider } from './himalayas.provider';
 import { jobicyProvider } from './jobicy.provider';
+import { leverProvider } from './lever.provider';
 import { mockJobsProvider } from './mockJobs.provider';
 import { remoteOkProvider } from './remoteOk.provider';
 import { remotiveProvider } from './remotive.provider';
@@ -13,5 +16,6 @@ export const externalJobProviders: JobSourceProvider[] = [
   remoteOkProvider,
   remotiveProvider,
 ];
+export const atsJobProviders: JobSourceProvider[] = [greenhouseProvider, leverProvider, ashbyProvider];
 export const realJobProviders: JobSourceProvider[] = [githubJobsProvider, ...externalJobProviders];
-export const activeJobProviders: JobSourceProvider[] = [...testJobProviders, ...realJobProviders];
+export const activeJobProviders: JobSourceProvider[] = [...testJobProviders, ...realJobProviders, ...atsJobProviders];

@@ -31,6 +31,26 @@ Esses providers nao usam Playwright, Cheerio, login, captcha ou scraping com nav
 
 Jobicy, RemoteOK e Remotive exigem atribuicao/linkback. O projeto preserva a URL original da vaga e registra `source` para que a revisao humana mantenha a origem visivel na publicacao.
 
+### ATS publicos por empresa
+
+Greenhouse, Lever e Ashby foram adicionados como primeira etapa de ATS publicos. Eles nao sao tratados como scraping pesado: cada provider usa endpoints JSON publicos por empresa, sem navegador, sem Cheerio, sem login, sem cookies, sem credenciais pessoais, sem proxy e sem bypass de captcha, Cloudflare ou anti-bot.
+
+Endpoints usados:
+
+- Greenhouse: `https://boards-api.greenhouse.io/v1/boards/{slug}/jobs?content=true`;
+- Lever: `https://api.lever.co/v0/postings/{slug}?mode=json`;
+- Ashby: `https://api.ashbyhq.com/posting-api/job-board/{slug}`.
+
+A lista de empresas-alvo e controlada em `src/providers/companyTargets.ts` e comeca pequena:
+
+- GitLab no Greenhouse;
+- Kepler Communications no Lever;
+- Ashby no Ashby.
+
+Os providers ATS consultam apenas empresas cadastradas nessa lista. Se um endpoint falhar ou deixar de existir, a falha e registrada e os demais alvos continuam. A coleta aceita apenas vagas recentes, com sinal claro de entrada, localizacao compatível e revisao humana obrigatoria.
+
+Nesta etapa, ATS publicos ficam em coleta manual pelo botao `Coletar ATS publicos`. Eles nao entram na coleta automatica diaria ate a lista de empresas e o volume de chamadas amadurecerem.
+
 ### GitHub e listas publicas
 
 Repositorios, arquivos Markdown, listas publicas e curadorias abertas podem ser boas fontes. Devem ser tratados como dados semi-estruturados e sempre registrar URL de origem.
@@ -60,11 +80,13 @@ Depois da coleta, a revisao humana continua obrigatoria. O admin pode usar `Prep
 
 O filtro de qualidade nao substitui a revisao humana. Ele apenas reduz ruido antes da criacao do rascunho e registra rejeicoes em `ignoredByQuality` com os motivos no terminal.
 
-Alem da coleta manual no painel, o processo admin agenda a coleta dos providers reais diariamente as 08:00 em `America/Sao_Paulo`. Essa rotina executa GitHub e as APIs externas registradas, nao executa providers de teste/mock, nao chama IA, nao publica no Discord e salva somente rascunhos `DRAFT`.
+Alem da coleta manual no painel, o processo admin agenda a coleta dos providers reais diariamente as 08:00 em `America/Sao_Paulo`. Essa rotina executa GitHub e as APIs externas registradas, nao executa providers de teste/mock nem ATS publicos, nao chama IA, nao publica no Discord e salva somente rascunhos `DRAFT`.
 
 ### Paginas publicas simples
 
 Paginas HTML estaticas ou pouco dinamicas podem ser coletadas com baixo risco usando parsing simples.
+
+Para futuras fontes HTML, use a camada isolada `src/scraping/` como base tecnica e consulte `docs/scraping-engine-design.md`. Ela separa politica, fetch publico e utilitarios HTML do contrato de providers.
 
 ### Scraping com Cheerio
 
@@ -75,6 +97,8 @@ Cheerio deve ser a primeira opcao quando scraping HTML for necessario. Ele e mai
 Playwright deve ser usado somente em ultimo caso, quando a pagina depende fortemente de JavaScript e nao ha API, RSS ou HTML simples disponivel.
 
 Ele e mais caro, mais lento e mais sujeito a bloqueios.
+
+Browser scraping so pode ser considerado quando a pagina for publica e nao exigir login, captcha, paywall, bypass anti-bot ou credenciais pessoais. Playwright ainda nao faz parte da implementacao atual.
 
 ## Riscos de LinkedIn, Gupy e Solides
 
@@ -89,6 +113,8 @@ LinkedIn, Gupy, Solides e plataformas similares podem ter:
 
 Essas fontes nao devem ser o ponto de partida. Tambem nao se deve tentar burlar login, captcha ou bloqueios.
 
+Antes de implementar qualquer plataforma maior, consulte `docs/scraping-platforms-research.md`. A recomendacao atual e priorizar Greenhouse, Lever, Ashby, sites proprios de empresas e paginas publicas de carreiras quando houver API publica, RSS, endpoint JSON publico ou HTML simples. LinkedIn deve ser evitado; Gupy e Solides ficam para depois e apenas com endpoints publicos permitidos.
+
 ## Recomendacao
 
 Comecar por fontes simples, publicas e revisaveis:
@@ -101,4 +127,4 @@ Comecar por fontes simples, publicas e revisaveis:
 
 Na fase inicial, qualquer vaga coletada automaticamente deve entrar como `DRAFT` ou equivalente para revisao humana antes de publicacao.
 
-Fontes como Arbeitnow, Findwork, Jobdata, LinkedIn, Gupy, Solides, Programathor e Remotar continuam fora desta etapa por menor aderencia, necessidade de chave/login, uso comercial, captcha, protecoes anti-bot ou risco de scraping pesado.
+Fontes como Arbeitnow, Findwork, Jobdata, LinkedIn, Gupy, Solides, Programathor e Remotar continuam fora desta etapa por menor aderencia, necessidade de chave/login, uso comercial, captcha, protecoes anti-bot ou risco de scraping pesado. Greenhouse, Lever e Ashby ficam limitados a endpoints publicos por empresa cadastrada e revisao humana.

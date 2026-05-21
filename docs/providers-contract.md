@@ -1,6 +1,6 @@
 # Contrato de Providers
 
-Este documento define o contrato inicial para fontes de coleta de vagas. A implementacao atual possui um provider mock/de teste em `src/providers/mockJobs.provider.ts`, um provider real para issues publicas do GitHub em `src/providers/githubJobs.provider.ts` e providers externos por APIs publicas JSON em `src/providers/himalayas.provider.ts`, `src/providers/jobicy.provider.ts`, `src/providers/remoteOk.provider.ts` e `src/providers/remotive.provider.ts`.
+Este documento define o contrato inicial para fontes de coleta de vagas. A implementacao atual possui um provider mock/de teste em `src/providers/mockJobs.provider.ts`, um provider real para issues publicas do GitHub em `src/providers/githubJobs.provider.ts`, providers externos por APIs publicas JSON em `src/providers/himalayas.provider.ts`, `src/providers/jobicy.provider.ts`, `src/providers/remoteOk.provider.ts` e `src/providers/remotive.provider.ts`, e providers manuais de ATS publicos em `src/providers/greenhouse.provider.ts`, `src/providers/lever.provider.ts` e `src/providers/ashby.provider.ts`.
 
 ## Interface sugerida
 
@@ -44,7 +44,9 @@ export type ProviderRepositorySummary = {
 
 O provider deve ser pequeno, testavel e responsavel por uma unica fonte ou familia de fontes.
 
-Providers ativos devem ser registrados em `src/providers/providerRegistry.ts`. O registry separa `testJobProviders`, `externalJobProviders` e `realJobProviders`; a coleta automatica usa somente providers reais. O runner central fica em `src/providers/providerRunner.ts`. Rotas especificas podem chamar o runner com uma lista explicita de providers quando precisam executar apenas uma familia de fontes, como a coleta mock, a coleta GitHub ou a coleta externa.
+Providers ativos devem ser registrados em `src/providers/providerRegistry.ts`. O registry separa `testJobProviders`, `externalJobProviders`, `atsJobProviders` e `realJobProviders`; a coleta automatica usa somente `realJobProviders`. O runner central fica em `src/providers/providerRunner.ts`. Rotas especificas podem chamar o runner com uma lista explicita de providers quando precisam executar apenas uma familia de fontes, como a coleta mock, a coleta GitHub, a coleta externa ou a coleta ATS manual.
+
+Futuras fontes que dependam de scraping ou pesquisa de paginas publicas devem usar a camada isolada `src/scraping/` antes de virar provider. Essa camada contem tipos genericos (`ScrapingStrategy`, `ScrapingSourceConfig`, `ScrapingResult`, `ScrapedJob`), politica de permissao, helpers leves de HTML e cliente publico simples. Ela nao substitui este contrato: providers continuam entregando `CollectedJob[]` ou `ProviderCollectResult` ao runner.
 
 ## Tipo sugerido
 
@@ -160,7 +162,23 @@ Na implementacao atual, `runJobProviders()` cria vagas coletadas com:
 
 Isso garante que a coleta automatica nao dispare Gemini/IA nem publique vagas no Discord.
 
+Scrapers futuros tambem devem respeitar essa regra. Mesmo que uma fonte retorne `ScrapedJob`, a conversao para `CollectedJob` e a criacao no banco devem passar pelo `providerRunner`, que mantem `DRAFT`, filtro de qualidade e deduplicacao central.
+
+## Politica para fontes dificeis
+
+Antes de criar um provider para plataformas maiores, registre a decisao de acesso conforme `docs/scraping-engine-design.md` e `docs/scraping-platforms-research.md`.
+
+Regras obrigatorias:
+
+- API publica e RSS publico sao preferiveis.
+- HTML publico simples pode ser usado quando estavel.
+- Browser scraping e ultimo caso e ainda nao esta implementado.
+- Fontes com login, captcha, Cloudflare/bloqueio anti-bot que exija bypass, paywall, credenciais pessoais ou termos explicitamente incompativeis devem ser bloqueadas.
+- LinkedIn, Gupy, Solides e similares nao devem ser implementados sem avaliacao especifica e decisao explicita.
+
 A coleta automatica diaria em `src/services/scheduledCollector.ts` reaproveita o mesmo runner e executa apenas `realJobProviders`. Ela roda as 08:00 em `America/Sao_Paulo` enquanto o processo admin estiver ativo, nao executa o provider mock e usa lock simples em memoria para ignorar execucoes concorrentes.
+
+Os providers ATS publicos ficam em `atsJobProviders` e nao entram na coleta automatica diaria nesta etapa. Eles podem ser executados manualmente pelo painel e usam o mesmo lock de coletas reais.
 
 ## Provider GitHub
 
@@ -233,7 +251,7 @@ O toast da coleta GitHub mostra um resumo compacto e temporario, sem persistir l
 Coleta GitHub: 48 issues analisadas, 2 novas, 4 duplicatas, 0 possíveis, 5 antigas, 8 fora de localização, 21 fora do nível, 3 por qualidade, 1 erro.
 ```
 
-O terminal recebe tambem um log estruturado por repositorio com lidas, criadas, descartes por data/nivel/localizacao, duplicatas e erros. Esse diagnostico e operacional e nao cria tela de logs nem tabela de eventos.
+Quando houver vagas criadas, o toast pode acrescentar ate tres fontes com mais vagas novas, por exemplo `Top fontes: frontendbr/vagas: 1 nova; backend-br/vagas: 1 nova.` O terminal recebe tambem um log estruturado por repositorio com lidas, criadas, descartes por data/nivel/localizacao, duplicatas e erros. Esse diagnostico e operacional e nao cria tela de logs nem tabela de eventos.
 
 ## Providers externos por API publica
 
@@ -258,6 +276,8 @@ Regras comuns:
 - preservar URL original para candidatura/linkback quando fornecida;
 - retornar metadados de diagnostico para o runner contabilizar lidas, antigas, fora de nivel, fora de localizacao, qualidade e erros.
 
+O painel usa `repositorySummaries` para exibir um resumo visual compacto apos a coleta externa manual, como `Himalayas: 1 nova; Jobicy: 0; RemoteOK: 0; Remotive: 1`. Esse resumo mostra somente vagas criadas e erros por fonte, quando existirem. O diagnostico completo permanece nos logs do terminal e nao e persistido no banco.
+
 Jobicy, RemoteOK e Remotive exigem atribuicao ou linkback. A implementacao preserva `url` e `source`; a revisao humana deve manter o link original ao preparar/publicar a vaga. Himalayas tambem usa a URL original quando disponivel.
 
 Os helpers compartilhados ficam em:
@@ -268,6 +288,37 @@ Os helpers compartilhados ficam em:
 - `src/providers/providerLocationUtils.ts`: avaliacao conservadora de localidade remota;
 - `src/providers/providerSalaryUtils.ts`: formatacao simples de faixa salarial;
 - `src/providers/providerSummaryUtils.ts`: criacao de resumo operacional por fonte.
+
+## Providers ATS publicos
+
+Os providers `greenhouseProvider`, `leverProvider` e `ashbyProvider` seguem o mesmo contrato e nunca salvam diretamente no banco. Eles consultam somente endpoints JSON publicos de empresas cadastradas em `src/providers/companyTargets.ts`.
+
+Lista inicial de alvos:
+
+- GitLab, Greenhouse slug `gitlab`;
+- Kepler Communications, Lever slug `kepler`;
+- Ashby, Ashby slug `ashby`.
+
+Endpoints usados:
+
+- Greenhouse: `https://boards-api.greenhouse.io/v1/boards/{slug}/jobs?content=true`;
+- Lever: `https://api.lever.co/v0/postings/{slug}?mode=json`;
+- Ashby: `https://api.ashbyhq.com/posting-api/job-board/{slug}`.
+
+Regras comuns:
+
+- usar apenas `fetchPublicJson` e politica `api` permitida em `src/scraping/scrapingPolicy.ts`;
+- nao usar Playwright, Cheerio, login, cookies, proxy, credenciais pessoais, captcha ou bypass anti-bot;
+- se uma empresa-alvo falhar, registrar erro em `errors` e continuar nos demais alvos;
+- aceitar apenas vagas com data publicada/criada nos ultimos 30 dias quando a data existe;
+- exigir sinal claro de nivel iniciante (`junior`, `jr`, `entry-level`, `intern`, `internship`, `estagio`, `estagiario` ou `trainee`);
+- rejeitar sinais de senioridade intermediaria/alta;
+- aceitar remoto global, Brasil, LATAM ou Americas, ou remoto sem restricao incompatível;
+- aceitar hibrido/presencial somente em Minas Gerais;
+- preencher `externalId`, `title`, `company`, `location`, `modality`, `level`, `stacks`, `salaryRange`, `shortDescription`, `rawText`, `url`, `source` e `collectedAt` quando a fonte fornece dados suficientes;
+- retornar `ProviderCollectResult` com `repositorySummaries` por alvo.
+
+A coleta ATS manual cria vagas somente via `providerRunner`, como `DRAFT` e `useAi = false`. Ela nao chama Gemini, nao marca `PENDING`, nao envia ao Discord, nao altera schema Prisma e nao cria migrations.
 
 ## Preparacao de vaga coletada
 

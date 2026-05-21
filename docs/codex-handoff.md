@@ -4,9 +4,11 @@
 
 O `tech-scrapper-discord-bot` e um bot/painel para cadastrar, organizar e publicar vagas de tecnologia para iniciantes no Discord da Projeto Desenvolve.
 
-Apesar do nome mencionar scraper, o projeto nao faz scraping HTML nesta etapa. O estado atual e um painel admin manual com publicacao controlada para Discord, um provider real via API publica do GitHub e providers externos via APIs JSON publicas.
+Apesar do nome mencionar scraper, o projeto nao faz scraping HTML nesta etapa. O estado atual e um painel admin manual com publicacao controlada para Discord, um provider real via API publica do GitHub, providers externos via APIs JSON publicas e providers manuais para ATS publicos via JSON.
 
-Existe uma base de providers em `src/providers/`, com provider mock/de teste, provider GitHub para issues publicas de repositorios de vagas e providers externos para Himalayas, Jobicy, RemoteOK e Remotive.
+Existe uma base de providers em `src/providers/`, com provider mock/de teste, provider GitHub para issues publicas de repositorios de vagas, providers externos para Himalayas, Jobicy, RemoteOK e Remotive, e providers ATS para Greenhouse, Lever e Ashby.
+
+Tambem existe uma camada inicial em `src/scraping/` para preparar futuras fontes publicas mais dificeis. Ela ainda nao esta conectada ao `providerRunner`, nao cria provider novo, nao usa Cheerio/Playwright e nao altera fluxo do admin. A intencao e isolar tipos, politica de permissao, helpers HTML e cliente publico simples antes de qualquer scraper real.
 
 ## Stack
 
@@ -61,12 +63,15 @@ Existe uma base de providers em `src/providers/`, com provider mock/de teste, pr
 - Helpers puros ficam em `src/admin/helpers/`: `forms.ts`, `validators.ts`, `status.ts`, `formatters.ts` e `notifications.ts`.
 - Views e helpers nao devem acessar Prisma diretamente. Rotas podem chamar Prisma e services.
 - Feedback operacional do painel usa notificacoes temporarias renderizadas no HTML via query params `message` e `noticeType`. Nao existe tela de logs nem persistencia em banco para essas notificacoes.
+- O resumo visual de coletas fica em `src/admin/helpers/providerSummary.ts`. Ele monta toasts compactos por fonte/provider usando `repositorySummaries`, exibindo vagas criadas e erros quando existirem. Detalhes completos de filtros, duplicatas e rejeicoes continuam no terminal.
 - A deduplicacao fica em `src/services/jobDeduplication.ts` para reuso futuro por providers. Nao ha unique constraint nem migration nesta etapa.
 - O filtro de qualidade de providers fica em `src/services/jobQualityFilter.ts`; ele e deterministico, nao usa IA e rejeita coletas antes do banco quando faltam dados essenciais, falta canal claro de candidatura (URL ou e-mail no texto), ha senioridade/experiencia alta ou a vaga parece fora de tecnologia.
 - A listagem de vagas possui a acao `Coletar vagas de teste`, que chama `POST /admin/jobs/collect` e executa `runJobProviders([mockJobsProvider])`.
 - A listagem tambem possui a acao `Coletar vagas do GitHub`, que chama `POST /admin/jobs/collect-github` e executa apenas `githubJobsProvider` pelo lock de `runRealJobCollection`.
 - A listagem possui a acao `Coletar fontes externas`, que chama `POST /admin/jobs/collect-external` e executa `externalJobProviders` pelo mesmo lock.
-- A listagem exibe `Preparar` para vagas `DRAFT`; os detalhes exibem `Preparar e colocar na fila` para vagas `DRAFT` ou `PENDING`.
+- A listagem possui a acao `Coletar ATS publicos`, que chama `POST /admin/jobs/collect-ats` e executa `atsJobProviders` pelo mesmo lock. Esta coleta e manual nesta etapa.
+- A listagem `/admin/jobs` e organizada por secoes visuais: `Para revisar` funciona como fila de curadoria de vagas `DRAFT`, principalmente coletadas por providers. Essa secao usa cards com titulo, empresa, fonte, localizacao, modalidade, nivel, stacks, resumo curto, link original quando existir e data de criacao/coleta; as acoes principais sao `Preparar`, `Ver detalhes` e `Arquivar`. `Prontas para envio` mostra `PENDING` com acao principal `Enviar agora`; `Historico recente` mostra `SENT` e `ERROR` recentes; `Arquivadas` mostra `ARCHIVED` no final com limite visual simples. Isso nao altera rotas nem regras de negocio.
+- Os detalhes exibem `Preparar e colocar na fila` para vagas `DRAFT` ou `PENDING`.
 
 ## Providers de coleta
 
@@ -77,7 +82,11 @@ Existe uma base de providers em `src/providers/`, com provider mock/de teste, pr
 - O provider mock e `src/providers/mockJobs.provider.ts`.
 - O provider GitHub e `src/providers/githubJobs.provider.ts`.
 - Os providers externos sao `src/providers/himalayas.provider.ts`, `src/providers/jobicy.provider.ts`, `src/providers/remoteOk.provider.ts` e `src/providers/remotive.provider.ts`.
+- Os providers ATS sao `src/providers/greenhouse.provider.ts`, `src/providers/lever.provider.ts` e `src/providers/ashby.provider.ts`.
+- A lista controlada de empresas-alvo ATS fica em `src/providers/companyTargets.ts`. A lista inicial e GitLab no Greenhouse (`gitlab`), Kepler Communications no Lever (`kepler`) e Ashby no Ashby (`ashby`).
 - Helpers compartilhados para providers externos ficam em `providerTextUtils.ts`, `providerDateUtils.ts`, `providerSeniorityUtils.ts`, `providerLocationUtils.ts`, `providerSalaryUtils.ts` e `providerSummaryUtils.ts`.
+- Helpers especificos da primeira leva ATS ficam em `src/providers/atsProviderUtils.ts` e tratam politica publica `api`, limpeza leve de HTML retornado nos JSONs, datas recentes e filtro conservador de localizacao.
+- A camada preparatoria para scraping fica em `src/scraping/`: `types.ts`, `scrapingPolicy.ts`, `htmlUtils.ts` e `scrapingClient.ts`. Use-a para avaliar e buscar fontes publicas permitidas antes de criar providers novos.
 - O runner central fica em `src/providers/providerRunner.ts`.
 - O runner percorre os providers ativos, normaliza vagas, aplica `evaluateCollectedJobQuality`, reaproveita `checkJobDuplicate`, ignora duplicatas fortes por URL e cria as demais como `DRAFT`.
 - Vagas rejeitadas por qualidade incrementam `ignoredByQuality` e geram log `Vaga coletada ignorada por filtro de qualidade` com `reasons` e `score`.
@@ -85,8 +94,8 @@ Existe uma base de providers em `src/providers/`, com provider mock/de teste, pr
 - O runner tambem aceita resultado de provider com metadados, como `ignoredByLocation`, para exibir resumo operacional sem criar registros.
 - O runner tambem propaga erros internos retornados por providers, como falhas de repositorio no GitHub provider.
 - O diagnostico GitHub inclui `totalIssuesRead`, `ignoredByDate`, `ignoredBySeniority`, `ignoredByMissingEntryLevel`, `ignoredByLocation`, `ignoredByQuality`, `ignoredDuplicates`, `possibleDuplicates`, `created` e `repositoryErrors`.
-- O toast da coleta GitHub mostra um resumo compacto e temporario. Detalhes por repositorio sao logados no terminal em eventos `Resumo da coleta GitHub por repositorio`; nao ha tela de logs nem persistencia em banco.
-- `providerRegistry.ts` registra `mockJobsProvider`, `githubJobsProvider`, `externalJobProviders` e `realJobProviders`. A coleta automatica roda todos os providers reais; a coleta externa manual roda apenas Himalayas, Jobicy, RemoteOK e Remotive.
+- O toast da coleta GitHub mostra um resumo compacto e temporario. Quando houver vagas criadas, ele pode incluir ate tres fontes com mais vagas novas. Detalhes por repositorio sao logados no terminal em eventos `Resumo da coleta GitHub por repositorio`; nao ha tela de logs nem persistencia em banco.
+- `providerRegistry.ts` registra `mockJobsProvider`, `githubJobsProvider`, `externalJobProviders`, `atsJobProviders` e `realJobProviders`. A coleta automatica roda apenas `realJobProviders`; a coleta externa manual roda Himalayas, Jobicy, RemoteOK e Remotive; a coleta ATS manual roda Greenhouse, Lever e Ashby.
 - O provider GitHub usa issues abertas de `frontendbr/vagas`, `backend-br/vagas`, `react-brasil/vagas`, `qa-brasil/vagas`, `nodejsdevbr/vagas`, `dotnetdevbr/vagas`, `soujava/vagas-java`, `DevOps-Brasil/Vagas`, `programadores-br/geral`, `datascience-br/vagas`, `brasil-php/vagas`, `androiddevbr/vagas`, `CocoaHeadsBrasil/vagas` e `remotejobsbr/design-ux-vagas` pela API oficial do GitHub.
 - Se um repositorio GitHub falhar, o provider loga o erro, adiciona erro ao resumo e continua nos demais repositorios.
 - O provider GitHub usa `state=open`, `per_page=100` e `since` com data ISO de 30 dias atras, mas tambem filtra `created_at` manualmente porque `since` pode considerar atualizacao.
@@ -97,9 +106,33 @@ Existe uma base de providers em `src/providers/`, com provider mock/de teste, pr
 - O provider GitHub tenta preencher `shortDescription` a partir de secoes do corpo da issue e `stacks` a partir de termos tecnicos conhecidos, sem chamar IA.
 - `GITHUB_TOKEN` e opcional; quando configurado, aumenta o rate limit e e enviado como `Authorization: Bearer`.
 - Nao ha scraping HTML real, Cheerio, Playwright, LinkedIn, Gupy, Solides ou fontes protegidas nesta etapa.
+- A politica de scraping bloqueia fontes que exigem login, captcha, bypass anti-bot, credenciais pessoais, simulacao de usuario autenticado ou termos explicitamente incompativeis. Browser scraping so pode ser considerado como ultimo caso para pagina publica sem esses bloqueios.
 - Himalayas usa `https://himalayas.app/jobs/api/search`; Jobicy usa `https://jobicy.com/api/v2/remote-jobs`; RemoteOK usa `https://remoteok.com/api`; Remotive usa `https://remotive.com/api/remote-jobs`.
 - Os providers externos filtram vagas dos ultimos 30 dias, exigem sinal claro de nivel iniciante, rejeitam senioridade alta/intermediaria e aceitam apenas vagas remotas globais ou compativeis com Brasil/LATAM/Americas.
+- O toast da coleta externa manual mostra totais compactos e um resumo por provider, por exemplo `Himalayas: 1 nova; Jobicy: 0; RemoteOK: 0; Remotive: 1`, sem criar tela, tabela ou persistencia de logs.
 - Jobicy, RemoteOK e Remotive exigem atribuicao/linkback; preserve a URL original e o `source` ao revisar/publicar vagas coletadas.
+
+## Providers ATS publicos
+
+Os providers ATS usam somente endpoints JSON publicos e empresas-alvo cadastradas em `companyTargets.ts`:
+
+- Greenhouse: `https://boards-api.greenhouse.io/v1/boards/{slug}/jobs?content=true`;
+- Lever: `https://api.lever.co/v0/postings/{slug}?mode=json`;
+- Ashby: `https://api.ashbyhq.com/posting-api/job-board/{slug}`.
+
+Eles nao usam Playwright, Cheerio, login, cookies, credenciais pessoais, proxy, captcha, Cloudflare bypass ou qualquer bypass anti-bot. Tambem nao chamam Gemini, nao salvam direto no banco, nao mudam schema Prisma e nao publicam vagas.
+
+Regras dos providers ATS:
+
+- se um alvo falhar, registrar erro e continuar nos demais alvos;
+- aceitar apenas vagas com data publicada/criada nos ultimos 30 dias quando a data existe;
+- exigir sinal claro de entrada (`junior`, `jr`, `entry-level`, `intern`, `internship`, `estagio` ou `trainee`);
+- rejeitar senioridade intermediaria/alta (`pleno`, `mid-level`, `senior`, `lead`, `staff`, `principal`, `manager`, `director`, `executive`, `head of`);
+- aceitar remoto global/Brasil/LATAM/Americas ou sem restricao incompatível;
+- aceitar hibrido/presencial somente em Minas Gerais;
+- retornar `ProviderCollectResult` com `repositorySummaries` por alvo, para o runner completar qualidade, duplicidade e criacao.
+
+A coleta ATS fica manual em `/admin/jobs/collect-ats`. Ela usa o mesmo lock de `runRealJobCollection`, cria apenas `DRAFT` via runner, com `useAi = false`, e nao entra na coleta automatica diaria por enquanto.
 
 ## Coleta automatica
 
@@ -107,6 +140,7 @@ Existe uma base de providers em `src/providers/`, com provider mock/de teste, pr
 - Ela roda junto com `npm run admin`; se o painel admin nao estiver rodando, a coleta automatica nao executa.
 - Usa `node-cron` e chama `runJobProviders(realJobProviders)`.
 - Nao executa `mockJobsProvider` automaticamente.
+- Nao executa `atsJobProviders` automaticamente nesta etapa.
 - Usa lock simples em memoria (`isCollecting`) compartilhado com as rotas manuais GitHub e fontes externas por meio de `runRealJobCollection`.
 - Se uma coleta ja estiver rodando, a nova tentativa e ignorada com log.
 - Falhas sao logadas e nao derrubam o processo.
@@ -117,6 +151,7 @@ Existe uma base de providers em `src/providers/`, com provider mock/de teste, pr
 - Manter o painel simples e server-rendered em Express ate haver necessidade real de frontend separado.
 - Evoluir providers a partir da base mock atual.
 - Comecar provider real por uma fonte simples e publica.
+- Para fontes maiores, consultar `docs/scraping-engine-design.md` e `docs/scraping-platforms-research.md` antes de implementar. Priorize Greenhouse, Lever, Ashby, paginas publicas de carreiras e sites proprios simples quando houver API/RSS/endpoint JSON publico.
 - Salvar coletas automaticas como `DRAFT`.
 - Reutilizar `jobDeduplication` nos providers antes de criar vagas automaticamente.
 - Adicionar autenticacao simples antes de expor o painel fora de ambiente local/confiavel.
@@ -129,6 +164,7 @@ Existe uma base de providers em `src/providers/`, com provider mock/de teste, pr
 - Nao depender exclusivamente de scraping.
 - Preferir APIs, RSS, listas publicas e HTML simples antes de Playwright.
 - Evitar login, captcha, paywalls e circunvencao de bloqueios.
+- Manter scraping dificil isolado da camada de providers e do painel admin ate haver fonte concreta e permitida.
 - Manter mensagens de Discord curtas, formatadas e uteis para alunos iniciantes.
 - Usar IA como apoio, nao como dependencia obrigatoria.
 - Configurar horarios e limite diario de envio pelo banco/painel, nao por `.env`.

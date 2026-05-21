@@ -16,7 +16,8 @@
 - `src/admin/routes/schedule.routes.ts`: rotas de configuracao do envio agendado.
 - `src/admin/views/`: renderizacao server-side do painel. `layout.ts` contem o layout base, `styles.ts` contem o CSS inline, `components.ts` contem componentes HTML reutilizaveis, `jobs.views.ts` contem telas de vagas e `schedule.views.ts` contem a tela de agendamento.
 - `src/admin/helpers/`: helpers puros do painel. `forms.ts` concentra parse e normalizacao de formularios, `validators.ts` concentra validacoes de formulario/status, `status.ts` concentra labels de status, `formatters.ts` concentra formatacao visual simples e `notifications.ts` concentra notificacoes temporarias via query params.
-- `src/providers/`: base de providers de coleta. Inclui contrato (`types.ts`), normalizacao (`normalizeCollectedJob.ts`), registry de providers ativos (`providerRegistry.ts`), provider mock (`mockJobs.provider.ts`), provider GitHub (`githubJobs.provider.ts`), providers externos por APIs publicas JSON (`himalayas.provider.ts`, `jobicy.provider.ts`, `remoteOk.provider.ts`, `remotive.provider.ts`), helpers compartilhados e runner (`providerRunner.ts`).
+- `src/providers/`: base de providers de coleta. Inclui contrato (`types.ts`), normalizacao (`normalizeCollectedJob.ts`), registry de providers ativos (`providerRegistry.ts`), provider mock (`mockJobs.provider.ts`), provider GitHub (`githubJobs.provider.ts`), providers externos por APIs publicas JSON (`himalayas.provider.ts`, `jobicy.provider.ts`, `remoteOk.provider.ts`, `remotive.provider.ts`), providers manuais de ATS publicos (`greenhouse.provider.ts`, `lever.provider.ts`, `ashby.provider.ts`), lista controlada de empresas (`companyTargets.ts`), helpers compartilhados e runner (`providerRunner.ts`).
+- `src/scraping/`: camada preparatoria e isolada para futuras fontes publicas mais dificeis. Inclui tipos genericos, politica de permissao, helpers leves de HTML e cliente publico simples para HTML/JSON. Os providers ATS usam o cliente JSON publico dessa camada, mas ela continua sem salvar no banco, sem Playwright/Cheerio e sem alterar regras do runner.
 - `src/services/publishPendingJobs.ts`: fluxo de publicacao de vagas, incluindo envio em lote de vagas `PENDING` e envio de uma unica vaga.
 - `src/services/jobDeduplication.ts`: primeira camada reutilizavel de deduplicacao de vagas. Bloqueia duplicata forte por URL normalizada e sinaliza possivel duplicata por titulo + empresa normalizados.
 - `src/services/jobQualityFilter.ts`: filtro deterministico de qualidade para vagas coletadas por providers. Rejeita vagas antes da criacao no banco quando faltam dados essenciais, falta canal claro de candidatura (URL ou e-mail no texto), ha sinais fortes de senioridade/experiencia alta ou a vaga parece fora de tecnologia.
@@ -62,6 +63,10 @@ O envio individual nao reenvia vagas `SENT` e nao publica vagas `ARCHIVED`.
 
 O projeto possui uma base inicial de providers em `src/providers/`. A coleta continua manual pelo painel e cria apenas rascunhos para revisao humana.
 
+Fontes publicas mais dificeis devem ser preparadas na camada isolada `src/scraping/`, documentada em `docs/scraping-engine-design.md`. Essa camada existe para separar politica, cliente HTTP publico e utilitarios de HTML do contrato de providers. APIs e RSS continuam preferiveis; HTML simples vem antes de browser; scraping com browser e ultimo caso e so pode ser considerado para paginas publicas sem login, captcha ou bloqueio conhecido. Nao e permitido burlar login, captcha, Cloudflare, paywalls ou protecoes anti-bot.
+
+Antes de implementar plataformas maiores, a fonte deve ser avaliada conforme `docs/scraping-platforms-research.md`. LinkedIn, Gupy, Solides e similares nao devem ser implementados por suposicao; precisam de pesquisa especifica, decisao explicita e respeito a termos e bloqueios tecnicos.
+
 O fluxo de teste/mock e acionado pela rota `POST /admin/jobs/collect`, exibida na listagem como `Coletar vagas de teste`.
 
 1. O admin aciona a coleta de teste na listagem de vagas.
@@ -75,7 +80,7 @@ O fluxo de teste/mock e acionado pela rota `POST /admin/jobs/collect`, exibida n
 9. Possivel duplicata por titulo + empresa e apenas contabilizada; a vaga ainda e criada como `DRAFT` para revisao humana.
 10. Vagas criadas automaticamente entram sempre como `DRAFT`, com `useAi = false`.
 11. A coleta nao chama Gemini/IA, nao marca vagas como `PENDING` e nao envia nada ao Discord.
-12. O painel redireciona de volta para `/admin/jobs` com um toast resumindo novas vagas, duplicatas por URL ignoradas e metadados especificos da coleta quando existirem.
+12. O painel redireciona de volta para `/admin/jobs` com um toast resumindo novas vagas, duplicatas por URL ignoradas e metadados especificos da coleta quando existirem. Para coletas com diagnostico por fonte, o toast mostra apenas um resumo compacto por provider/repositorio; os detalhes completos continuam nos logs do terminal.
 
 O provider mock retorna vagas fake para validar arquitetura e fluxo operacional.
 
@@ -116,7 +121,7 @@ O provider tambem tenta extrair `shortDescription` do corpo da issue a partir de
 
 Depois da coleta, o runner existente normaliza, aplica o filtro de qualidade, deduplica e cria os registros como `DRAFT`, com `useAi = false`. Vagas rejeitadas por qualidade nao sao criadas e aparecem no diagnostico como `ignoredByQuality`. Duplicatas fortes por URL sao ignoradas. Possiveis duplicatas por titulo + empresa sao contabilizadas no toast, mas ainda podem ser criadas como rascunho.
 
-A coleta GitHub nao chama IA, nao envia vagas ao Discord, nao transforma vagas em `PENDING` automaticamente e nao altera o agendamento. O toast da rota mostra um resumo temporario com issues analisadas, novas vagas, duplicatas, possiveis duplicatas, antigas, fora de localizacao, fora do nivel, rejeitadas por qualidade e erros. O terminal registra tambem um resumo estruturado por repositorio e logs das rejeicoes de qualidade com `reasons`. Nao ha tabela, pagina ou persistencia de logs de coleta.
+A coleta GitHub nao chama IA, nao envia vagas ao Discord, nao transforma vagas em `PENDING` automaticamente e nao altera o agendamento. O toast da rota mostra um resumo temporario com issues analisadas, novas vagas, duplicatas, possiveis duplicatas, antigas, fora de localizacao, fora do nivel, rejeitadas por qualidade e erros. Quando houver vagas criadas, o toast tambem pode mostrar ate tres fontes com mais vagas novas. O terminal registra tambem um resumo estruturado por repositorio e logs das rejeicoes de qualidade com `reasons`. Nao ha tabela, pagina ou persistencia de logs de coleta.
 
 ## Fluxo de coleta de fontes externas
 
@@ -141,13 +146,43 @@ Depois desse filtro, o mesmo runner central normaliza, aplica `evaluateCollected
 
 Jobicy, RemoteOK e Remotive exigem atribuicao/linkback. A implementacao preserva a URL original sempre que fornecida, registra `source` com o nome do provider e deixa a revisao final para o admin antes da publicacao.
 
+Ao final da coleta externa manual, o painel exibe um toast compacto com o total de vagas novas, rejeicoes por qualidade, erros e um resumo por provider mostrando apenas vagas criadas e erros quando houver. O diagnostico completo por provider segue restrito ao terminal.
+
+## Fluxo de coleta de ATS publicos
+
+A rota `POST /admin/jobs/collect-ats`, exibida na listagem como `Coletar ATS publicos`, executa os providers registrados em `atsJobProviders`:
+
+- `greenhouseProvider`, usando `https://boards-api.greenhouse.io/v1/boards/{slug}/jobs?content=true`;
+- `leverProvider`, usando `https://api.lever.co/v0/postings/{slug}?mode=json`;
+- `ashbyProvider`, usando `https://api.ashbyhq.com/posting-api/job-board/{slug}`.
+
+A lista inicial de empresas-alvo fica em `src/providers/companyTargets.ts`:
+
+- GitLab no Greenhouse (`gitlab`);
+- Kepler Communications no Lever (`kepler`);
+- Ashby no Ashby (`ashby`).
+
+Cada provider consulta apenas os alvos cadastrados para seu ATS. A coleta usa somente endpoints JSON publicos permitidos pela politica de scraping, via `fetchPublicJson`, e nao usa Playwright, Cheerio, login, cookies, credenciais pessoais, proxy, captcha ou bypass anti-bot. Se um alvo falhar ou retornar endpoint indisponivel, o erro e contabilizado no resumo e o provider continua nos demais alvos.
+
+Os providers ATS aplicam filtros antes do runner:
+
+- data publicada/criada nos ultimos 30 dias quando o ATS fornece data;
+- sinal claro de entrada (`junior`, `jr`, `entry-level`, `intern`, `internship`, `estagio` ou `trainee`);
+- rejeicao de `senior`, `pleno`, `mid-level`, `lead`, `staff`, `principal`, `manager`, `director`, `executive`, `head of` e similares;
+- remoto apenas quando for global, Brasil, LATAM ou Americas, ou quando nao houver restricao incompatível;
+- hibrido/presencial somente quando a localizacao indicar Minas Gerais.
+
+Depois desses filtros, o runner central normaliza, aplica `evaluateCollectedJobQuality`, deduplica e cria registros como `DRAFT` com `useAi = false`. A coleta ATS nao chama Gemini/IA, nao envia vagas ao Discord, nao transforma vagas em `PENDING` e nao altera schema Prisma.
+
+O toast da coleta ATS usa o resumo compacto por fonte/provider, como os providers externos. Detalhes de data, nivel, localizacao, qualidade, duplicidade e erros continuam nos logs do terminal.
+
 ## Fluxo de coleta automatica
 
 O painel admin inicia `scheduledCollector` junto com o processo de `npm run admin`.
 
 A coleta automatica roda diariamente as 08:00 no timezone `America/Sao_Paulo`, usando `node-cron` com a expressao `0 8 * * *`.
 
-Ela executa apenas os providers reais registrados em `realJobProviders`, atualmente GitHub, Himalayas, Jobicy, RemoteOK e Remotive. O `mockJobsProvider` fica em `testJobProviders` e nao roda automaticamente.
+Ela executa apenas os providers reais registrados em `realJobProviders`, atualmente GitHub, Himalayas, Jobicy, RemoteOK e Remotive. O `mockJobsProvider` fica em `testJobProviders` e nao roda automaticamente. Os providers ATS ficam em `atsJobProviders` e, nesta etapa, rodam apenas pela coleta manual para evitar aumento de chamadas diarias enquanto a lista de empresas-alvo ainda esta sendo validada.
 
 A coleta automatica chama o mesmo runner de providers, entao preserva as regras centrais:
 
@@ -184,7 +219,18 @@ A tela `/admin/settings/schedule` tambem mostra um resumo operacional com status
 
 O painel admin e a interface operacional do projeto. Ele permite criar, revisar, editar, visualizar, arquivar, preparar vagas para publicacao e configurar o envio agendado.
 
+A listagem `/admin/jobs` organiza as vagas por fluxo operacional:
+
+- `Para revisar`: vagas `DRAFT`, principalmente coletadas por providers, exibidas como uma fila de curadoria. Cada card mostra contexto de decisao, como titulo, empresa, fonte, localizacao, modalidade, nivel, stacks, resumo curto, link original e data de criacao/coleta. As acoes principais continuam sendo `Preparar`, `Ver detalhes` e `Arquivar`.
+- `Prontas para envio`: vagas `PENDING`, que podem ser enviadas manualmente pela listagem ou pelo agendamento.
+- `Historico recente`: vagas `SENT` e `ERROR`, limitado visualmente as mais recentes para manter a tela leve.
+- `Arquivadas`: vagas `ARCHIVED`, exibidas no final com limite visual simples.
+
+Essa organizacao e apenas visual. Ela nao muda regras de coleta, preparacao, envio, agendamento, IA ou status no banco.
+
 O feedback operacional do painel e exibido por notificacoes temporarias server-rendered, usando query params como `message` e `noticeType`. Essas notificacoes nao sao logs persistentes, nao criam tabela no banco e nao substituem os logs da aplicacao.
+
+Nas coletas de providers, essas notificacoes sao deliberadamente compactas. O painel pode mostrar um resumo por fonte/provider com vagas novas e erros, mas detalhes como descartes por data, senioridade, localizacao, qualidade e duplicidade continuam no terminal.
 
 Na interface, os status sao exibidos com nomes amigaveis:
 

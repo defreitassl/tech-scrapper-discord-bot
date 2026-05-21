@@ -15,30 +15,25 @@ import {
 } from './components';
 import { renderLayout } from './layout';
 
-export function renderJobsList(jobs: JobPost[], notice?: AdminNotice): string {
-  const rows = jobs
-    .map(
-      (job) => `
-        <tr>
-          <td>
-            <a class="job-title" href="/admin/jobs/${escapeHtml(job.id)}">${escapeHtml(job.title ?? 'Sem titulo')}</a>
-            <span class="job-meta">${escapeHtml(job.location ?? 'Localizacao nao informada')}</span>
-          </td>
-          <td>${escapeHtml(job.company ?? '-')}</td>
-          <td>${renderStatusBadge(job.status)}</td>
-          <td>${escapeHtml(job.source ?? '-')}</td>
-          <td><span class="date-cell">${formatDate(job.createdAt)}</span></td>
-          <td><span class="date-cell">${job.sentAt ? formatDate(job.sentAt) : '-'}</span></td>
-          <td class="actions">
-            <a class="button secondary" href="/admin/jobs/${escapeHtml(job.id)}/edit">Editar</a>
-            ${job.status === JobStatus.DRAFT ? renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/prepare`, 'Preparar', 'secondary', 'Preparando...') : ''}
-            ${renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/pending`, 'Aprovar para envio', 'secondary', 'Salvando...')}
-            ${renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/archive`, 'Arquivar', 'secondary', 'Salvando...')}
-          </td>
-        </tr>
-      `,
-    )
-    .join('');
+export type JobsByStatus = {
+  draft: JobPost[];
+  pending: JobPost[];
+  history: JobPost[];
+  archived: JobPost[];
+};
+
+type JobsSectionOptions = {
+  title: string;
+  description: string;
+  jobs: JobPost[];
+  emptyMessage: string;
+  flow: 'review' | 'pending' | 'history' | 'archived';
+  visibleLimit?: number;
+};
+
+export function renderJobsList(jobsByStatus: JobsByStatus, notice?: AdminNotice): string {
+  const totalJobs =
+    jobsByStatus.draft.length + jobsByStatus.pending.length + jobsByStatus.history.length + jobsByStatus.archived.length;
 
   const content = `
     <div class="page-heading">
@@ -57,41 +52,230 @@ export function renderJobsList(jobs: JobPost[], notice?: AdminNotice): string {
         <form method="post" action="/admin/jobs/collect-external">
           <button type="submit" class="secondary" data-loading-label="Coletando...">Coletar fontes externas</button>
         </form>
+        <form method="post" action="/admin/jobs/collect-ats">
+          <button type="submit" class="secondary" data-loading-label="Coletando...">Coletar ATS publicos</button>
+        </form>
         <form method="post" action="/admin/jobs/collect">
           <button type="submit" class="secondary" data-loading-label="Coletando...">Coletar vagas de teste</button>
         </form>
         <a class="button" href="/admin/jobs/new">Nova vaga</a>
       </div>
     </div>
-    <p class="collection-note">Coletas criam apenas rascunhos para revisao, nao chamam IA e nao publicam no Discord. GitHub coleta issues abertas recentes; fontes externas usam APIs publicas remotas com filtro conservador de nivel.</p>
+    <p class="collection-note">Coletas criam apenas rascunhos para revisao, nao chamam IA e nao publicam no Discord. GitHub coleta issues abertas recentes; fontes externas e ATS publicos usam endpoints JSON com filtro conservador de nivel.</p>
     ${renderNotification(notice)}
-    <section class="card table-card">
-      <div class="section-heading">
-        <h2>Lista de vagas</h2>
-        <span>${jobs.length} cadastrada${jobs.length === 1 ? '' : 's'}</span>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Titulo</th>
-              <th>Empresa</th>
-              <th>Status</th>
-              <th>Fonte</th>
-              <th>Criada em</th>
-              <th>Enviada em</th>
-              <th>Acoes</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rows || '<tr><td colspan="7" class="empty">Nenhuma vaga cadastrada.</td></tr>'}
-          </tbody>
-        </table>
-      </div>
-    </section>
+    <div class="jobs-sections" aria-label="Lista de vagas por fluxo">
+      ${renderJobsSection({
+        title: 'Para revisar',
+        description: 'Vagas coletadas automaticamente entram aqui antes de irem para a fila.',
+        jobs: jobsByStatus.draft,
+        emptyMessage: 'Nenhum rascunho aguardando revisao.',
+        flow: 'review',
+      })}
+      ${renderJobsSection({
+        title: 'Prontas para envio',
+        description: 'Essas vagas podem ser enviadas manualmente ou pelo agendamento.',
+        jobs: jobsByStatus.pending,
+        emptyMessage: 'Nenhuma vaga pronta para envio agora.',
+        flow: 'pending',
+      })}
+      ${renderJobsSection({
+        title: 'Historico recente',
+        description: 'Ultimas vagas enviadas ou com erro de envio.',
+        jobs: jobsByStatus.history,
+        emptyMessage: 'Nenhuma vaga enviada ou com erro ainda.',
+        flow: 'history',
+        visibleLimit: 30,
+      })}
+      ${renderJobsSection({
+        title: 'Arquivadas',
+        description: 'Vagas removidas do fluxo de revisao e envio.',
+        jobs: jobsByStatus.archived,
+        emptyMessage: 'Nenhuma vaga arquivada.',
+        flow: 'archived',
+        visibleLimit: 10,
+      })}
+    </div>
+    <p class="jobs-total">${totalJobs} vaga${totalJobs === 1 ? '' : 's'} cadastrada${totalJobs === 1 ? '' : 's'} no total.</p>
   `;
 
   return renderLayout('Vagas', content);
+}
+
+function renderJobsSection(options: JobsSectionOptions): string {
+  const visibleJobs = options.visibleLimit ? options.jobs.slice(0, options.visibleLimit) : options.jobs;
+  const limited = visibleJobs.length < options.jobs.length;
+  const countLabel = limited ? `${visibleJobs.length} de ${options.jobs.length}` : `${options.jobs.length}`;
+  const jobsContent =
+    options.flow === 'review'
+      ? renderReviewQueue(visibleJobs, options.emptyMessage)
+      : renderJobsTable(visibleJobs, options.flow, options.emptyMessage);
+
+  return `
+    <section class="card table-card jobs-section">
+      <div class="section-heading jobs-section-heading">
+        <div>
+          <h2>${escapeHtml(options.title)}</h2>
+          <p>${escapeHtml(options.description)}</p>
+        </div>
+        <span class="count-pill">${escapeHtml(countLabel)}</span>
+      </div>
+      ${jobsContent}
+      ${limited ? `<p class="section-limit-note">Mostrando as ${visibleJobs.length} mais recentes desta secao.</p>` : ''}
+    </section>
+  `;
+}
+
+function renderReviewQueue(jobs: JobPost[], emptyMessage: string): string {
+  if (jobs.length === 0) {
+    return `<p class="empty review-empty">${escapeHtml(emptyMessage)}</p>`;
+  }
+
+  return `
+    <div class="review-queue" aria-label="Fila de curadoria de rascunhos">
+      ${jobs.map(renderReviewCard).join('')}
+    </div>
+  `;
+}
+
+function renderReviewCard(job: JobPost): string {
+  const jobId = escapeHtml(job.id);
+  const source = job.source?.trim() || 'Fonte nao informada';
+  const url = job.url?.trim();
+
+  return `
+    <article class="review-card">
+      <div class="review-card-main">
+        <div class="review-card-header">
+          <div>
+            <a class="job-title review-title" href="/admin/jobs/${jobId}">${escapeHtml(job.title ?? 'Sem titulo')}</a>
+            <p class="review-company">${escapeHtml(job.company ?? 'Empresa nao informada')}</p>
+          </div>
+          <span class="source-pill">${escapeHtml(source)}</span>
+        </div>
+        <dl class="review-meta-grid">
+          ${renderReviewMetaItem('Localizacao', job.location)}
+          ${renderReviewMetaItem('Modalidade', job.modality)}
+          ${renderReviewMetaItem('Nivel', job.level)}
+          ${renderReviewMetaItem('Criada em', formatDate(job.createdAt))}
+        </dl>
+        <div class="review-stack-row">
+          <span class="review-label">Stacks</span>
+          <span class="${job.stacks?.trim() ? 'review-stacks' : 'review-stacks muted'}">${escapeHtml(job.stacks?.trim() || 'Stacks nao informadas')}</span>
+        </div>
+        ${
+          job.shortDescription?.trim()
+            ? `<p class="review-description">${escapeHtml(job.shortDescription.trim())}</p>`
+            : ''
+        }
+        ${renderOriginalJobLink(url)}
+      </div>
+      <div class="review-actions">
+        ${renderPostButton(`/admin/jobs/${jobId}/prepare`, 'Preparar', 'primary-action', 'Preparando...')}
+        <a class="button secondary" href="/admin/jobs/${jobId}">Ver detalhes</a>
+        ${renderPostButton(`/admin/jobs/${jobId}/archive`, 'Arquivar', 'secondary', 'Salvando...')}
+      </div>
+    </article>
+  `;
+}
+
+function renderOriginalJobLink(url?: string): string {
+  if (!url) {
+    return '';
+  }
+
+  if (!isSafeExternalUrl(url)) {
+    return `<p class="review-original-text">Link original informado: ${escapeHtml(url)}</p>`;
+  }
+
+  return `<a class="review-original-link" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">Abrir vaga original</a>`;
+}
+
+function isSafeExternalUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+function renderReviewMetaItem(label: string, value: string | null): string {
+  return `
+    <div class="review-meta-item">
+      <dt>${escapeHtml(label)}</dt>
+      <dd>${escapeHtml(value?.trim() || '-')}</dd>
+    </div>
+  `;
+}
+
+function renderJobsTable(jobs: JobPost[], flow: JobsSectionOptions['flow'], emptyMessage: string): string {
+  const rows = jobs.map((job) => renderJobRow(job, flow)).join('');
+
+  return `
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Titulo</th>
+            <th>Empresa</th>
+            <th>Status</th>
+            <th>Fonte</th>
+            <th>Criada em</th>
+            <th>Enviada em</th>
+            <th>Acoes</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows || `<tr><td colspan="7" class="empty">${escapeHtml(emptyMessage)}</td></tr>`}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderJobRow(job: JobPost, flow: JobsSectionOptions['flow']): string {
+  return `
+    <tr>
+      <td>
+        <a class="job-title" href="/admin/jobs/${escapeHtml(job.id)}">${escapeHtml(job.title ?? 'Sem titulo')}</a>
+        <span class="job-meta">${escapeHtml(job.location ?? 'Localizacao nao informada')}</span>
+      </td>
+      <td>${escapeHtml(job.company ?? '-')}</td>
+      <td>${renderStatusBadge(job.status)}</td>
+      <td>${escapeHtml(job.source ?? '-')}</td>
+      <td><span class="date-cell">${formatDate(job.createdAt)}</span></td>
+      <td><span class="date-cell">${job.sentAt ? formatDate(job.sentAt) : '-'}</span></td>
+      <td class="actions">${renderJobRowActions(job, flow)}</td>
+    </tr>
+  `;
+}
+
+function renderJobRowActions(job: JobPost, flow: JobsSectionOptions['flow']): string {
+  const jobId = escapeHtml(job.id);
+  const editAction = `<a class="button secondary" href="/admin/jobs/${jobId}/edit">Editar</a>`;
+
+  if (flow === 'review') {
+    return [
+      renderPostButton(`/admin/jobs/${jobId}/prepare`, 'Preparar', 'primary-action', 'Preparando...'),
+      editAction,
+      renderPostButton(`/admin/jobs/${jobId}/archive`, 'Arquivar', 'secondary', 'Salvando...'),
+    ].join('');
+  }
+
+  if (flow === 'pending') {
+    return [
+      renderPostButton(`/admin/jobs/${jobId}/publish`, 'Enviar agora', 'primary-action', 'Enviando...'),
+      editAction,
+      renderPostButton(`/admin/jobs/${jobId}/archive`, 'Arquivar', 'secondary', 'Salvando...'),
+    ].join('');
+  }
+
+  if (flow === 'history') {
+    return [editAction, renderPostButton(`/admin/jobs/${jobId}/archive`, 'Arquivar', 'secondary', 'Salvando...')].join('');
+  }
+
+  return editAction;
 }
 
 export function renderJobDetails(job: JobPost, feedback: { notice?: AdminNotice } = {}): string {
