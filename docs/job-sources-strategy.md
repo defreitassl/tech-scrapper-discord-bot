@@ -112,6 +112,29 @@ Por isso, a estrategia recomendada para a primeira versao e usar esse JSON publi
 
 Se a Gupy passar a exigir login, captcha, cookies autenticados, Cloudflare/bypass, proxy ou credenciais, a coleta deve ser interrompida.
 
+### Programathor experimental
+
+O Programathor foi investigado em `docs/programathor-scraping-research.md`. Nao foi encontrado endpoint JSON publico de vagas, mas as listagens publicas retornam cards no HTML inicial e os detalhes das vagas possuem JSON-LD `JobPosting` com `datePosted`.
+
+Por isso, a estrategia recomendada para a primeira versao e usar HTML publico simples em provider experimental manual, com baixo volume e sem coleta automatica. O provider `src/providers/programathor.provider.ts` fica em `experimentalJobProviders`, mas a rota manual `POST /admin/jobs/collect-programathor` chama apenas esse provider.
+
+Regras do experimento:
+
+- sem login;
+- sem cookies autenticados;
+- sem credenciais pessoais;
+- sem proxy ou rotacao de IP;
+- sem captcha ou bypass;
+- sem Playwright operacional;
+- sem paginacao agressiva;
+- limite de 20 vagas retornadas por execucao;
+- vagas como `DRAFT`;
+- `useAi = false`;
+- sem IA;
+- sem Discord.
+
+Se o Programathor passar a exigir login, captcha, Cloudflare/bypass, proxy, credenciais ou qualquer contorno tecnico, a coleta deve ser interrompida.
+
 ## Riscos de LinkedIn, Gupy e Solides
 
 LinkedIn, Gupy, Solides e plataformas similares podem ter:
@@ -139,4 +162,4 @@ Comecar por fontes simples, publicas e revisaveis:
 
 Na fase inicial, qualquer vaga coletada automaticamente deve entrar como `DRAFT` ou equivalente para revisao humana antes de publicacao.
 
-Fontes como Arbeitnow, Findwork, Jobdata, LinkedIn, Solides, Programathor e Remotar continuam fora desta etapa por menor aderencia, necessidade de chave/login, uso comercial, captcha, protecoes anti-bot ou risco de scraping pesado. Gupy fica apenas como experimento manual por endpoint publico observado. Greenhouse, Lever e Ashby ficam limitados a endpoints publicos por empresa cadastrada e revisao humana.
+Fontes como Arbeitnow, Findwork, Jobdata, LinkedIn, Solides e Remotar continuam fora desta etapa por menor aderencia, necessidade de chave/login, uso comercial, captcha, protecoes anti-bot ou risco de scraping pesado. Gupy fica apenas como experimento manual por endpoint publico observado. Programathor fica apenas como experimento manual por HTML publico simples. Greenhouse, Lever e Ashby ficam limitados a endpoints publicos por empresa cadastrada e revisao humana.

@@ -208,6 +208,18 @@ A coleta prioriza sinais de entrada (`estagio`, `junior`, `trainee`) em tecnolog
 
 As vagas Gupy passam pelo runner central, entram como `DRAFT`, com `useAi = false`, sem chamar Gemini/IA e sem enviar ao Discord.
 
+### Coleta experimental Programathor
+
+A listagem tambem possui o botao `Coletar Programathor`. Ele executa apenas o provider experimental `src/providers/programathor.provider.ts`, registrado em `experimentalJobProviders` e fora da coleta automatica.
+
+O provider foi criado apos investigacao tecnica documentada em `docs/programathor-scraping-research.md`. Nao foi encontrado endpoint JSON publico de vagas; como as listagens publicas entregam cards no HTML inicial e as paginas de detalhe possuem JSON-LD `JobPosting`, a coleta usa HTML publico simples via `src/scraping/`, sem Playwright operacional.
+
+A coleta consulta poucas URLs publicas para estagio, junior, front-end, QA, dados, remoto e Belo Horizonte/regiao, sem login, cookies autenticados, credenciais pessoais, proxy, rotacao de IP, captcha ou bypass. Se a fonte passar a exibir captcha, login obrigatorio, bloqueio tecnico ou desafio Cloudflare que exija contorno, a coleta deve ser interrompida.
+
+O provider filtra vagas vencidas, vagas com `datePosted` acima de 30 dias, senioridade acima de entrada e localizacao fora da regra do projeto. Vagas remotas sao aceitas de qualquer lugar; hibridas/presenciais so entram quando indicam Minas Gerais/Belo Horizonte/regiao. O limite e de 20 vagas retornadas por execucao.
+
+As vagas Programathor passam pelo runner central, entram como `DRAFT`, com `useAi = false`, sem chamar Gemini/IA e sem enviar ao Discord.
+
 ### Coleta automatica diaria
 
 Quando o painel admin esta rodando com `npm run admin`, o sistema agenda automaticamente a coleta dos providers reais todos os dias as 08:00 no timezone `America/Sao_Paulo`.

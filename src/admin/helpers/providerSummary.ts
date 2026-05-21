@@ -62,6 +62,18 @@ export function buildGupyCollectionNotice(summary: ProviderRunnerSummary): strin
   return `${baseMessage} Termos: ${termBreakdown}.`;
 }
 
+export function buildProgramathorCollectionNotice(summary: ProviderRunnerSummary): string {
+  const ignoredByLevel = summary.ignoredBySeniority + summary.ignoredByMissingEntryLevel;
+  const termBreakdown = buildTermBreakdown(summary);
+  const baseMessage = `Programathor: ${summary.createdJobs} novas, ${summary.totalIssuesRead} analisadas, ${summary.ignoredByDate} antigas/vencidas, ${summary.ignoredByLocation} localização, ${ignoredByLevel} nível, ${summary.ignoredByQuality} qualidade, ${summary.ignoredDuplicates} duplicatas, ${summary.repositoryErrors} ${summary.repositoryErrors === 1 ? 'erro' : 'erros'}.`;
+
+  if (!termBreakdown) {
+    return baseMessage;
+  }
+
+  return `${baseMessage} Termos: ${termBreakdown}.`;
+}
+
 function getBreakdownSources(
   summary: ProviderRunnerSummary,
   options: ProviderBreakdownOptions,
@@ -95,6 +107,10 @@ function formatSourceSummary(summary: ProviderRepositorySummary): string {
 }
 
 function buildGupyTermBreakdown(summary: ProviderRunnerSummary): string {
+  return buildTermBreakdown(summary);
+}
+
+function buildTermBreakdown(summary: ProviderRunnerSummary): string {
   const terms = summary.repositorySummaries
     .filter((source) => source.term && (source.returnedByProvider ?? source.created) > 0)
     .sort((a, b) => {

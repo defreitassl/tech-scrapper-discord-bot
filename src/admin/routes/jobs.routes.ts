@@ -12,10 +12,16 @@ import { mockJobsProvider } from '../../providers/mockJobs.provider';
 import { runJobProviders } from '../../providers/providerRunner';
 import { parseJobForm } from '../helpers/forms';
 import { getNoticeFromQuery, redirectWithNotice } from '../helpers/notifications';
-import { buildGithubCollectionNotice, buildGupyCollectionNotice, buildProviderCollectionNotice } from '../helpers/providerSummary';
+import {
+  buildGithubCollectionNotice,
+  buildGupyCollectionNotice,
+  buildProgramathorCollectionNotice,
+  buildProviderCollectionNotice,
+} from '../helpers/providerSummary';
 import { validateJob, validatePending } from '../helpers/validators';
 import { renderLayout } from '../views/layout';
 import { renderJobDetails, renderJobForm, renderJobsList, type JobsByStatus } from '../views/jobs.views';
+import { programathorProvider } from '../../providers/programathor.provider';
 
 export function createJobsRouter(): express.Router {
   const router = express.Router();
@@ -255,6 +261,32 @@ export function createJobsRouter(): express.Router {
     } catch (error) {
       logger.error('Erro ao coletar Gupy pelo admin.', error);
       redirectWithNotice(response, '/admin/jobs', 'Erro ao coletar Gupy.', 'error');
+    }
+  });
+
+  router.post('/admin/jobs/collect-programathor', async (_request, response) => {
+    try {
+      logger.info('Coleta manual experimental Programathor iniciada pelo admin.');
+      const collectionResult = await runRealJobCollection('manual', [programathorProvider]);
+
+      if (collectionResult.skipped || !collectionResult.summary) {
+        redirectWithNotice(
+          response,
+          '/admin/jobs',
+          'Coleta Programathor ignorada porque outra coleta ja esta em execucao.',
+          'warning',
+        );
+        return;
+      }
+
+      const result = collectionResult.summary;
+      const message = buildProgramathorCollectionNotice(result);
+      const noticeType = result.errors.length > 0 ? 'warning' : result.createdJobs > 0 ? 'success' : 'info';
+
+      redirectWithNotice(response, '/admin/jobs', message, noticeType);
+    } catch (error) {
+      logger.error('Erro ao coletar Programathor pelo admin.', error);
+      redirectWithNotice(response, '/admin/jobs', 'Erro ao coletar Programathor.', 'error');
     }
   });
 
