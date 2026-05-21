@@ -40,6 +40,8 @@ Os providers Himalayas, Jobicy, RemoteOK e Remotive tambem nao fazem scraping HT
 
 Os providers Greenhouse, Lever e Ashby tambem nao fazem scraping HTML pesado. Eles usam somente endpoints JSON publicos de ATS por empresa cadastrada, via coleta manual no painel. Nao usam Playwright, Cheerio, login, cookies, credenciais pessoais, proxy, captcha, Cloudflare bypass ou bypass anti-bot. Nesta etapa, eles nao entram na coleta automatica diaria.
 
+O provider experimental Gupy foi criado apos reconhecimento com Playwright MCP e fica documentado em `docs/gupy-scraping-research.md`. Ele deve continuar manual, com poucas chamadas, limite de 20 vagas por execucao, sem paginacao agressiva e fora da coleta automatica.
+
 ## Tratamento de falhas
 
 Scrapers quebram. O sistema deve tolerar:
@@ -56,6 +58,8 @@ Falhas de coleta nao devem afetar o painel admin nem a publicacao manual de vaga
 Se a fonte retornar sinais de bloqueio, captcha, exigencia de login ou termos explicitamente incompativeis, a coleta deve ser interrompida e a fonte deve ser marcada como nao permitida. O projeto nao deve implementar bypass.
 
 Para browser scraping, a politica tambem deve bloquear uso de credenciais, cookies customizados, proxy e rotacao de IP. O contexto Playwright deve usar User-Agent identificavel, `headless: true` por padrao e timeout conservador.
+
+No caso da Gupy, se o endpoint publico passar a exigir login, captcha, Cloudflare/bypass ou qualquer credencial, a coleta deve ser parada em vez de contornada.
 
 ## Revisao antes de publicar
 

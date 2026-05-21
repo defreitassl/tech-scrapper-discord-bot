@@ -72,3 +72,9 @@ Nao use MCP, Playwright ou qualquer automacao para contornar bloqueios, simular 
 `src/providers/playwrightSmokeTest.provider.ts` valida a infraestrutura contra uma pagina publica simples. Ele nao coleta plataforma real complexa, nao salva vagas, nao chama IA e nao envia ao Discord.
 
 Esse provider nao esta registrado em `realJobProviders`, `testJobProviders`, `atsJobProviders` ou na coleta automatica. Para testar outra pagina publica simples, defina `PLAYWRIGHT_SMOKE_TEST_URL` ao chamar o provider diretamente em codigo local de validacao.
+
+## Caso Gupy
+
+A investigacao da Gupy esta documentada em `docs/gupy-scraping-research.md`. O reconhecimento foi feito com Playwright MCP em paginas publicas e identificou um endpoint JSON publico usado pelo portal. A implementacao experimental fica em `src/providers/gupy.provider.ts`, registrada apenas em `experimentalJobProviders` e acionada manualmente. Como o endpoint JSON publico e suficiente, o provider usa o cliente publico de `src/scraping/`, nao browser scraping.
+
+Esse caso nao muda a regra geral: se a pagina ou endpoint passar a exigir login, captcha, cookies autenticados, proxy, rotacao de IP ou bypass, a coleta deve ser interrompida e documentada.

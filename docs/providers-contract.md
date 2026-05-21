@@ -1,6 +1,6 @@
 # Contrato de Providers
 
-Este documento define o contrato inicial para fontes de coleta de vagas. A implementacao atual possui um provider mock/de teste em `src/providers/mockJobs.provider.ts`, um provider real para issues publicas do GitHub em `src/providers/githubJobs.provider.ts`, providers externos por APIs publicas JSON em `src/providers/himalayas.provider.ts`, `src/providers/jobicy.provider.ts`, `src/providers/remoteOk.provider.ts` e `src/providers/remotive.provider.ts`, e providers manuais de ATS publicos em `src/providers/greenhouse.provider.ts`, `src/providers/lever.provider.ts` e `src/providers/ashby.provider.ts`.
+Este documento define o contrato inicial para fontes de coleta de vagas. A implementacao atual possui um provider mock/de teste em `src/providers/mockJobs.provider.ts`, um provider real para issues publicas do GitHub em `src/providers/githubJobs.provider.ts`, providers externos por APIs publicas JSON em `src/providers/himalayas.provider.ts`, `src/providers/jobicy.provider.ts`, `src/providers/remoteOk.provider.ts` e `src/providers/remotive.provider.ts`, providers manuais de ATS publicos em `src/providers/greenhouse.provider.ts`, `src/providers/lever.provider.ts` e `src/providers/ashby.provider.ts`, e um provider experimental manual Gupy em `src/providers/gupy.provider.ts`.
 
 ## Interface sugerida
 
@@ -44,7 +44,7 @@ export type ProviderRepositorySummary = {
 
 O provider deve ser pequeno, testavel e responsavel por uma unica fonte ou familia de fontes.
 
-Providers ativos devem ser registrados em `src/providers/providerRegistry.ts`. O registry separa `testJobProviders`, `externalJobProviders`, `atsJobProviders` e `realJobProviders`; a coleta automatica usa somente `realJobProviders`. O runner central fica em `src/providers/providerRunner.ts`. Rotas especificas podem chamar o runner com uma lista explicita de providers quando precisam executar apenas uma familia de fontes, como a coleta mock, a coleta GitHub, a coleta externa ou a coleta ATS manual.
+Providers ativos devem ser registrados em `src/providers/providerRegistry.ts`. O registry separa `testJobProviders`, `externalJobProviders`, `atsJobProviders`, `experimentalJobProviders` e `realJobProviders`; a coleta automatica usa somente `realJobProviders`. O runner central fica em `src/providers/providerRunner.ts`. Rotas especificas podem chamar o runner com uma lista explicita de providers quando precisam executar apenas uma familia de fontes, como a coleta mock, a coleta GitHub, a coleta externa, a coleta ATS manual ou a coleta experimental Gupy.
 
 Futuras fontes que dependam de scraping ou pesquisa de paginas publicas devem usar a camada isolada `src/scraping/` antes de virar provider. Essa camada contem tipos genericos (`ScrapingStrategy`, `ScrapingSourceConfig`, `ScrapingResult`, `ScrapedJob`), politica de permissao, helpers leves de HTML e cliente publico simples. Ela nao substitui este contrato: providers continuam entregando `CollectedJob[]` ou `ProviderCollectResult` ao runner.
 
@@ -172,13 +172,13 @@ Regras obrigatorias:
 
 - API publica e RSS publico sao preferiveis.
 - HTML publico simples pode ser usado quando estavel.
-- Browser scraping e ultimo caso e ainda nao esta implementado.
+- Browser scraping e ultimo caso. A infraestrutura Playwright existe, mas providers reais devem continuar manuais/experimentais ate decisao explicita.
 - Fontes com login, captcha, Cloudflare/bloqueio anti-bot que exija bypass, paywall, credenciais pessoais ou termos explicitamente incompativeis devem ser bloqueadas.
-- LinkedIn, Gupy, Solides e similares nao devem ser implementados sem avaliacao especifica e decisao explicita.
+- LinkedIn, Gupy, Solides e similares nao devem ser implementados sem avaliacao especifica e decisao explicita. A Gupy ja possui uma primeira avaliacao em `docs/gupy-scraping-research.md` e fica limitada a provider experimental manual.
 
 A coleta automatica diaria em `src/services/scheduledCollector.ts` reaproveita o mesmo runner e executa apenas `realJobProviders`. Ela roda as 08:00 em `America/Sao_Paulo` enquanto o processo admin estiver ativo, nao executa o provider mock e usa lock simples em memoria para ignorar execucoes concorrentes.
 
-Os providers ATS publicos ficam em `atsJobProviders` e nao entram na coleta automatica diaria nesta etapa. Eles podem ser executados manualmente pelo painel e usam o mesmo lock de coletas reais.
+Os providers ATS publicos ficam em `atsJobProviders` e nao entram na coleta automatica diaria nesta etapa. O provider Gupy fica em `experimentalJobProviders` e tambem nao entra na coleta automatica. Eles podem ser executados manualmente pelo painel e usam o mesmo lock de coletas reais.
 
 ## Provider GitHub
 

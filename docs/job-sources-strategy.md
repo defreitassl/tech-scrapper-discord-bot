@@ -98,7 +98,19 @@ Playwright deve ser usado somente em ultimo caso, quando a pagina depende fortem
 
 Ele e mais caro, mais lento e mais sujeito a bloqueios.
 
-Browser scraping so pode ser considerado quando a pagina for publica e nao exigir login, captcha, paywall, bypass anti-bot ou credenciais pessoais. Playwright ainda nao faz parte da implementacao atual.
+Browser scraping so pode ser considerado quando a pagina for publica e nao exigir login, captcha, paywall, bypass anti-bot ou credenciais pessoais. A infraestrutura Playwright ja existe, mas deve ser usada apenas em fluxos manuais/experimentais ate decisao explicita.
+
+### Gupy experimental
+
+A Gupy foi investigada com Playwright MCP em `docs/gupy-scraping-research.md`. O portal publico renderiza a busca com JavaScript, mas os dados foram observados em endpoint JSON publico:
+
+```text
+https://employability-portal.gupy.io/api/v1/jobs
+```
+
+Por isso, a estrategia recomendada para a primeira versao e usar esse JSON publico em provider experimental manual, com baixo volume e sem coleta automatica. O provider `src/providers/gupy.provider.ts` fica em `experimentalJobProviders`, e a rota manual `POST /admin/jobs/collect-gupy` cria somente rascunhos via runner.
+
+Se a Gupy passar a exigir login, captcha, cookies autenticados, Cloudflare/bypass, proxy ou credenciais, a coleta deve ser interrompida.
 
 ## Riscos de LinkedIn, Gupy e Solides
 
@@ -113,7 +125,7 @@ LinkedIn, Gupy, Solides e plataformas similares podem ter:
 
 Essas fontes nao devem ser o ponto de partida. Tambem nao se deve tentar burlar login, captcha ou bloqueios.
 
-Antes de implementar qualquer plataforma maior, consulte `docs/scraping-platforms-research.md`. A recomendacao atual e priorizar Greenhouse, Lever, Ashby, sites proprios de empresas e paginas publicas de carreiras quando houver API publica, RSS, endpoint JSON publico ou HTML simples. LinkedIn deve ser evitado; Gupy e Solides ficam para depois e apenas com endpoints publicos permitidos.
+Antes de implementar qualquer plataforma maior, consulte `docs/scraping-platforms-research.md`. A recomendacao atual e priorizar Greenhouse, Lever, Ashby, sites proprios de empresas e paginas publicas de carreiras quando houver API publica, RSS, endpoint JSON publico ou HTML simples. LinkedIn deve ser evitado; Gupy fica apenas como experimento manual por endpoint publico validado; Solides fica para depois e apenas com endpoints publicos permitidos.
 
 ## Recomendacao
 
@@ -127,4 +139,4 @@ Comecar por fontes simples, publicas e revisaveis:
 
 Na fase inicial, qualquer vaga coletada automaticamente deve entrar como `DRAFT` ou equivalente para revisao humana antes de publicacao.
 
-Fontes como Arbeitnow, Findwork, Jobdata, LinkedIn, Gupy, Solides, Programathor e Remotar continuam fora desta etapa por menor aderencia, necessidade de chave/login, uso comercial, captcha, protecoes anti-bot ou risco de scraping pesado. Greenhouse, Lever e Ashby ficam limitados a endpoints publicos por empresa cadastrada e revisao humana.
+Fontes como Arbeitnow, Findwork, Jobdata, LinkedIn, Solides, Programathor e Remotar continuam fora desta etapa por menor aderencia, necessidade de chave/login, uso comercial, captcha, protecoes anti-bot ou risco de scraping pesado. Gupy fica apenas como experimento manual por endpoint publico observado. Greenhouse, Lever e Ashby ficam limitados a endpoints publicos por empresa cadastrada e revisao humana.

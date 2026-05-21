@@ -63,6 +63,8 @@ A base tecnica fica em `src/scraping/browser/`:
 
 O provider `src/providers/playwrightSmokeTest.provider.ts` existe apenas para smoke test em pagina publica simples. Ele nao esta registrado no registry de providers, nao entra na coleta automatica, nao cria vagas, nao chama IA e nao envia ao Discord.
 
+A pesquisa Gupy (`docs/gupy-scraping-research.md`) usou Playwright MCP para observar a UI publica e a rede. A implementacao experimental usa somente acesso publico, fica em `experimentalJobProviders`, nao entra na coleta automatica e deve ser removida/desativada se surgir login, captcha, Cloudflare/bypass ou exigencia de credenciais.
+
 ## Riscos de plataformas com login/captcha
 
 Fontes com login, captcha, Cloudflare/bloqueios anti-bot, paywall ou termos explicitamente incompativeis nao devem ser implementadas. O projeto nao deve:

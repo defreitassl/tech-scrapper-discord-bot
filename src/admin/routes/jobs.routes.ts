@@ -6,13 +6,13 @@ import { generateJobMessage } from '../../services/aiMessageGenerator';
 import { checkJobDuplicate } from '../../services/jobDeduplication';
 import { publishPendingJobs, publishSingleJob } from '../../services/publishPendingJobs';
 import { runRealJobCollection } from '../../services/scheduledCollector';
-import { atsJobProviders, externalJobProviders } from '../../providers/providerRegistry';
+import { atsJobProviders, experimentalJobProviders, externalJobProviders } from '../../providers/providerRegistry';
 import { githubJobsProvider } from '../../providers/githubJobs.provider';
 import { mockJobsProvider } from '../../providers/mockJobs.provider';
 import { runJobProviders } from '../../providers/providerRunner';
 import { parseJobForm } from '../helpers/forms';
 import { getNoticeFromQuery, redirectWithNotice } from '../helpers/notifications';
-import { buildGithubCollectionNotice, buildProviderCollectionNotice } from '../helpers/providerSummary';
+import { buildGithubCollectionNotice, buildGupyCollectionNotice, buildProviderCollectionNotice } from '../helpers/providerSummary';
 import { validateJob, validatePending } from '../helpers/validators';
 import { renderLayout } from '../views/layout';
 import { renderJobDetails, renderJobForm, renderJobsList, type JobsByStatus } from '../views/jobs.views';
@@ -229,6 +229,32 @@ export function createJobsRouter(): express.Router {
     } catch (error) {
       logger.error('Erro ao coletar providers ATS pelo admin.', error);
       redirectWithNotice(response, '/admin/jobs', 'Erro ao coletar ATS publicos.', 'error');
+    }
+  });
+
+  router.post('/admin/jobs/collect-gupy', async (_request, response) => {
+    try {
+      logger.info('Coleta manual experimental Gupy iniciada pelo admin.');
+      const collectionResult = await runRealJobCollection('manual', experimentalJobProviders);
+
+      if (collectionResult.skipped || !collectionResult.summary) {
+        redirectWithNotice(
+          response,
+          '/admin/jobs',
+          'Coleta Gupy ignorada porque outra coleta ja esta em execucao.',
+          'warning',
+        );
+        return;
+      }
+
+      const result = collectionResult.summary;
+      const message = buildGupyCollectionNotice(result);
+      const noticeType = result.errors.length > 0 ? 'warning' : result.createdJobs > 0 ? 'success' : 'info';
+
+      redirectWithNotice(response, '/admin/jobs', message, noticeType);
+    } catch (error) {
+      logger.error('Erro ao coletar Gupy pelo admin.', error);
+      redirectWithNotice(response, '/admin/jobs', 'Erro ao coletar Gupy.', 'error');
     }
   });
 

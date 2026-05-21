@@ -50,6 +50,12 @@ export function buildGithubCollectionNotice(summary: ProviderRunnerSummary): str
   return `${baseMessage} Top fontes: ${sourceBreakdown}.`;
 }
 
+export function buildGupyCollectionNotice(summary: ProviderRunnerSummary): string {
+  const ignoredByLevel = summary.ignoredBySeniority + summary.ignoredByMissingEntryLevel;
+
+  return `Coleta Gupy: ${summary.totalIssuesRead} vagas analisadas, ${summary.createdJobs} novas, ${summary.ignoredByLocation} fora de localização, ${ignoredByLevel} fora do nível, ${summary.ignoredByQuality} por qualidade, ${summary.ignoredDuplicates} duplicatas, ${summary.repositoryErrors} ${summary.repositoryErrors === 1 ? 'erro' : 'erros'}.`;
+}
+
 function getBreakdownSources(
   summary: ProviderRunnerSummary,
   options: ProviderBreakdownOptions,

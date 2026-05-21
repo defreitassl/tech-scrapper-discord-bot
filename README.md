@@ -198,6 +198,16 @@ A coleta ATS filtra vagas publicadas nos ultimos 30 dias quando o ATS fornece da
 
 As vagas coletadas de ATS sao normalizadas, passam pelo filtro de qualidade e pela deduplicacao existente e entram como `DRAFT`, com `useAi = false`. A coleta ATS nao chama Gemini/IA, nao marca vagas como `PENDING` e nao envia nada ao Discord.
 
+### Coleta experimental Gupy
+
+A listagem tambem possui o botao `Coletar Gupy`. Ele executa apenas o provider experimental `src/providers/gupy.provider.ts`, registrado em `experimentalJobProviders` e fora da coleta automatica.
+
+O provider foi criado apos investigacao tecnica documentada em `docs/gupy-scraping-research.md`. A pagina publica da Gupy carrega vagas por endpoint JSON publico em `https://employability-portal.gupy.io/api/v1/jobs`, sem login, captcha, cookies autenticados, proxy ou bypass durante a validacao. Como JSON publico e preferivel a browser scraping, a coleta usa o cliente publico da camada `src/scraping/` e consulta poucas buscas com `limit=10`, sem paginacao agressiva.
+
+A coleta prioriza sinais de entrada (`estagio`, `junior`, `trainee`) em tecnologia, suporte tecnico, desenvolvimento, dados e QA. Vagas remotas sao aceitas de qualquer lugar; vagas hibridas ou presenciais sao aceitas somente em Minas Gerais/Belo Horizonte/regiao. Vagas publicadas ha mais de 30 dias sao ignoradas quando a data publica existe.
+
+As vagas Gupy passam pelo runner central, entram como `DRAFT`, com `useAi = false`, sem chamar Gemini/IA e sem enviar ao Discord.
+
 ### Coleta automatica diaria
 
 Quando o painel admin esta rodando com `npm run admin`, o sistema agenda automaticamente a coleta dos providers reais todos os dias as 08:00 no timezone `America/Sao_Paulo`.

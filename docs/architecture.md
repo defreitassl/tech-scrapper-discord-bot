@@ -16,7 +16,7 @@
 - `src/admin/routes/schedule.routes.ts`: rotas de configuracao do envio agendado.
 - `src/admin/views/`: renderizacao server-side do painel. `layout.ts` contem o layout base, `styles.ts` contem o CSS inline, `components.ts` contem componentes HTML reutilizaveis, `jobs.views.ts` contem telas de vagas e `schedule.views.ts` contem a tela de agendamento.
 - `src/admin/helpers/`: helpers puros do painel. `forms.ts` concentra parse e normalizacao de formularios, `validators.ts` concentra validacoes de formulario/status, `status.ts` concentra labels de status, `formatters.ts` concentra formatacao visual simples e `notifications.ts` concentra notificacoes temporarias via query params.
-- `src/providers/`: base de providers de coleta. Inclui contrato (`types.ts`), normalizacao (`normalizeCollectedJob.ts`), registry de providers ativos (`providerRegistry.ts`), provider mock (`mockJobs.provider.ts`), provider GitHub (`githubJobs.provider.ts`), providers externos por APIs publicas JSON (`himalayas.provider.ts`, `jobicy.provider.ts`, `remoteOk.provider.ts`, `remotive.provider.ts`), providers manuais de ATS publicos (`greenhouse.provider.ts`, `lever.provider.ts`, `ashby.provider.ts`), lista controlada de empresas (`companyTargets.ts`), helpers compartilhados e runner (`providerRunner.ts`).
+- `src/providers/`: base de providers de coleta. Inclui contrato (`types.ts`), normalizacao (`normalizeCollectedJob.ts`), registry de providers ativos (`providerRegistry.ts`), provider mock (`mockJobs.provider.ts`), provider GitHub (`githubJobs.provider.ts`), providers externos por APIs publicas JSON (`himalayas.provider.ts`, `jobicy.provider.ts`, `remoteOk.provider.ts`, `remotive.provider.ts`), providers manuais de ATS publicos (`greenhouse.provider.ts`, `lever.provider.ts`, `ashby.provider.ts`), provider experimental Gupy (`gupy.provider.ts`), lista controlada de empresas (`companyTargets.ts`), helpers compartilhados e runner (`providerRunner.ts`).
 - `src/scraping/`: camada preparatoria e isolada para futuras fontes publicas mais dificeis. Inclui tipos genericos, politica de permissao, helpers leves de HTML, cliente publico simples para HTML/JSON e uma subcamada experimental `src/scraping/browser/` para Playwright. Os providers ATS usam o cliente JSON publico dessa camada. A subcamada Playwright continua isolada, sem salvar no banco e sem alterar regras do runner.
 - `src/services/publishPendingJobs.ts`: fluxo de publicacao de vagas, incluindo envio em lote de vagas `PENDING` e envio de uma unica vaga.
 - `src/services/jobDeduplication.ts`: primeira camada reutilizavel de deduplicacao de vagas. Bloqueia duplicata forte por URL normalizada e sinaliza possivel duplicata por titulo + empresa normalizados.
@@ -66,6 +66,8 @@ O projeto possui uma base inicial de providers em `src/providers/`. A coleta con
 Fontes publicas mais dificeis devem ser preparadas na camada isolada `src/scraping/`, documentada em `docs/scraping-engine-design.md` e `docs/playwright-scraping.md`. Essa camada existe para separar politica, cliente HTTP publico, utilitarios de HTML e utilitarios de browser do contrato de providers. APIs e RSS continuam preferiveis; HTML simples vem antes de browser; scraping com browser e ultimo caso e so pode ser considerado para paginas publicas sem login, captcha ou bloqueio conhecido. Nao e permitido burlar login, captcha, Cloudflare, paywalls ou protecoes anti-bot.
 
 A base Playwright fica em `src/scraping/browser/` e fornece tipos, politica, cliente de browser e helpers de pagina. Ela usa navegador headless por padrao, timeout conservador, User-Agent identificavel, sem cookies customizados, sem login e sem proxy. O provider `src/providers/playwrightSmokeTest.provider.ts` existe apenas para validar a infraestrutura em uma pagina publica simples e nao esta registrado em `providerRegistry.ts`, nao roda na coleta automatica, nao chama IA, nao cria vagas e nao envia ao Discord.
+
+A pesquisa da Gupy fica em `docs/gupy-scraping-research.md`. O provider `src/providers/gupy.provider.ts` fica registrado apenas em `experimentalJobProviders` e e acionado manualmente por `POST /admin/jobs/collect-gupy`. Ele usa apenas acesso publico, sem login/cookies/proxy/bypass, limita a coleta a 20 vagas por execucao, nao entra em `realJobProviders` e nao roda na coleta automatica.
 
 Antes de implementar plataformas maiores, a fonte deve ser avaliada conforme `docs/scraping-platforms-research.md`. LinkedIn, Gupy, Solides e similares nao devem ser implementados por suposicao; precisam de pesquisa especifica, decisao explicita e respeito a termos e bloqueios tecnicos.
 
@@ -178,13 +180,23 @@ Depois desses filtros, o runner central normaliza, aplica `evaluateCollectedJobQ
 
 O toast da coleta ATS usa o resumo compacto por fonte/provider, como os providers externos. Detalhes de data, nivel, localizacao, qualidade, duplicidade e erros continuam nos logs do terminal.
 
+## Fluxo de coleta experimental Gupy
+
+A rota `POST /admin/jobs/collect-gupy`, exibida na listagem como `Coletar Gupy`, executa apenas `experimentalJobProviders`, atualmente `gupyProvider`.
+
+O provider Gupy foi implementado apos reconhecimento com Playwright MCP. A pagina publica `https://portal.gupy.io/job-search/term=...` carrega os dados pelo endpoint publico `https://employability-portal.gupy.io/api/v1/jobs`. Durante a validacao, a listagem abriu sem login, captcha, Cloudflare ou bloqueio tecnico. Se isso mudar, o provider deve ser pausado.
+
+A coleta usa o cliente publico da camada `src/scraping/`, porque o endpoint JSON observado e mais simples e estavel que browser scraping. Ela nao usa cookies customizados, credenciais, proxy, rotacao de IP ou bypass, e nao pagina agressivamente. Consulta poucos termos de tecnologia, limita a criacao a 20 vagas por execucao, aceita vagas remotas de qualquer localidade e aceita hibridas/presenciais apenas em Minas Gerais/Belo Horizonte/regiao. Vagas com `publishedDate` acima de 30 dias sao ignoradas.
+
+Depois dos filtros do provider, o runner central normaliza, aplica qualidade, deduplica e cria registros como `DRAFT` com `useAi = false`. A coleta Gupy nao chama Gemini/IA, nao envia ao Discord e nao transforma vagas em `PENDING`.
+
 ## Fluxo de coleta automatica
 
 O painel admin inicia `scheduledCollector` junto com o processo de `npm run admin`.
 
 A coleta automatica roda diariamente as 08:00 no timezone `America/Sao_Paulo`, usando `node-cron` com a expressao `0 8 * * *`.
 
-Ela executa apenas os providers reais registrados em `realJobProviders`, atualmente GitHub, Himalayas, Jobicy, RemoteOK e Remotive. O `mockJobsProvider` fica em `testJobProviders` e nao roda automaticamente. Os providers ATS ficam em `atsJobProviders` e, nesta etapa, rodam apenas pela coleta manual para evitar aumento de chamadas diarias enquanto a lista de empresas-alvo ainda esta sendo validada.
+Ela executa apenas os providers reais registrados em `realJobProviders`, atualmente GitHub, Himalayas, Jobicy, RemoteOK e Remotive. O `mockJobsProvider` fica em `testJobProviders` e nao roda automaticamente. Os providers ATS ficam em `atsJobProviders` e o provider Gupy fica em `experimentalJobProviders`; nesta etapa, ambos rodam apenas por coleta manual.
 
 A coleta automatica chama o mesmo runner de providers, entao preserva as regras centrais:
 

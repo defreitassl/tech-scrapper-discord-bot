@@ -6,7 +6,7 @@ O `tech-scrapper-discord-bot` e um bot/painel para cadastrar, organizar e public
 
 Apesar do nome mencionar scraper, o projeto nao faz scraping HTML real de plataformas nesta etapa. O estado atual e um painel admin manual com publicacao controlada para Discord, um provider real via API publica do GitHub, providers externos via APIs JSON publicas, providers manuais para ATS publicos via JSON e uma base Playwright isolada para validar paginas publicas dinamicas no futuro.
 
-Existe uma base de providers em `src/providers/`, com provider mock/de teste, provider GitHub para issues publicas de repositorios de vagas, providers externos para Himalayas, Jobicy, RemoteOK e Remotive, e providers ATS para Greenhouse, Lever e Ashby.
+Existe uma base de providers em `src/providers/`, com provider mock/de teste, provider GitHub para issues publicas de repositorios de vagas, providers externos para Himalayas, Jobicy, RemoteOK e Remotive, providers ATS para Greenhouse, Lever e Ashby, e provider experimental manual para Gupy.
 
 Tambem existe uma camada inicial em `src/scraping/` para preparar futuras fontes publicas mais dificeis. Ela ainda nao esta conectada ao `providerRunner` para scraping real e nao altera fluxo do admin. A intencao e isolar tipos, politica de permissao, helpers HTML, cliente publico simples e utilitarios Playwright antes de qualquer scraper real.
 
@@ -70,6 +70,7 @@ Tambem existe uma camada inicial em `src/scraping/` para preparar futuras fontes
 - A listagem tambem possui a acao `Coletar vagas do GitHub`, que chama `POST /admin/jobs/collect-github` e executa apenas `githubJobsProvider` pelo lock de `runRealJobCollection`.
 - A listagem possui a acao `Coletar fontes externas`, que chama `POST /admin/jobs/collect-external` e executa `externalJobProviders` pelo mesmo lock.
 - A listagem possui a acao `Coletar ATS publicos`, que chama `POST /admin/jobs/collect-ats` e executa `atsJobProviders` pelo mesmo lock. Esta coleta e manual nesta etapa.
+- A listagem possui a acao `Coletar Gupy`, que chama `POST /admin/jobs/collect-gupy` e executa `experimentalJobProviders` pelo mesmo lock. Esta coleta e experimental/manual e nao entra na coleta automatica.
 - A listagem `/admin/jobs` e organizada por secoes visuais: `Para revisar` funciona como fila de curadoria de vagas `DRAFT`, principalmente coletadas por providers. Essa secao usa cards com titulo, empresa, fonte, localizacao, modalidade, nivel, stacks, resumo curto, link original quando existir e data de criacao/coleta; as acoes principais sao `Preparar`, `Ver detalhes` e `Arquivar`. `Prontas para envio` mostra `PENDING` com acao principal `Enviar agora`; `Historico recente` mostra `SENT` e `ERROR` recentes; `Arquivadas` mostra `ARCHIVED` no final com limite visual simples. Isso nao altera rotas nem regras de negocio.
 - Os detalhes exibem `Preparar e colocar na fila` para vagas `DRAFT` ou `PENDING`.
 
@@ -83,6 +84,7 @@ Tambem existe uma camada inicial em `src/scraping/` para preparar futuras fontes
 - O provider GitHub e `src/providers/githubJobs.provider.ts`.
 - Os providers externos sao `src/providers/himalayas.provider.ts`, `src/providers/jobicy.provider.ts`, `src/providers/remoteOk.provider.ts` e `src/providers/remotive.provider.ts`.
 - Os providers ATS sao `src/providers/greenhouse.provider.ts`, `src/providers/lever.provider.ts` e `src/providers/ashby.provider.ts`.
+- O provider experimental Gupy e `src/providers/gupy.provider.ts`, documentado em `docs/gupy-scraping-research.md`.
 - A lista controlada de empresas-alvo ATS fica em `src/providers/companyTargets.ts`. A lista inicial e GitLab no Greenhouse (`gitlab`), Kepler Communications no Lever (`kepler`) e Ashby no Ashby (`ashby`).
 - Helpers compartilhados para providers externos ficam em `providerTextUtils.ts`, `providerDateUtils.ts`, `providerSeniorityUtils.ts`, `providerLocationUtils.ts`, `providerSalaryUtils.ts` e `providerSummaryUtils.ts`.
 - Helpers especificos da primeira leva ATS ficam em `src/providers/atsProviderUtils.ts` e tratam politica publica `api`, limpeza leve de HTML retornado nos JSONs, datas recentes e filtro conservador de localizacao.
@@ -97,7 +99,7 @@ Tambem existe uma camada inicial em `src/scraping/` para preparar futuras fontes
 - O runner tambem propaga erros internos retornados por providers, como falhas de repositorio no GitHub provider.
 - O diagnostico GitHub inclui `totalIssuesRead`, `ignoredByDate`, `ignoredBySeniority`, `ignoredByMissingEntryLevel`, `ignoredByLocation`, `ignoredByQuality`, `ignoredDuplicates`, `possibleDuplicates`, `created` e `repositoryErrors`.
 - O toast da coleta GitHub mostra um resumo compacto e temporario. Quando houver vagas criadas, ele pode incluir ate tres fontes com mais vagas novas. Detalhes por repositorio sao logados no terminal em eventos `Resumo da coleta GitHub por repositorio`; nao ha tela de logs nem persistencia em banco.
-- `providerRegistry.ts` registra `mockJobsProvider`, `githubJobsProvider`, `externalJobProviders`, `atsJobProviders` e `realJobProviders`. A coleta automatica roda apenas `realJobProviders`; a coleta externa manual roda Himalayas, Jobicy, RemoteOK e Remotive; a coleta ATS manual roda Greenhouse, Lever e Ashby.
+- `providerRegistry.ts` registra `mockJobsProvider`, `githubJobsProvider`, `externalJobProviders`, `atsJobProviders`, `experimentalJobProviders` e `realJobProviders`. A coleta automatica roda apenas `realJobProviders`; a coleta externa manual roda Himalayas, Jobicy, RemoteOK e Remotive; a coleta ATS manual roda Greenhouse, Lever e Ashby; a coleta Gupy manual roda `experimentalJobProviders`.
 - O provider GitHub usa issues abertas de `frontendbr/vagas`, `backend-br/vagas`, `react-brasil/vagas`, `qa-brasil/vagas`, `nodejsdevbr/vagas`, `dotnetdevbr/vagas`, `soujava/vagas-java`, `DevOps-Brasil/Vagas`, `programadores-br/geral`, `datascience-br/vagas`, `brasil-php/vagas`, `androiddevbr/vagas`, `CocoaHeadsBrasil/vagas` e `remotejobsbr/design-ux-vagas` pela API oficial do GitHub.
 - Se um repositorio GitHub falhar, o provider loga o erro, adiciona erro ao resumo e continua nos demais repositorios.
 - O provider GitHub usa `state=open`, `per_page=100` e `since` com data ISO de 30 dias atras, mas tambem filtra `created_at` manualmente porque `since` pode considerar atualizacao.
@@ -107,10 +109,11 @@ Tambem existe uma camada inicial em `src/scraping/` para preparar futuras fontes
 - Issues GitHub ignoradas pelo filtro geografico entram no resumo como `ignoredByLocation`.
 - O provider GitHub tenta preencher `shortDescription` a partir de secoes do corpo da issue e `stacks` a partir de termos tecnicos conhecidos, sem chamar IA.
 - `GITHUB_TOKEN` e opcional; quando configurado, aumenta o rate limit e e enviado como `Authorization: Bearer`.
-- Nao ha scraping HTML real de plataformas, Cheerio, LinkedIn, Gupy, Solides ou fontes protegidas nesta etapa. Playwright esta instalado apenas como infraestrutura isolada e smoke test nao registrado.
+- Nao ha scraping HTML real de plataformas, Cheerio, LinkedIn, Solides ou fontes protegidas nesta etapa. A Gupy existe apenas como provider experimental manual baseado em endpoint publico observado, com limite baixo e fora da coleta automatica. Playwright foi usado no reconhecimento e tambem esta instalado como infraestrutura isolada e smoke test nao registrado.
 - A politica de scraping bloqueia fontes que exigem login, captcha, bypass anti-bot, credenciais pessoais, simulacao de usuario autenticado ou termos explicitamente incompativeis. Browser scraping so pode ser considerado como ultimo caso para pagina publica sem esses bloqueios.
 - Himalayas usa `https://himalayas.app/jobs/api/search`; Jobicy usa `https://jobicy.com/api/v2/remote-jobs`; RemoteOK usa `https://remoteok.com/api`; Remotive usa `https://remotive.com/api/remote-jobs`.
 - Os providers externos filtram vagas dos ultimos 30 dias, exigem sinal claro de nivel iniciante, rejeitam senioridade alta/intermediaria e aceitam apenas vagas remotas globais ou compativeis com Brasil/LATAM/Americas.
+- O provider Gupy consulta poucas buscas publicas, exige sinal de entrada, rejeita senioridade intermediaria/alta, aceita remoto de qualquer lugar, aceita hibrido/presencial apenas em Minas Gerais/Belo Horizonte/regiao, limita a 20 vagas por execucao e salva apenas `DRAFT` via runner.
 - O toast da coleta externa manual mostra totais compactos e um resumo por provider, por exemplo `Himalayas: 1 nova; Jobicy: 0; RemoteOK: 0; Remotive: 1`, sem criar tela, tabela ou persistencia de logs.
 - Jobicy, RemoteOK e Remotive exigem atribuicao/linkback; preserve a URL original e o `source` ao revisar/publicar vagas coletadas.
 
@@ -143,6 +146,7 @@ A coleta ATS fica manual em `/admin/jobs/collect-ats`. Ela usa o mesmo lock de `
 - Usa `node-cron` e chama `runJobProviders(realJobProviders)`.
 - Nao executa `mockJobsProvider` automaticamente.
 - Nao executa `atsJobProviders` automaticamente nesta etapa.
+- Nao executa `experimentalJobProviders` automaticamente nesta etapa.
 - Usa lock simples em memoria (`isCollecting`) compartilhado com as rotas manuais GitHub e fontes externas por meio de `runRealJobCollection`.
 - Se uma coleta ja estiver rodando, a nova tentativa e ignorada com log.
 - Falhas sao logadas e nao derrubam o processo.
