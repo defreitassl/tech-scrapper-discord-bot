@@ -61,13 +61,16 @@ export function renderJobsList(jobsByStatus: JobsByStatus, notice?: AdminNotice)
         <form method="post" action="/admin/jobs/collect-programathor">
           <button type="submit" class="secondary" data-loading-label="Coletando...">Coletar Programathor</button>
         </form>
+        <form method="post" action="/admin/jobs/collect-remotar">
+          <button type="submit" class="secondary" data-loading-label="Coletando...">Coletar Remotar</button>
+        </form>
         <form method="post" action="/admin/jobs/collect">
           <button type="submit" class="secondary" data-loading-label="Coletando...">Coletar vagas de teste</button>
         </form>
         <a class="button" href="/admin/jobs/new">Nova vaga</a>
       </div>
     </div>
-    <p class="collection-note">Coletas criam apenas rascunhos para revisao, nao chamam IA e nao publicam no Discord. GitHub coleta issues abertas recentes; fontes externas, ATS publicos, Gupy e Programathor usam fontes publicas com filtro conservador de nivel.</p>
+    <p class="collection-note">Coletas criam apenas rascunhos para revisao, nao chamam IA e nao publicam no Discord. GitHub coleta issues abertas recentes; fontes externas, ATS publicos, Gupy, Programathor e Remotar usam fontes publicas com filtro conservador de nivel.</p>
     ${renderNotification(notice)}
     <div class="jobs-sections" aria-label="Lista de vagas por fluxo">
       ${renderJobsSection({

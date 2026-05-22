@@ -24,6 +24,8 @@ Greenhouse, Lever e Ashby foram adicionados nessa categoria para a primeira leva
 
 Esses providers usam `fetchPublicJson` e passam pela politica `api`. Nao usam browser, Cheerio, login, cookies, credenciais pessoais, proxy, captcha, Cloudflare bypass ou bypass anti-bot.
 
+A Remotar tambem foi classificada nesta categoria apos reconhecimento com Playwright MCP: a UI publica carrega vagas por `https://api.remotar.com.br/jobs`, com filtros publicos por `search`, `tagId` e `categoryId`. O provider experimental usa `fetchPublicJson`, limite baixo, rota manual e segue fora da coleta automatica.
+
 ### RSS publico
 
 RSS tambem e preferivel a HTML. O formato e simples, estruturado e normalmente feito para consumo automatizado. Quando existir RSS publico, ele deve vir antes de HTML.
@@ -31,6 +33,8 @@ RSS tambem e preferivel a HTML. O formato e simples, estruturado e normalmente f
 ### HTML simples
 
 HTML publico simples pode ser usado quando nao houver API ou RSS. A pagina deve ser acessivel sem login, captcha, paywall ou bloqueio anti-bot. O parsing deve ser conservador e aceitar falhas sem derrubar o processo.
+
+O Programathor foi classificado nesta categoria apos pesquisa especifica: nao foi encontrado endpoint JSON publico de vagas, mas as listagens publicas entregam cards no HTML inicial e as paginas de detalhe possuem JSON-LD publico `JobPosting`. O provider experimental usa `fetchPublicHtml`, limite baixo, rota manual e segue fora da coleta automatica.
 
 ### Browser/Playwright
 
@@ -64,6 +68,10 @@ A base tecnica fica em `src/scraping/browser/`:
 O provider `src/providers/playwrightSmokeTest.provider.ts` existe apenas para smoke test em pagina publica simples. Ele nao esta registrado no registry de providers, nao entra na coleta automatica, nao cria vagas, nao chama IA e nao envia ao Discord.
 
 A pesquisa Gupy (`docs/gupy-scraping-research.md`) usou Playwright MCP para observar a UI publica e a rede. A implementacao experimental usa somente acesso publico, fica em `experimentalJobProviders`, nao entra na coleta automatica e deve ser removida/desativada se surgir login, captcha, Cloudflare/bypass ou exigencia de credenciais.
+
+A pesquisa Programathor (`docs/programathor-scraping-research.md`) tambem usou validacao de paginas publicas durante o reconhecimento, mas a implementacao nao usa browser scraping. Como o HTML inicial e suficiente, o provider `src/providers/programathor.provider.ts` usa a camada publica simples de `src/scraping/`, fica em `experimentalJobProviders`, roda apenas por `POST /admin/jobs/collect-programathor` e deve ser removido/desativado se surgir login, captcha, Cloudflare/bypass ou exigencia de credenciais.
+
+A pesquisa Remotar (`docs/remotar-scraping-research.md`) usou Playwright MCP para navegar na UI publica, clicar em vaga, observar filtros e inspecionar a rede. A implementacao nao usa browser scraping porque o JSON publico observado e suficiente. O provider `src/providers/remotar.provider.ts` usa `fetchPublicJson`, fica em `experimentalJobProviders`, roda apenas por `POST /admin/jobs/collect-remotar` e deve ser removido/desativado se surgir login, captcha, Cloudflare/bypass ou exigencia de credenciais.
 
 ## Riscos de plataformas com login/captcha
 

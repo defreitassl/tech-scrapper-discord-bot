@@ -78,3 +78,15 @@ Esse provider nao esta registrado em `realJobProviders`, `testJobProviders`, `at
 A investigacao da Gupy esta documentada em `docs/gupy-scraping-research.md`. O reconhecimento foi feito com Playwright MCP em paginas publicas e identificou um endpoint JSON publico usado pelo portal. A implementacao experimental fica em `src/providers/gupy.provider.ts`, registrada apenas em `experimentalJobProviders` e acionada manualmente. Como o endpoint JSON publico e suficiente, o provider usa o cliente publico de `src/scraping/`, nao browser scraping.
 
 Esse caso nao muda a regra geral: se a pagina ou endpoint passar a exigir login, captcha, cookies autenticados, proxy, rotacao de IP ou bypass, a coleta deve ser interrompida e documentada.
+
+## Caso Programathor
+
+A investigacao do Programathor esta documentada em `docs/programathor-scraping-research.md`. O reconhecimento validou paginas publicas de listagem e detalhe sem login, captcha ou bloqueio, mas nao encontrou endpoint JSON publico de vagas. As listagens entregam cards no HTML inicial e as paginas de detalhe possuem JSON-LD publico `JobPosting`.
+
+Por isso, a implementacao experimental fica em `src/providers/programathor.provider.ts`, registrada apenas em `experimentalJobProviders` e acionada manualmente por `POST /admin/jobs/collect-programathor`. Ela usa HTML publico simples pela camada `src/scraping/`, nao Playwright operacional. Se o Programathor passar a exigir login, captcha, Cloudflare/bypass, cookies autenticados, credenciais, proxy ou rotacao de IP, a coleta deve parar e a pesquisa deve ser atualizada.
+
+## Caso Remotar
+
+A investigacao da Remotar esta documentada em `docs/remotar-scraping-research.md`. O reconhecimento foi feito obrigatoriamente com Playwright MCP: a home, buscas, filtros e paginas de detalhe publicas abriram sem login obrigatorio, captcha ou bloqueio, e a aba de rede mostrou endpoints JSON publicos em `https://api.remotar.com.br/jobs`, `categories`, `tags` e `timeline`.
+
+Por isso, a implementacao experimental fica em `src/providers/remotar.provider.ts`, registrada apenas em `experimentalJobProviders` e acionada manualmente por `POST /admin/jobs/collect-remotar`. Como o endpoint JSON publico e suficiente, o provider usa o cliente publico de `src/scraping/`, nao browser scraping. Se a Remotar passar a exigir login, captcha, cookies autenticados, proxy, rotacao de IP ou bypass, a coleta deve ser interrompida e documentada.

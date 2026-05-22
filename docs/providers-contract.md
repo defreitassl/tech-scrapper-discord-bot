@@ -1,6 +1,6 @@
 # Contrato de Providers
 
-Este documento define o contrato inicial para fontes de coleta de vagas. A implementacao atual possui um provider mock/de teste em `src/providers/mockJobs.provider.ts`, um provider real para issues publicas do GitHub em `src/providers/githubJobs.provider.ts`, providers externos por APIs publicas JSON em `src/providers/himalayas.provider.ts`, `src/providers/jobicy.provider.ts`, `src/providers/remoteOk.provider.ts` e `src/providers/remotive.provider.ts`, providers manuais de ATS publicos em `src/providers/greenhouse.provider.ts`, `src/providers/lever.provider.ts` e `src/providers/ashby.provider.ts`, e um provider experimental manual Gupy em `src/providers/gupy.provider.ts`.
+Este documento define o contrato inicial para fontes de coleta de vagas. A implementacao atual possui um provider mock/de teste em `src/providers/mockJobs.provider.ts`, um provider real para issues publicas do GitHub em `src/providers/githubJobs.provider.ts`, providers externos por APIs publicas JSON em `src/providers/himalayas.provider.ts`, `src/providers/jobicy.provider.ts`, `src/providers/remoteOk.provider.ts` e `src/providers/remotive.provider.ts`, providers manuais de ATS publicos em `src/providers/greenhouse.provider.ts`, `src/providers/lever.provider.ts` e `src/providers/ashby.provider.ts`, e providers experimentais manuais Gupy em `src/providers/gupy.provider.ts`, Programathor em `src/providers/programathor.provider.ts` e Remotar em `src/providers/remotar.provider.ts`.
 
 ## Interface sugerida
 
@@ -46,7 +46,7 @@ export type ProviderRepositorySummary = {
 
 O provider deve ser pequeno, testavel e responsavel por uma unica fonte ou familia de fontes.
 
-Providers ativos devem ser registrados em `src/providers/providerRegistry.ts`. O registry separa `testJobProviders`, `externalJobProviders`, `atsJobProviders`, `experimentalJobProviders` e `realJobProviders`; a coleta automatica usa somente `realJobProviders`. O runner central fica em `src/providers/providerRunner.ts`. Rotas especificas podem chamar o runner com uma lista explicita de providers quando precisam executar apenas uma familia de fontes, como a coleta mock, a coleta GitHub, a coleta externa, a coleta ATS manual ou a coleta experimental Gupy.
+Providers ativos devem ser registrados em `src/providers/providerRegistry.ts`. O registry separa `testJobProviders`, `externalJobProviders`, `atsJobProviders`, `experimentalJobProviders` e `realJobProviders`; a coleta automatica usa somente `realJobProviders`. O runner central fica em `src/providers/providerRunner.ts`. Rotas especificas podem chamar o runner com uma lista explicita de providers quando precisam executar apenas uma familia de fontes, como a coleta mock, a coleta GitHub, a coleta externa, a coleta ATS manual, a coleta experimental Gupy, a coleta experimental Programathor ou a coleta experimental Remotar.
 
 Futuras fontes que dependam de scraping ou pesquisa de paginas publicas devem usar a camada isolada `src/scraping/` antes de virar provider. Essa camada contem tipos genericos (`ScrapingStrategy`, `ScrapingSourceConfig`, `ScrapingResult`, `ScrapedJob`), politica de permissao, helpers leves de HTML e cliente publico simples. Ela nao substitui este contrato: providers continuam entregando `CollectedJob[]` ou `ProviderCollectResult` ao runner.
 
@@ -177,11 +177,15 @@ Regras obrigatorias:
 - HTML publico simples pode ser usado quando estavel.
 - Browser scraping e ultimo caso. A infraestrutura Playwright existe, mas providers reais devem continuar manuais/experimentais ate decisao explicita.
 - Fontes com login, captcha, Cloudflare/bloqueio anti-bot que exija bypass, paywall, credenciais pessoais ou termos explicitamente incompativeis devem ser bloqueadas.
-- LinkedIn, Gupy, Solides e similares nao devem ser implementados sem avaliacao especifica e decisao explicita. A Gupy ja possui uma primeira avaliacao em `docs/gupy-scraping-research.md` e fica limitada a provider experimental manual.
+- LinkedIn, Gupy, Solides e similares nao devem ser implementados sem avaliacao especifica e decisao explicita. A Gupy ja possui uma primeira avaliacao em `docs/gupy-scraping-research.md` e fica limitada a provider experimental manual. O Programathor possui avaliacao em `docs/programathor-scraping-research.md` e tambem fica limitado a provider experimental manual por HTML publico simples. A Remotar possui avaliacao em `docs/remotar-scraping-research.md` e fica limitada a provider experimental manual por JSON publico.
 
 A coleta automatica diaria em `src/services/scheduledCollector.ts` reaproveita o mesmo runner e executa apenas `realJobProviders`. Ela roda as 08:00 em `America/Sao_Paulo` enquanto o processo admin estiver ativo, nao executa o provider mock e usa lock simples em memoria para ignorar execucoes concorrentes.
 
-Os providers ATS publicos ficam em `atsJobProviders` e nao entram na coleta automatica diaria nesta etapa. O provider Gupy fica em `experimentalJobProviders` e tambem nao entra na coleta automatica. Eles podem ser executados manualmente pelo painel e usam o mesmo lock de coletas reais. A Gupy retorna diagnostico por termo de busca em `repositorySummaries`, com `source` como `gupy:<termo>`, `term` e `returnedByProvider`.
+Os providers ATS publicos ficam em `atsJobProviders` e nao entram na coleta automatica diaria nesta etapa. Os providers Gupy, Programathor e Remotar ficam em `experimentalJobProviders` e tambem nao entram na coleta automatica. Eles podem ser executados manualmente pelo painel e usam o mesmo lock de coletas reais. A Gupy retorna diagnostico por termo de busca em `repositorySummaries`, com `source` como `gupy:<termo>`, `term` e `returnedByProvider`.
+
+O Programathor retorna diagnostico por termo/fonte em `repositorySummaries`, com `source` como `programathor:<termo>`, `term` e `returnedByProvider`. Ele usa apenas paginas publicas, sem login, cookies autenticados, proxy, rotacao de IP, captcha ou bypass; nao foi encontrado endpoint JSON publico de listagem, entao a estrategia atual usa HTML publico simples e JSON-LD publico nas paginas de detalhe. A rota manual `POST /admin/jobs/collect-programathor` chama explicitamente apenas `programathorProvider`.
+
+O Remotar retorna diagnostico por termo/fonte em `repositorySummaries`, com `source` como `remotar:<termo>`, `term` e `returnedByProvider`. O reconhecimento foi feito com Playwright MCP, mas a coleta usa apenas endpoint JSON publico em `https://api.remotar.com.br/jobs`, sem login, cookies autenticados, proxy, rotacao de IP, captcha ou bypass. A rota manual `POST /admin/jobs/collect-remotar` chama explicitamente apenas `remotarProvider`.
 
 ## Provider GitHub
 

@@ -8,7 +8,7 @@ Fontes recomendadas primeiro:
 
 - Greenhouse, Lever e Ashby ja foram iniciados por endpoints JSON publicos da propria empresa. Workable continua para depois/avaliar caso a caso.
 - Sites proprios de empresas e paginas publicas de carreiras com HTML simples ou RSS.
-- Programathor e Remotar somente apos pesquisa especifica de endpoints publicos e termos.
+- Programathor ja foi iniciado como experimento manual por HTML publico simples apos pesquisa especifica. Remotar ja foi iniciada como experimento manual por JSON publico apos pesquisa especifica com Playwright MCP.
 
 Fontes para evitar nesta etapa:
 
@@ -51,24 +51,24 @@ Fontes para evitar nesta etapa:
 ## Programathor
 
 - Tipo de acesso provavel: site publico de vagas de tecnologia.
-- API publica/endpoints conhecidos: precisa de pesquisa especifica; nao assumir contrato.
-- Exige login: pode nao exigir para visualizar algumas vagas; candidatura pode exigir conta.
-- JS-heavy: medio.
-- Risco de captcha/bloqueio: baixo a medio.
-- Dificuldade estimada: media.
-- Recomendacao: depois.
-- Estrategia ideal: procurar API/endpoints publicos; se nao houver, avaliar HTML simples com baixa frequencia.
+- API publica/endpoints conhecidos: nao foi encontrado endpoint JSON publico de listagem de vagas durante a pesquisa.
+- Exige login: nao para visualizar listagens e detalhes publicos analisados; candidatura pode ter fluxo proprio fora da coleta.
+- JS-heavy: baixo para coleta atual, pois os cards aparecem no HTML inicial.
+- Risco de captcha/bloqueio: baixo no reconhecimento feito; a infraestrutura observada inclui Cloudflare, entao qualquer desafio, captcha ou necessidade de bypass deve interromper a coleta.
+- Dificuldade estimada: baixa a media.
+- Recomendacao: iniciado como provider experimental manual.
+- Estrategia implementada: HTML publico simples via `fetchPublicHtml`, detalhes por JSON-LD publico `JobPosting`, limite de 20 vagas por execucao, sem Playwright operacional, login, cookies autenticados, credenciais, proxy, rotacao de IP, captcha ou bypass.
 
 ## Remotar
 
 - Tipo de acesso provavel: site publico/listagem de vagas remotas.
-- API publica/endpoints conhecidos: precisa de pesquisa especifica.
-- Exige login: provavelmente nao para visualizar listagens publicas, mas deve ser validado.
-- JS-heavy: baixo a medio.
-- Risco de captcha/bloqueio: baixo a medio.
-- Dificuldade estimada: media.
-- Recomendacao: depois.
-- Estrategia ideal: API publica ou HTML simples, com link original preservado.
+- API publica/endpoints conhecidos: sim, a UI publica usa `https://api.remotar.com.br/jobs`, alem de `categories`, `tags` e `timeline`.
+- Exige login: nao para visualizar listagens e detalhes publicos analisados; a pagina de detalhe mostra convite de cadastro, mas o conteudo publico da vaga continua visivel.
+- JS-heavy: medio na UI, mas a coleta pode usar JSON publico.
+- Risco de captcha/bloqueio: baixo no reconhecimento feito; se surgir captcha, login obrigatorio, bloqueio ou necessidade de bypass, a coleta deve parar.
+- Dificuldade estimada: baixa a media.
+- Recomendacao: iniciado como provider experimental manual.
+- Estrategia implementada: JSON publico via `fetchPublicJson`, filtros por `search`, `tagId` e `categoryId`, limite de 20 vagas por execucao, sem Playwright operacional, login, cookies autenticados, credenciais, proxy, rotacao de IP, captcha ou bypass.
 
 ## Sites proprios de empresas
 

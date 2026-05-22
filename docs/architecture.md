@@ -16,7 +16,7 @@
 - `src/admin/routes/schedule.routes.ts`: rotas de configuracao do envio agendado.
 - `src/admin/views/`: renderizacao server-side do painel. `layout.ts` contem o layout base, `styles.ts` contem o CSS inline, `components.ts` contem componentes HTML reutilizaveis, `jobs.views.ts` contem telas de vagas e `schedule.views.ts` contem a tela de agendamento.
 - `src/admin/helpers/`: helpers puros do painel. `forms.ts` concentra parse e normalizacao de formularios, `validators.ts` concentra validacoes de formulario/status, `status.ts` concentra labels de status, `formatters.ts` concentra formatacao visual simples e `notifications.ts` concentra notificacoes temporarias via query params.
-- `src/providers/`: base de providers de coleta. Inclui contrato (`types.ts`), normalizacao (`normalizeCollectedJob.ts`), registry de providers ativos (`providerRegistry.ts`), provider mock (`mockJobs.provider.ts`), provider GitHub (`githubJobs.provider.ts`), providers externos por APIs publicas JSON (`himalayas.provider.ts`, `jobicy.provider.ts`, `remoteOk.provider.ts`, `remotive.provider.ts`), providers manuais de ATS publicos (`greenhouse.provider.ts`, `lever.provider.ts`, `ashby.provider.ts`), providers experimentais Gupy (`gupy.provider.ts`) e Programathor (`programathor.provider.ts`), lista controlada de empresas (`companyTargets.ts`), helpers compartilhados e runner (`providerRunner.ts`).
+- `src/providers/`: base de providers de coleta. Inclui contrato (`types.ts`), normalizacao (`normalizeCollectedJob.ts`), registry de providers ativos (`providerRegistry.ts`), provider mock (`mockJobs.provider.ts`), provider GitHub (`githubJobs.provider.ts`), providers externos por APIs publicas JSON (`himalayas.provider.ts`, `jobicy.provider.ts`, `remoteOk.provider.ts`, `remotive.provider.ts`), providers manuais de ATS publicos (`greenhouse.provider.ts`, `lever.provider.ts`, `ashby.provider.ts`), providers experimentais Gupy (`gupy.provider.ts`), Programathor (`programathor.provider.ts`) e Remotar (`remotar.provider.ts`), lista controlada de empresas (`companyTargets.ts`), helpers compartilhados e runner (`providerRunner.ts`).
 - `src/scraping/`: camada preparatoria e isolada para futuras fontes publicas mais dificeis. Inclui tipos genericos, politica de permissao, helpers leves de HTML, cliente publico simples para HTML/JSON e uma subcamada experimental `src/scraping/browser/` para Playwright. Os providers ATS usam o cliente JSON publico dessa camada. A subcamada Playwright continua isolada, sem salvar no banco e sem alterar regras do runner.
 - `src/services/publishPendingJobs.ts`: fluxo de publicacao de vagas, incluindo envio em lote de vagas `PENDING` e envio de uma unica vaga.
 - `src/services/jobDeduplication.ts`: primeira camada reutilizavel de deduplicacao de vagas. Bloqueia duplicata forte por URL normalizada e sinaliza possivel duplicata por titulo + empresa normalizados.
@@ -70,6 +70,8 @@ A base Playwright fica em `src/scraping/browser/` e fornece tipos, politica, cli
 A pesquisa da Gupy fica em `docs/gupy-scraping-research.md`. O provider `src/providers/gupy.provider.ts` fica registrado apenas em `experimentalJobProviders` e e acionado manualmente por `POST /admin/jobs/collect-gupy`. Ele usa apenas acesso publico, sem login/cookies/proxy/bypass, limita a coleta a 20 vagas por execucao, nao entra em `realJobProviders` e nao roda na coleta automatica.
 
 A pesquisa do Programathor fica em `docs/programathor-scraping-research.md`. O provider `src/providers/programathor.provider.ts` fica registrado apenas em `experimentalJobProviders` e e acionado manualmente por `POST /admin/jobs/collect-programathor`. Como nao foi encontrado endpoint JSON publico de vagas, ele usa HTML publico simples da camada `src/scraping/` e detalhes com JSON-LD embutido, sem Playwright operacional, sem login/cookies/proxy/bypass, com limite de 20 vagas retornadas por execucao, fora de `realJobProviders` e fora da coleta automatica.
+
+A pesquisa da Remotar fica em `docs/remotar-scraping-research.md`. O provider `src/providers/remotar.provider.ts` fica registrado apenas em `experimentalJobProviders` e e acionado manualmente por `POST /admin/jobs/collect-remotar`. O reconhecimento foi feito com Playwright MCP e encontrou endpoint JSON publico em `https://api.remotar.com.br/jobs`; por isso a coleta usa `fetchPublicJson`, sem Playwright operacional, sem login/cookies/proxy/bypass, com limite de 20 vagas retornadas por execucao, fora de `realJobProviders` e fora da coleta automatica.
 
 Antes de implementar plataformas maiores, a fonte deve ser avaliada conforme `docs/scraping-platforms-research.md`. LinkedIn, Gupy, Solides e similares nao devem ser implementados por suposicao; precisam de pesquisa especifica, decisao explicita e respeito a termos e bloqueios tecnicos.
 
@@ -184,7 +186,7 @@ O toast da coleta ATS usa o resumo compacto por fonte/provider, como os provider
 
 ## Fluxo de coleta experimental Gupy
 
-A rota `POST /admin/jobs/collect-gupy`, exibida na listagem como `Coletar Gupy`, executa apenas `experimentalJobProviders`, atualmente `gupyProvider`.
+A rota `POST /admin/jobs/collect-gupy`, exibida na listagem como `Coletar Gupy`, executa apenas `gupyProvider`.
 
 O provider Gupy foi implementado apos reconhecimento com Playwright MCP. A pagina publica `https://portal.gupy.io/job-search/term=...` carrega os dados pelo endpoint publico `https://employability-portal.gupy.io/api/v1/jobs`. Durante a validacao, a listagem abriu sem login, captcha, Cloudflare ou bloqueio tecnico. Se isso mudar, o provider deve ser pausado.
 
@@ -204,13 +206,25 @@ O provider consulta poucas fontes/termos, nao pagina agressivamente, limita a 20
 
 Depois dos filtros do provider, o runner central normaliza, aplica qualidade, deduplica e cria registros como `DRAFT` com `useAi = false`. A coleta Programathor nao chama Gemini/IA, nao envia ao Discord e nao transforma vagas em `PENDING`.
 
+## Fluxo de coleta experimental Remotar
+
+A rota `POST /admin/jobs/collect-remotar`, exibida na listagem como `Coletar Remotar`, executa apenas `remotarProvider`.
+
+O provider Remotar foi implementado apos reconhecimento com Playwright MCP documentado em `docs/remotar-scraping-research.md`. A home, buscas, filtros e detalhes publicos abriram sem login obrigatorio, captcha ou bloqueio tecnico. A UI chama endpoints JSON publicos como `https://api.remotar.com.br/jobs?search=desenvolvedor%20j%C3%BAnior`, `?tagId=17`, `?tagId=10`, `?categoryId=13` e combinacoes de busca, tags e categorias.
+
+A coleta usa JSON publico via `fetchPublicJson`, nao usa Playwright como dependencia operacional e nao usa login, cookies autenticados, credenciais, proxy, rotacao de IP, captcha ou bypass. Se a fonte passar a exigir login, captcha, desafio Cloudflare ou bloqueio tecnico, o provider deve ser interrompido.
+
+O provider consulta poucos termos/fontes, nao pagina agressivamente, limita a 20 vagas retornadas por execucao, filtra `createdAt` acima de 30 dias quando disponivel, exige sinal de entrada, rejeita senioridade acima de entrada, rejeita ruido fora de tecnologia e aceita remoto quando nao ha restricao explicita incompatível com Brasil/LATAM/Americas. Vagas hibridas/presenciais so entram quando indicam Minas Gerais/Belo Horizonte/regiao.
+
+Depois dos filtros do provider, o runner central normaliza, aplica qualidade, deduplica e cria registros como `DRAFT` com `useAi = false`. A coleta Remotar nao chama Gemini/IA, nao envia ao Discord e nao transforma vagas em `PENDING`.
+
 ## Fluxo de coleta automatica
 
 O painel admin inicia `scheduledCollector` junto com o processo de `npm run admin`.
 
 A coleta automatica roda diariamente as 08:00 no timezone `America/Sao_Paulo`, usando `node-cron` com a expressao `0 8 * * *`.
 
-Ela executa apenas os providers reais registrados em `realJobProviders`, atualmente GitHub, Himalayas, Jobicy, RemoteOK e Remotive. O `mockJobsProvider` fica em `testJobProviders` e nao roda automaticamente. Os providers ATS ficam em `atsJobProviders`; Gupy e Programathor ficam em `experimentalJobProviders`. Nesta etapa, ATS e experimentais rodam apenas por coleta manual.
+Ela executa apenas os providers reais registrados em `realJobProviders`, atualmente GitHub, Himalayas, Jobicy, RemoteOK e Remotive. O `mockJobsProvider` fica em `testJobProviders` e nao roda automaticamente. Os providers ATS ficam em `atsJobProviders`; Gupy, Programathor e Remotar ficam em `experimentalJobProviders`. Nesta etapa, ATS e experimentais rodam apenas por coleta manual.
 
 A coleta automatica chama o mesmo runner de providers, entao preserva as regras centrais:
 

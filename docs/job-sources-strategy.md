@@ -135,6 +135,34 @@ Regras do experimento:
 
 Se o Programathor passar a exigir login, captcha, Cloudflare/bypass, proxy, credenciais ou qualquer contorno tecnico, a coleta deve ser interrompida.
 
+### Remotar experimental
+
+A Remotar foi investigada com Playwright MCP em `docs/remotar-scraping-research.md`. A UI publica renderiza listagens com JavaScript, mas os dados foram observados em endpoint JSON publico:
+
+```text
+https://api.remotar.com.br/jobs
+```
+
+Por isso, a estrategia recomendada para a primeira versao e usar esse JSON publico em provider experimental manual, com baixo volume e sem coleta automatica. O provider `src/providers/remotar.provider.ts` fica em `experimentalJobProviders`, mas a rota manual `POST /admin/jobs/collect-remotar` chama apenas esse provider.
+
+Regras do experimento:
+
+- reconhecimento feito com Playwright MCP;
+- sem login;
+- sem cookies autenticados;
+- sem credenciais pessoais;
+- sem proxy ou rotacao de IP;
+- sem captcha ou bypass;
+- sem Playwright operacional, porque JSON publico e suficiente;
+- sem paginacao agressiva;
+- limite de 20 vagas retornadas por execucao;
+- vagas como `DRAFT`;
+- `useAi = false`;
+- sem IA;
+- sem Discord.
+
+Se a Remotar passar a exigir login, captcha, Cloudflare/bypass, proxy, credenciais ou qualquer contorno tecnico, a coleta deve ser interrompida.
+
 ## Riscos de LinkedIn, Gupy e Solides
 
 LinkedIn, Gupy, Solides e plataformas similares podem ter:
@@ -148,7 +176,7 @@ LinkedIn, Gupy, Solides e plataformas similares podem ter:
 
 Essas fontes nao devem ser o ponto de partida. Tambem nao se deve tentar burlar login, captcha ou bloqueios.
 
-Antes de implementar qualquer plataforma maior, consulte `docs/scraping-platforms-research.md`. A recomendacao atual e priorizar Greenhouse, Lever, Ashby, sites proprios de empresas e paginas publicas de carreiras quando houver API publica, RSS, endpoint JSON publico ou HTML simples. LinkedIn deve ser evitado; Gupy fica apenas como experimento manual por endpoint publico validado; Solides fica para depois e apenas com endpoints publicos permitidos.
+Antes de implementar qualquer plataforma maior, consulte `docs/scraping-platforms-research.md`. A recomendacao atual e priorizar Greenhouse, Lever, Ashby, sites proprios de empresas e paginas publicas de carreiras quando houver API publica, RSS, endpoint JSON publico ou HTML simples. LinkedIn deve ser evitado; Gupy e Remotar ficam apenas como experimentos manuais por endpoint publico validado; Programathor fica apenas como experimento manual por HTML publico simples; Solides fica para depois e apenas com endpoints publicos permitidos.
 
 ## Recomendacao
 
@@ -162,4 +190,4 @@ Comecar por fontes simples, publicas e revisaveis:
 
 Na fase inicial, qualquer vaga coletada automaticamente deve entrar como `DRAFT` ou equivalente para revisao humana antes de publicacao.
 
-Fontes como Arbeitnow, Findwork, Jobdata, LinkedIn, Solides e Remotar continuam fora desta etapa por menor aderencia, necessidade de chave/login, uso comercial, captcha, protecoes anti-bot ou risco de scraping pesado. Gupy fica apenas como experimento manual por endpoint publico observado. Programathor fica apenas como experimento manual por HTML publico simples. Greenhouse, Lever e Ashby ficam limitados a endpoints publicos por empresa cadastrada e revisao humana.
+Fontes como Arbeitnow, Findwork, Jobdata, LinkedIn e Solides continuam fora desta etapa por menor aderencia, necessidade de chave/login, uso comercial, captcha, protecoes anti-bot ou risco de scraping pesado. Gupy e Remotar ficam apenas como experimentos manuais por endpoint publico observado. Programathor fica apenas como experimento manual por HTML publico simples. Greenhouse, Lever e Ashby ficam limitados a endpoints publicos por empresa cadastrada e revisao humana.

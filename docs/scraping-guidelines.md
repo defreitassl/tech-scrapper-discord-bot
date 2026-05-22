@@ -42,6 +42,8 @@ Os providers Greenhouse, Lever e Ashby tambem nao fazem scraping HTML pesado. El
 
 O provider experimental Gupy foi criado apos reconhecimento com Playwright MCP e fica documentado em `docs/gupy-scraping-research.md`. Ele deve continuar manual, com poucas chamadas, limite de 20 vagas por execucao, sem paginacao agressiva e fora da coleta automatica.
 
+O provider experimental Remotar foi criado apos reconhecimento com Playwright MCP e fica documentado em `docs/remotar-scraping-research.md`. A implementacao usa JSON publico, deve continuar manual, com poucas chamadas, limite de 20 vagas por execucao, sem paginacao agressiva e fora da coleta automatica.
+
 ## Tratamento de falhas
 
 Scrapers quebram. O sistema deve tolerar:
@@ -60,6 +62,8 @@ Se a fonte retornar sinais de bloqueio, captcha, exigencia de login ou termos ex
 Para browser scraping, a politica tambem deve bloquear uso de credenciais, cookies customizados, proxy e rotacao de IP. O contexto Playwright deve usar User-Agent identificavel, `headless: true` por padrao e timeout conservador.
 
 No caso da Gupy, se o endpoint publico passar a exigir login, captcha, Cloudflare/bypass ou qualquer credencial, a coleta deve ser parada em vez de contornada.
+
+No caso da Remotar, se o endpoint publico ou as paginas publicas passarem a exigir login, captcha, Cloudflare/bypass, cookies autenticados, proxy, rotacao de IP ou qualquer credencial, a coleta deve ser parada em vez de contornada.
 
 ## Revisao antes de publicar
 

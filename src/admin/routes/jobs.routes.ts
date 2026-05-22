@@ -6,9 +6,12 @@ import { generateJobMessage } from '../../services/aiMessageGenerator';
 import { checkJobDuplicate } from '../../services/jobDeduplication';
 import { publishPendingJobs, publishSingleJob } from '../../services/publishPendingJobs';
 import { runRealJobCollection } from '../../services/scheduledCollector';
-import { atsJobProviders, experimentalJobProviders, externalJobProviders } from '../../providers/providerRegistry';
+import { atsJobProviders, externalJobProviders } from '../../providers/providerRegistry';
 import { githubJobsProvider } from '../../providers/githubJobs.provider';
+import { gupyProvider } from '../../providers/gupy.provider';
 import { mockJobsProvider } from '../../providers/mockJobs.provider';
+import { programathorProvider } from '../../providers/programathor.provider';
+import { remotarProvider } from '../../providers/remotar.provider';
 import { runJobProviders } from '../../providers/providerRunner';
 import { parseJobForm } from '../helpers/forms';
 import { getNoticeFromQuery, redirectWithNotice } from '../helpers/notifications';
@@ -17,11 +20,11 @@ import {
   buildGupyCollectionNotice,
   buildProgramathorCollectionNotice,
   buildProviderCollectionNotice,
+  buildRemotarCollectionNotice,
 } from '../helpers/providerSummary';
 import { validateJob, validatePending } from '../helpers/validators';
 import { renderLayout } from '../views/layout';
 import { renderJobDetails, renderJobForm, renderJobsList, type JobsByStatus } from '../views/jobs.views';
-import { programathorProvider } from '../../providers/programathor.provider';
 
 export function createJobsRouter(): express.Router {
   const router = express.Router();
@@ -241,7 +244,7 @@ export function createJobsRouter(): express.Router {
   router.post('/admin/jobs/collect-gupy', async (_request, response) => {
     try {
       logger.info('Coleta manual experimental Gupy iniciada pelo admin.');
-      const collectionResult = await runRealJobCollection('manual', experimentalJobProviders);
+      const collectionResult = await runRealJobCollection('manual', [gupyProvider]);
 
       if (collectionResult.skipped || !collectionResult.summary) {
         redirectWithNotice(
@@ -287,6 +290,32 @@ export function createJobsRouter(): express.Router {
     } catch (error) {
       logger.error('Erro ao coletar Programathor pelo admin.', error);
       redirectWithNotice(response, '/admin/jobs', 'Erro ao coletar Programathor.', 'error');
+    }
+  });
+
+  router.post('/admin/jobs/collect-remotar', async (_request, response) => {
+    try {
+      logger.info('Coleta manual experimental Remotar iniciada pelo admin.');
+      const collectionResult = await runRealJobCollection('manual', [remotarProvider]);
+
+      if (collectionResult.skipped || !collectionResult.summary) {
+        redirectWithNotice(
+          response,
+          '/admin/jobs',
+          'Coleta Remotar ignorada porque outra coleta ja esta em execucao.',
+          'warning',
+        );
+        return;
+      }
+
+      const result = collectionResult.summary;
+      const message = buildRemotarCollectionNotice(result);
+      const noticeType = result.errors.length > 0 ? 'warning' : result.createdJobs > 0 ? 'success' : 'info';
+
+      redirectWithNotice(response, '/admin/jobs', message, noticeType);
+    } catch (error) {
+      logger.error('Erro ao coletar Remotar pelo admin.', error);
+      redirectWithNotice(response, '/admin/jobs', 'Erro ao coletar Remotar.', 'error');
     }
   });
 

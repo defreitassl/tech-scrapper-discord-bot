@@ -220,6 +220,18 @@ O provider filtra vagas vencidas, vagas com `datePosted` acima de 30 dias, senio
 
 As vagas Programathor passam pelo runner central, entram como `DRAFT`, com `useAi = false`, sem chamar Gemini/IA e sem enviar ao Discord.
 
+### Coleta experimental Remotar
+
+A listagem tambem possui o botao `Coletar Remotar`. Ele executa apenas o provider experimental `src/providers/remotar.provider.ts`, registrado em `experimentalJobProviders` e fora da coleta automatica.
+
+O provider foi criado apos reconhecimento obrigatorio com Playwright MCP, documentado em `docs/remotar-scraping-research.md`. A Remotar carrega listagens por endpoint JSON publico em `https://api.remotar.com.br/jobs`, com filtros publicos por busca, categoria e tags. Como JSON publico e preferivel a browser scraping, a coleta usa `fetchPublicJson` pela camada `src/scraping/`, sem Playwright operacional.
+
+A coleta consulta poucos termos de tecnologia para estagio, junior, desenvolvimento, suporte tecnico, QA, dados e remoto, sem login, cookies autenticados, credenciais pessoais, proxy, rotacao de IP, captcha ou bypass. Se a fonte passar a exigir login, captcha, bloqueio tecnico ou desafio Cloudflare que exija contorno, a coleta deve ser interrompida.
+
+O provider filtra vagas antigas acima de 30 dias, senioridade acima de entrada, falta de sinal de nivel, ruido fora de tecnologia e localizacao fora da regra. Como a Remotar e focada em remoto, vagas remotas sao aceitas quando nao ha restricao explicita incompatível com Brasil/LATAM/Americas; hibridas/presenciais so entram quando indicam Minas Gerais/Belo Horizonte/regiao. O limite e de 20 vagas retornadas por execucao.
+
+As vagas Remotar passam pelo runner central, entram como `DRAFT`, com `useAi = false`, sem chamar Gemini/IA e sem enviar ao Discord.
+
 ### Coleta automatica diaria
 
 Quando o painel admin esta rodando com `npm run admin`, o sistema agenda automaticamente a coleta dos providers reais todos os dias as 08:00 no timezone `America/Sao_Paulo`.

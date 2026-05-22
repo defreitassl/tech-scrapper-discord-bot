@@ -74,6 +74,18 @@ export function buildProgramathorCollectionNotice(summary: ProviderRunnerSummary
   return `${baseMessage} Termos: ${termBreakdown}.`;
 }
 
+export function buildRemotarCollectionNotice(summary: ProviderRunnerSummary): string {
+  const ignoredByLevel = summary.ignoredBySeniority + summary.ignoredByMissingEntryLevel;
+  const termBreakdown = buildTermBreakdown(summary);
+  const baseMessage = `Remotar: ${summary.createdJobs} novas, ${summary.totalIssuesRead} analisadas, ${summary.ignoredByDate} antigas, ${summary.ignoredByLocation} localização, ${ignoredByLevel} nível, ${summary.ignoredByQuality} qualidade, ${summary.ignoredDuplicates} duplicatas, ${summary.repositoryErrors} ${summary.repositoryErrors === 1 ? 'erro' : 'erros'}.`;
+
+  if (!termBreakdown) {
+    return baseMessage;
+  }
+
+  return `${baseMessage} Termos: ${termBreakdown}.`;
+}
+
 function getBreakdownSources(
   summary: ProviderRunnerSummary,
   options: ProviderBreakdownOptions,
