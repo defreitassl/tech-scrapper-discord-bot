@@ -21,6 +21,7 @@
 - `src/services/publishPendingJobs.ts`: fluxo de publicacao de vagas, incluindo envio em lote de vagas `PENDING` e envio de uma unica vaga.
 - `src/services/jobDeduplication.ts`: primeira camada reutilizavel de deduplicacao de vagas. Bloqueia duplicata forte por URL normalizada e sinaliza possivel duplicata por titulo + empresa normalizados.
 - `src/services/jobQualityFilter.ts`: filtro deterministico de qualidade para vagas coletadas por providers. Rejeita vagas antes da criacao no banco quando faltam dados essenciais, falta canal claro de candidatura (URL ou e-mail no texto), ha sinais fortes de senioridade/experiencia alta ou a vaga parece fora de tecnologia.
+- `src/services/jobPriority.ts`: priorizacao deterministica em memoria para vagas coletadas aprovadas pelo filtro de qualidade. Favorece estagio remoto, estagio em Minas Gerais/BH/regiao, trainee remoto e junior remoto, sem descartar vagas `LOW` que continuem uteis.
 - `src/services/schedulerSettings.ts`: leitura, criacao padrao, validacao e atualizacao das configuracoes de envio agendado.
 - `src/services/schedulerOperations.ts`: consultas operacionais do agendamento, como limite restante do dia e proximas vagas `PENDING`.
 - `src/services/scheduledPublisher.ts`: registro dos crons de publicacao e aplicacao do limite diario antes de chamar `publishPendingJobs`.
@@ -83,12 +84,17 @@ O fluxo de teste/mock e acionado pela rota `POST /admin/jobs/collect`, exibida n
 4. Cada vaga coletada passa por `normalizeCollectedJob`, que remove espacos duplicados em campos estruturados, transforma strings vazias em `null`, preserva `rawText` quando existir e garante `source`.
 5. Antes de criar no banco, o runner chama `evaluateCollectedJobQuality` em `src/services/jobQualityFilter.ts`.
 6. Vagas rejeitadas pelo filtro de qualidade nao sao criadas, incrementam `ignoredByQuality` e registram os motivos no terminal.
-7. Para vagas aceitas por qualidade, o runner chama `checkJobDuplicate` em `src/services/jobDeduplication.ts`.
-8. Duplicata forte por URL normalizada bloqueia a criacao.
-9. Possivel duplicata por titulo + empresa e apenas contabilizada; a vaga ainda e criada como `DRAFT` para revisao humana.
-10. Vagas criadas automaticamente entram sempre como `DRAFT`, com `useAi = false`.
-11. A coleta nao chama Gemini/IA, nao marca vagas como `PENDING` e nao envia nada ao Discord.
-12. O painel redireciona de volta para `/admin/jobs` com um toast resumindo novas vagas, duplicatas por URL ignoradas e metadados especificos da coleta quando existirem. Para coletas com diagnostico por fonte, o toast mostra apenas um resumo compacto por provider/repositorio; os detalhes completos continuam nos logs do terminal.
+7. Para vagas aceitas por qualidade, o runner chama `evaluateJobPriority` em `src/services/jobPriority.ts`. A prioridade e calculada em memoria, logada com `priority`, `score` e `reasons`, e ainda nao e persistida no banco.
+8. O runner ordena as vagas aceitas por prioridade antes de salvar: `HIGH`, depois `MEDIUM`, depois `LOW`; dentro da mesma prioridade, preserva a ordem original do provider.
+9. Para cada vaga ordenada, o runner chama `checkJobDuplicate` em `src/services/jobDeduplication.ts`.
+10. Duplicata forte por URL normalizada bloqueia a criacao.
+11. Possivel duplicata por titulo + empresa e apenas contabilizada; a vaga ainda e criada como `DRAFT` para revisao humana.
+12. Vagas `LOW` nao sao descartadas por prioridade. Se passarem no filtro de qualidade e na deduplicacao forte, tambem sao criadas como `DRAFT`.
+13. Vagas criadas automaticamente entram sempre como `DRAFT`, com `useAi = false`.
+14. A coleta nao chama Gemini/IA, nao marca vagas como `PENDING` e nao envia nada ao Discord.
+15. O painel redireciona de volta para `/admin/jobs` com um toast resumindo novas vagas, duplicatas por URL ignoradas, prioridades criadas quando couber e metadados especificos da coleta quando existirem. Para coletas com diagnostico por fonte, o toast mostra apenas um resumo compacto por provider/repositorio; os detalhes completos continuam nos logs do terminal.
+
+A prioridade inicial valoriza mais estagio remoto em tecnologia, depois estagio em Minas Gerais/BH/regiao, trainee remoto, junior remoto, junior em Minas Gerais/BH/regiao e, por fim, outras vagas uteis para entendimento de mercado. Vagas junior, presenciais ou hibridas boas continuam podendo ser salvas como rascunho; a prioridade apenas melhora a ordem de processamento e o diagnostico. Em etapa futura, `priority` e `score` podem virar campos persistidos e apoiar autoaprovacao, mas isso nao altera o schema Prisma agora.
 
 O provider mock retorna vagas fake para validar arquitetura e fluxo operacional.
 

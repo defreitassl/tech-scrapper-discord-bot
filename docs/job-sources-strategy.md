@@ -80,6 +80,10 @@ Depois da coleta, a revisao humana continua obrigatoria. O admin pode usar `Prep
 
 O filtro de qualidade nao substitui a revisao humana. Ele apenas reduz ruido antes da criacao do rascunho e registra rejeicoes em `ignoredByQuality` com os motivos no terminal.
 
+Alem do filtro de qualidade, o runner calcula uma prioridade deterministica em memoria para cada vaga aprovada antes de salvar. A prioridade valoriza principalmente estagio remoto em tecnologia, estagio em Minas Gerais/BH/regiao, trainee remoto e junior remoto. Vagas junior, hibridas ou presenciais boas continuam podendo ser salvas como `DRAFT`; a prioridade apenas ordena melhor a criacao e melhora o diagnostico. Vagas `LOW` nao sao descartadas por prioridade se ja passaram no filtro de qualidade atual.
+
+A prioridade ainda nao e persistida no banco e nao altera schema Prisma. O resumo operacional conta vagas criadas por `HIGH`, `MEDIUM` e `LOW`, e os logs mostram pontuacao e motivos. No futuro, `priority` e `score` podem virar campos persistidos e apoiar uma regra de autoaprovacao, mas vagas coletadas seguem exigindo curadoria humana nesta etapa.
+
 Alem da coleta manual no painel, o processo admin agenda a coleta dos providers reais diariamente as 08:00 em `America/Sao_Paulo`. Essa rotina executa GitHub e as APIs externas registradas, nao executa providers de teste/mock nem ATS publicos, nao chama IA, nao publica no Discord e salva somente rascunhos `DRAFT`.
 
 ### Paginas publicas simples

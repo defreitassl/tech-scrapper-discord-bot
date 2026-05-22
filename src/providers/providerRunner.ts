@@ -2,10 +2,11 @@ import { JobStatus } from '@prisma/client';
 import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
 import { checkJobDuplicate } from '../services/jobDeduplication';
+import { evaluateJobPriority, type JobPriorityLevel, type JobPriorityResult } from '../services/jobPriority';
 import { evaluateCollectedJobQuality } from '../services/jobQualityFilter';
 import { normalizeCollectedJob } from './normalizeCollectedJob';
 import { activeJobProviders } from './providerRegistry';
-import type { JobSourceProvider, ProviderRepositorySummary } from './types';
+import type { JobSourceProvider, NormalizedCollectedJob, ProviderRepositorySummary } from './types';
 
 export type ProviderRunnerError = {
   provider: string;
@@ -25,9 +26,19 @@ export type ProviderRunnerSummary = {
   possibleDuplicates: number;
   ignoredByLocation: number;
   ignoredByQuality: number;
+  highPriority: number;
+  mediumPriority: number;
+  lowPriority: number;
   repositoryErrors: number;
   errors: ProviderRunnerError[];
   repositorySummaries: ProviderRepositorySummary[];
+};
+
+type PrioritizedCollectedJob = {
+  originalIndex: number;
+  normalizedJob: NormalizedCollectedJob;
+  repositorySummary?: ProviderRepositorySummary;
+  priorityResult: JobPriorityResult;
 };
 
 export async function runJobProviders(
@@ -46,6 +57,9 @@ export async function runJobProviders(
     possibleDuplicates: 0,
     ignoredByLocation: 0,
     ignoredByQuality: 0,
+    highPriority: 0,
+    mediumPriority: 0,
+    lowPriority: 0,
     repositoryErrors: 0,
     errors: [],
     repositorySummaries: [],
@@ -76,7 +90,9 @@ export async function runJobProviders(
         }
       }
 
-      for (const collectedJob of collectedJobs) {
+      const prioritizedJobs: PrioritizedCollectedJob[] = [];
+
+      for (const [originalIndex, collectedJob] of collectedJobs.entries()) {
         const normalizedJob = normalizeCollectedJob(collectedJob, provider.name);
         const repositorySummary = repositorySummaries.get(normalizedJob.source);
         const qualityResult = evaluateCollectedJobQuality({
@@ -100,6 +116,35 @@ export async function runJobProviders(
           continue;
         }
 
+        const priorityResult = evaluateJobPriority(normalizedJob);
+        logger.info('Prioridade calculada para vaga coletada.', {
+          provider: provider.name,
+          source: normalizedJob.source,
+          title: normalizedJob.title,
+          priority: priorityResult.priority,
+          score: priorityResult.score,
+          reasons: priorityResult.reasons,
+        });
+
+        prioritizedJobs.push({
+          originalIndex,
+          normalizedJob,
+          repositorySummary,
+          priorityResult,
+        });
+      }
+
+      const orderedJobs = [...prioritizedJobs].sort((a, b) => {
+        const priorityDifference = getPrioritySortValue(a.priorityResult.priority) - getPrioritySortValue(b.priorityResult.priority);
+
+        if (priorityDifference !== 0) {
+          return priorityDifference;
+        }
+
+        return a.originalIndex - b.originalIndex;
+      });
+
+      for (const { normalizedJob, repositorySummary, priorityResult } of orderedJobs) {
         const duplicateCheck = await checkJobDuplicate(normalizedJob);
 
         if (duplicateCheck.duplicateByUrl) {
@@ -132,6 +177,7 @@ export async function runJobProviders(
 
         summary.createdJobs += 1;
         summary.created += 1;
+        incrementPrioritySummary(summary, priorityResult.priority);
         if (repositorySummary) {
           repositorySummary.created += 1;
         }
@@ -139,6 +185,9 @@ export async function runJobProviders(
           provider: provider.name,
           jobId: job.id,
           title: job.title,
+          priority: priorityResult.priority,
+          priorityScore: priorityResult.score,
+          priorityReasons: priorityResult.reasons,
           possibleDuplicateJobId: duplicateCheck.possibleDuplicateByTitleAndCompany?.id,
         });
       }
@@ -172,4 +221,30 @@ export async function runJobProviders(
   }
 
   return summary;
+}
+
+function getPrioritySortValue(priority: JobPriorityLevel): number {
+  if (priority === 'HIGH') {
+    return 0;
+  }
+
+  if (priority === 'MEDIUM') {
+    return 1;
+  }
+
+  return 2;
+}
+
+function incrementPrioritySummary(summary: ProviderRunnerSummary, priority: JobPriorityLevel): void {
+  if (priority === 'HIGH') {
+    summary.highPriority += 1;
+    return;
+  }
+
+  if (priority === 'MEDIUM') {
+    summary.mediumPriority += 1;
+    return;
+  }
+
+  summary.lowPriority += 1;
 }

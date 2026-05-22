@@ -82,6 +82,9 @@ export async function runRealJobCollection(
       ignoredByMissingEntryLevel: summary.ignoredByMissingEntryLevel,
       ignoredByLocation: summary.ignoredByLocation,
       ignoredByQuality: summary.ignoredByQuality,
+      highPriority: summary.highPriority,
+      mediumPriority: summary.mediumPriority,
+      lowPriority: summary.lowPriority,
       repositoryErrors: summary.repositoryErrors,
       errors: summary.errors.length,
     });

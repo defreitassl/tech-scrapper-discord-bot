@@ -26,7 +26,7 @@ export function buildProviderCollectionNotice(prefix: string, summary: ProviderR
       ? 'Nenhuma vaga nova'
       : `${summary.createdJobs} ${summary.createdJobs === 1 ? 'nova' : 'novas'}`;
   const errorLabel = `${summary.repositoryErrors} ${summary.repositoryErrors === 1 ? 'erro' : 'erros'}`;
-  const details = [`${createdLabel}`, `${summary.ignoredByQuality} por qualidade`, errorLabel];
+  const details = [`${createdLabel}`, buildPriorityNotice(summary), `${summary.ignoredByQuality} por qualidade`, errorLabel];
 
   if (breakdown) {
     details.push(`Por fonte: ${breakdown}`);
@@ -53,7 +53,7 @@ export function buildGithubCollectionNotice(summary: ProviderRunnerSummary): str
 export function buildGupyCollectionNotice(summary: ProviderRunnerSummary): string {
   const ignoredByLevel = summary.ignoredBySeniority + summary.ignoredByMissingEntryLevel;
   const termBreakdown = buildGupyTermBreakdown(summary);
-  const baseMessage = `Gupy: ${summary.createdJobs} novas, ${summary.totalIssuesRead} analisadas, ${summary.ignoredByLocation} localização, ${ignoredByLevel} nível, ${summary.ignoredByQuality} qualidade, ${summary.ignoredDuplicates} duplicatas, ${summary.repositoryErrors} ${summary.repositoryErrors === 1 ? 'erro' : 'erros'}.`;
+  const baseMessage = `Gupy: ${summary.createdJobs} novas. ${buildPriorityNotice(summary)}. ${summary.totalIssuesRead} analisadas, ${summary.ignoredByLocation} localização, ${ignoredByLevel} nível, ${summary.ignoredByQuality} qualidade, ${summary.ignoredDuplicates} duplicatas, ${summary.repositoryErrors} ${summary.repositoryErrors === 1 ? 'erro' : 'erros'}.`;
 
   if (!termBreakdown) {
     return baseMessage;
@@ -65,7 +65,7 @@ export function buildGupyCollectionNotice(summary: ProviderRunnerSummary): strin
 export function buildProgramathorCollectionNotice(summary: ProviderRunnerSummary): string {
   const ignoredByLevel = summary.ignoredBySeniority + summary.ignoredByMissingEntryLevel;
   const termBreakdown = buildTermBreakdown(summary);
-  const baseMessage = `Programathor: ${summary.createdJobs} novas, ${summary.totalIssuesRead} analisadas, ${summary.ignoredByDate} antigas/vencidas, ${summary.ignoredByLocation} localização, ${ignoredByLevel} nível, ${summary.ignoredByQuality} qualidade, ${summary.ignoredDuplicates} duplicatas, ${summary.repositoryErrors} ${summary.repositoryErrors === 1 ? 'erro' : 'erros'}.`;
+  const baseMessage = `Programathor: ${summary.createdJobs} novas. ${buildPriorityNotice(summary)}. ${summary.totalIssuesRead} analisadas, ${summary.ignoredByDate} antigas/vencidas, ${summary.ignoredByLocation} localização, ${ignoredByLevel} nível, ${summary.ignoredByQuality} qualidade, ${summary.ignoredDuplicates} duplicatas, ${summary.repositoryErrors} ${summary.repositoryErrors === 1 ? 'erro' : 'erros'}.`;
 
   if (!termBreakdown) {
     return baseMessage;
@@ -77,7 +77,7 @@ export function buildProgramathorCollectionNotice(summary: ProviderRunnerSummary
 export function buildRemotarCollectionNotice(summary: ProviderRunnerSummary): string {
   const ignoredByLevel = summary.ignoredBySeniority + summary.ignoredByMissingEntryLevel;
   const termBreakdown = buildTermBreakdown(summary);
-  const baseMessage = `Remotar: ${summary.createdJobs} novas, ${summary.totalIssuesRead} analisadas, ${summary.ignoredByDate} antigas, ${summary.ignoredByLocation} localização, ${ignoredByLevel} nível, ${summary.ignoredByQuality} qualidade, ${summary.ignoredDuplicates} duplicatas, ${summary.repositoryErrors} ${summary.repositoryErrors === 1 ? 'erro' : 'erros'}.`;
+  const baseMessage = `Remotar: ${summary.createdJobs} novas. ${buildPriorityNotice(summary)}. ${summary.totalIssuesRead} analisadas, ${summary.ignoredByDate} antigas, ${summary.ignoredByLocation} localização, ${ignoredByLevel} nível, ${summary.ignoredByQuality} qualidade, ${summary.ignoredDuplicates} duplicatas, ${summary.repositoryErrors} ${summary.repositoryErrors === 1 ? 'erro' : 'erros'}.`;
 
   if (!termBreakdown) {
     return baseMessage;
@@ -116,6 +116,10 @@ function formatSourceSummary(summary: ProviderRepositorySummary): string {
   const errors = summary.errors > 0 ? `, ${summary.errors} ${summary.errors === 1 ? 'erro' : 'erros'}` : '';
 
   return `${summary.source}: ${created}${errors}`;
+}
+
+function buildPriorityNotice(summary: ProviderRunnerSummary): string {
+  return `Prioridade: ${summary.highPriority} altas, ${summary.mediumPriority} médias, ${summary.lowPriority} baixas`;
 }
 
 function buildGupyTermBreakdown(summary: ProviderRunnerSummary): string {

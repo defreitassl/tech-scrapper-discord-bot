@@ -115,6 +115,7 @@ O runner atual aplica exatamente essa regra:
 - URL duplicada bloqueia a criacao e incrementa `ignoredDuplicates`;
 - titulo + empresa iguais incrementam `possibleDuplicates`, mas a vaga ainda e criada como `DRAFT`.
 - filtro de qualidade rejeita vagas coletadas antes da criacao no banco e incrementa `ignoredByQuality`;
+- priorizacao em memoria e aplicada depois do filtro de qualidade e antes da deduplicacao/escrita no banco;
 - providers podem retornar metadados de coleta, como `ignoredByLocation`, para aparecer no resumo operacional sem criar vagas no banco.
 - providers podem retornar erros internos, como falha por repositorio, sem interromper a execucao dos demais itens.
 - providers podem retornar `repositorySummaries` para o runner completar dados que dependem do banco, como duplicatas e vagas criadas.
@@ -142,6 +143,43 @@ A vaga e rejeitada quando:
 Para o perfil de tecnologia, o filtro aceita vagas com termos como `desenvolvimento`, `desenvolvedor`, `frontend`, `backend`, `fullstack`, `software`, `suporte técnico`, `QA`, `dados`, `tecnologia`, `programação`, `React`, `Node`, `Java`, `Python`, `SQL` ou `cloud`.
 
 Esse filtro nao altera schema, nao cria migrations, nao chama Gemini, nao marca vagas como `PENDING` e nao publica no Discord.
+
+## Priorizacao em memoria
+
+Depois que uma vaga coletada passa pelo filtro de qualidade, o runner executa `evaluateJobPriority(job)` em `src/services/jobPriority.ts`. Essa etapa e deterministica, barata e nao usa IA.
+
+O resultado contem:
+
+- `priority`: `HIGH`, `MEDIUM` ou `LOW`;
+- `score`: pontuacao numerica para diagnostico;
+- `reasons`: motivos que explicam pontos e penalidades.
+
+A pontuacao favorece principalmente:
+
+- estagio remoto em tecnologia;
+- estagio em Minas Gerais/BH/regiao;
+- trainee remoto;
+- junior remoto;
+- junior em Minas Gerais/BH/regiao;
+- outras vagas uteis com prioridade menor.
+
+Regras de alto nivel:
+
+- nivel de entrada soma pontos, com maior peso para estagio/internship, depois trainee e junior;
+- remoto soma mais que hibrido ou presencial;
+- remoto global/Brasil/LATAM/Americas e Minas Gerais/BH/regiao somam pontos extras;
+- perfil tecnico e campos de qualidade como descricao, stacks e URL aumentam o score;
+- experiencia de 2+ ou 3+ anos, texto generico, localizacao incompatível, falta de descricao e falta de URL reduzem o score.
+
+Classificacao:
+
+- `score >= 90`: `HIGH`;
+- `score >= 55`: `MEDIUM`;
+- abaixo disso: `LOW`.
+
+O runner ordena as vagas aceitas por qualidade antes de salvar: `HIGH`, depois `MEDIUM`, depois `LOW`, preservando a ordem original dentro da mesma prioridade. Vagas `LOW` nao sao descartadas por essa etapa; se passarem na qualidade e na deduplicacao forte, continuam sendo salvas como `DRAFT`.
+
+A prioridade ainda nao e persistida no banco, nao altera schema Prisma e nao cria migration. O diagnostico da coleta contabiliza quantas vagas criadas foram `highPriority`, `mediumPriority` e `lowPriority`, e os logs do terminal mostram `priority`, `score` e `reasons`. Em etapa futura, esses campos podem ser persistidos e usados para apoiar autoaprovacao, mantendo revisao humana como regra ate decisao explicita.
 
 ## Status sugerido apos coleta
 
