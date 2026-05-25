@@ -20,6 +20,6 @@ export const externalJobProviders: JobSourceProvider[] = [
   remotiveProvider,
 ];
 export const atsJobProviders: JobSourceProvider[] = [greenhouseProvider, leverProvider, ashbyProvider];
-export const experimentalJobProviders: JobSourceProvider[] = [gupyProvider, programathorProvider, remotarProvider];
-export const realJobProviders: JobSourceProvider[] = [githubJobsProvider, ...externalJobProviders];
+export const experimentalJobProviders: JobSourceProvider[] = [gupyProvider, programathorProvider];
+export const realJobProviders: JobSourceProvider[] = [githubJobsProvider, ...externalJobProviders, remotarProvider];
 export const activeJobProviders: JobSourceProvider[] = [...testJobProviders, ...realJobProviders, ...atsJobProviders];

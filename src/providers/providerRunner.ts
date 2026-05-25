@@ -172,6 +172,9 @@ export async function runJobProviders(
             ...normalizedJob,
             status: JobStatus.DRAFT,
             useAi: false,
+            priority: priorityResult.priority,
+            priorityScore: priorityResult.score,
+            priorityReasons: JSON.stringify(priorityResult.reasons),
           },
         });
 

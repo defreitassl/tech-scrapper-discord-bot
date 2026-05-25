@@ -440,6 +440,75 @@ export const adminStyles = `
             white-space: nowrap;
           }
 
+          .review-badges {
+            display: flex;
+            flex: 0 0 auto;
+            align-items: flex-end;
+            flex-direction: column;
+            gap: 6px;
+          }
+
+          .priority-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 24px;
+            padding: 4px 9px;
+            border: 1px solid transparent;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 850;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            white-space: nowrap;
+          }
+
+          .priority-high {
+            color: #7c2d12;
+            border-color: #fdba74;
+            background: #fff7ed;
+            box-shadow: inset 3px 0 0 #f97316;
+          }
+
+          .priority-medium {
+            color: #1e3a8a;
+            border-color: #bfdbfe;
+            background: #eff6ff;
+          }
+
+          .priority-low {
+            color: #475569;
+            border-color: #cbd5e1;
+            background: #f8fafc;
+          }
+
+          .priority-none {
+            color: #64748b;
+            border-color: #e2e8f0;
+            background: #ffffff;
+          }
+
+          .review-priority-details {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+            margin-top: 12px;
+          }
+
+          .priority-score {
+            color: #334155;
+            font-size: 12px;
+            font-weight: 850;
+          }
+
+          .priority-reasons {
+            color: var(--text-muted);
+            font-size: 12px;
+            line-height: 1.4;
+            overflow-wrap: anywhere;
+          }
+
           .review-meta-grid {
             display: grid;
             grid-template-columns: repeat(4, minmax(0, 1fr));

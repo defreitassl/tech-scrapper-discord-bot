@@ -4,7 +4,7 @@ Data da investigacao: 2026-05-22.
 
 ## Resumo
 
-A Remotar e tecnicamente viavel para uma primeira coleta experimental, manual e conservadora.
+A Remotar e tecnicamente viavel para coleta conservadora por JSON publico. Ela comecou como provider experimental manual e foi promovida para a coleta automatica diaria em 2026-05-25, apos revisao operacional apontar melhor volume e aderencia entre os providers experimentais.
 
 O reconhecimento obrigatorio foi feito com Playwright MCP em paginas publicas da Remotar. A UI abriu sem login obrigatorio para visualizar listagens e detalhes, sem captcha e sem bloqueio tecnico. A rede mostrou endpoint JSON publico suficiente para a coleta:
 
@@ -206,9 +206,9 @@ Implementar agora como provider experimental manual usando JSON publico.
 
 Regras recomendadas:
 
-- provider experimental;
-- acionamento manual;
-- fora da coleta automatica;
+- provider em `realJobProviders`;
+- acionamento manual tambem disponivel;
+- coleta automatica diaria de baixa frequencia;
 - usar `fetchPublicJson` na camada `src/scraping/`;
 - sem Playwright operacional, porque JSON publico e suficiente;
 - sem login;
@@ -222,3 +222,5 @@ Regras recomendadas:
 - `useAi = false`;
 - sem Gemini;
 - sem Discord.
+
+A promocao para coleta automatica nao altera revisao humana, nao prepara vagas, nao marca `PENDING` e nao publica no Discord.

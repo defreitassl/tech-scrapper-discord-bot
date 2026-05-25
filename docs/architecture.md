@@ -16,12 +16,12 @@
 - `src/admin/routes/schedule.routes.ts`: rotas de configuracao do envio agendado.
 - `src/admin/views/`: renderizacao server-side do painel. `layout.ts` contem o layout base, `styles.ts` contem o CSS inline, `components.ts` contem componentes HTML reutilizaveis, `jobs.views.ts` contem telas de vagas e `schedule.views.ts` contem a tela de agendamento.
 - `src/admin/helpers/`: helpers puros do painel. `forms.ts` concentra parse e normalizacao de formularios, `validators.ts` concentra validacoes de formulario/status, `status.ts` concentra labels de status, `formatters.ts` concentra formatacao visual simples e `notifications.ts` concentra notificacoes temporarias via query params.
-- `src/providers/`: base de providers de coleta. Inclui contrato (`types.ts`), normalizacao (`normalizeCollectedJob.ts`), registry de providers ativos (`providerRegistry.ts`), provider mock (`mockJobs.provider.ts`), provider GitHub (`githubJobs.provider.ts`), providers externos por APIs publicas JSON (`himalayas.provider.ts`, `jobicy.provider.ts`, `remoteOk.provider.ts`, `remotive.provider.ts`), providers manuais de ATS publicos (`greenhouse.provider.ts`, `lever.provider.ts`, `ashby.provider.ts`), providers experimentais Gupy (`gupy.provider.ts`), Programathor (`programathor.provider.ts`) e Remotar (`remotar.provider.ts`), lista controlada de empresas (`companyTargets.ts`), helpers compartilhados e runner (`providerRunner.ts`).
+- `src/providers/`: base de providers de coleta. Inclui contrato (`types.ts`), normalizacao (`normalizeCollectedJob.ts`), registry de providers ativos (`providerRegistry.ts`), provider mock (`mockJobs.provider.ts`), provider GitHub (`githubJobs.provider.ts`), providers externos por APIs publicas JSON (`himalayas.provider.ts`, `jobicy.provider.ts`, `remoteOk.provider.ts`, `remotive.provider.ts`), provider Remotar por JSON publico (`remotar.provider.ts`), providers manuais de ATS publicos (`greenhouse.provider.ts`, `lever.provider.ts`, `ashby.provider.ts`), providers experimentais manuais Gupy (`gupy.provider.ts`) e Programathor (`programathor.provider.ts`), lista controlada de empresas (`companyTargets.ts`), helpers compartilhados e runner (`providerRunner.ts`).
 - `src/scraping/`: camada preparatoria e isolada para futuras fontes publicas mais dificeis. Inclui tipos genericos, politica de permissao, helpers leves de HTML, cliente publico simples para HTML/JSON e uma subcamada experimental `src/scraping/browser/` para Playwright. Os providers ATS usam o cliente JSON publico dessa camada. A subcamada Playwright continua isolada, sem salvar no banco e sem alterar regras do runner.
 - `src/services/publishPendingJobs.ts`: fluxo de publicacao de vagas, incluindo envio em lote de vagas `PENDING` e envio de uma unica vaga.
 - `src/services/jobDeduplication.ts`: primeira camada reutilizavel de deduplicacao de vagas. Bloqueia duplicata forte por URL normalizada e sinaliza possivel duplicata por titulo + empresa normalizados.
 - `src/services/jobQualityFilter.ts`: filtro deterministico de qualidade para vagas coletadas por providers. Rejeita vagas antes da criacao no banco quando faltam dados essenciais, falta canal claro de candidatura (URL ou e-mail no texto), ha sinais fortes de senioridade/experiencia alta ou a vaga parece fora de tecnologia.
-- `src/services/jobPriority.ts`: priorizacao deterministica em memoria para vagas coletadas aprovadas pelo filtro de qualidade. Favorece estagio remoto, estagio em Minas Gerais/BH/regiao, trainee remoto e junior remoto, sem descartar vagas `LOW` que continuem uteis.
+- `src/services/jobPriority.ts`: priorizacao deterministica para vagas coletadas aprovadas pelo filtro de qualidade. Favorece estagio remoto, estagio em Minas Gerais/BH/regiao, trainee remoto e junior remoto, sem descartar vagas `LOW` que continuem uteis. O runner persiste `priority`, `priorityScore` e `priorityReasons` no `JobPost`.
 - `src/services/schedulerSettings.ts`: leitura, criacao padrao, validacao e atualizacao das configuracoes de envio agendado.
 - `src/services/schedulerOperations.ts`: consultas operacionais do agendamento, como limite restante do dia e proximas vagas `PENDING`.
 - `src/services/scheduledPublisher.ts`: registro dos crons de publicacao e aplicacao do limite diario antes de chamar `publishPendingJobs`.
@@ -72,7 +72,7 @@ A pesquisa da Gupy fica em `docs/gupy-scraping-research.md`. O provider `src/pro
 
 A pesquisa do Programathor fica em `docs/programathor-scraping-research.md`. O provider `src/providers/programathor.provider.ts` fica registrado apenas em `experimentalJobProviders` e e acionado manualmente por `POST /admin/jobs/collect-programathor`. Como nao foi encontrado endpoint JSON publico de vagas, ele usa HTML publico simples da camada `src/scraping/` e detalhes com JSON-LD embutido, sem Playwright operacional, sem login/cookies/proxy/bypass, com limite de 20 vagas retornadas por execucao, fora de `realJobProviders` e fora da coleta automatica.
 
-A pesquisa da Remotar fica em `docs/remotar-scraping-research.md`. O provider `src/providers/remotar.provider.ts` fica registrado apenas em `experimentalJobProviders` e e acionado manualmente por `POST /admin/jobs/collect-remotar`. O reconhecimento foi feito com Playwright MCP e encontrou endpoint JSON publico em `https://api.remotar.com.br/jobs`; por isso a coleta usa `fetchPublicJson`, sem Playwright operacional, sem login/cookies/proxy/bypass, com limite de 20 vagas retornadas por execucao, fora de `realJobProviders` e fora da coleta automatica.
+A pesquisa da Remotar fica em `docs/remotar-scraping-research.md`. O provider `src/providers/remotar.provider.ts` foi promovido para `realJobProviders` apos a revisao operacional de 2026-05-25, por ter melhor volume e aderencia entre os experimentais. Ele tambem continua acionavel manualmente por `POST /admin/jobs/collect-remotar`. O reconhecimento foi feito com Playwright MCP e encontrou endpoint JSON publico em `https://api.remotar.com.br/jobs`; por isso a coleta usa `fetchPublicJson`, sem Playwright operacional, sem login/cookies/proxy/bypass, com limite de 20 vagas retornadas por execucao.
 
 Antes de implementar plataformas maiores, a fonte deve ser avaliada conforme `docs/scraping-platforms-research.md`. LinkedIn, Gupy, Solides e similares nao devem ser implementados por suposicao; precisam de pesquisa especifica, decisao explicita e respeito a termos e bloqueios tecnicos.
 
@@ -84,7 +84,7 @@ O fluxo de teste/mock e acionado pela rota `POST /admin/jobs/collect`, exibida n
 4. Cada vaga coletada passa por `normalizeCollectedJob`, que remove espacos duplicados em campos estruturados, transforma strings vazias em `null`, preserva `rawText` quando existir e garante `source`.
 5. Antes de criar no banco, o runner chama `evaluateCollectedJobQuality` em `src/services/jobQualityFilter.ts`.
 6. Vagas rejeitadas pelo filtro de qualidade nao sao criadas, incrementam `ignoredByQuality` e registram os motivos no terminal.
-7. Para vagas aceitas por qualidade, o runner chama `evaluateJobPriority` em `src/services/jobPriority.ts`. A prioridade e calculada em memoria, logada com `priority`, `score` e `reasons`, e ainda nao e persistida no banco.
+7. Para vagas aceitas por qualidade, o runner chama `evaluateJobPriority` em `src/services/jobPriority.ts`. A prioridade e calculada, logada com `priority`, `score` e `reasons`, e persistida no banco em `priority`, `priorityScore` e `priorityReasons`.
 8. O runner ordena as vagas aceitas por prioridade antes de salvar: `HIGH`, depois `MEDIUM`, depois `LOW`; dentro da mesma prioridade, preserva a ordem original do provider.
 9. Para cada vaga ordenada, o runner chama `checkJobDuplicate` em `src/services/jobDeduplication.ts`.
 10. Duplicata forte por URL normalizada bloqueia a criacao.
@@ -94,7 +94,7 @@ O fluxo de teste/mock e acionado pela rota `POST /admin/jobs/collect`, exibida n
 14. A coleta nao chama Gemini/IA, nao marca vagas como `PENDING` e nao envia nada ao Discord.
 15. O painel redireciona de volta para `/admin/jobs` com um toast resumindo novas vagas, duplicatas por URL ignoradas, prioridades criadas quando couber e metadados especificos da coleta quando existirem. Para coletas com diagnostico por fonte, o toast mostra apenas um resumo compacto por provider/repositorio; os detalhes completos continuam nos logs do terminal.
 
-A prioridade inicial valoriza mais estagio remoto em tecnologia, depois estagio em Minas Gerais/BH/regiao, trainee remoto, junior remoto, junior em Minas Gerais/BH/regiao e, por fim, outras vagas uteis para entendimento de mercado. Vagas junior, presenciais ou hibridas boas continuam podendo ser salvas como rascunho; a prioridade apenas melhora a ordem de processamento e o diagnostico. Em etapa futura, `priority` e `score` podem virar campos persistidos e apoiar autoaprovacao, mas isso nao altera o schema Prisma agora.
+A prioridade inicial valoriza mais estagio remoto em tecnologia, depois estagio em Minas Gerais/BH/regiao, trainee remoto, junior remoto, junior em Minas Gerais/BH/regiao e, por fim, outras vagas uteis para entendimento de mercado. Vagas junior, presenciais ou hibridas boas continuam podendo ser salvas como rascunho; a prioridade melhora a ordem de processamento, a exibicao no painel e o diagnostico. Ela nao autoaprova vagas e nao altera status; em etapa futura, pode apoiar uma regra de autoaprovacao com criterios auditaveis.
 
 O provider mock retorna vagas fake para validar arquitetura e fluxo operacional.
 
@@ -212,7 +212,7 @@ O provider consulta poucas fontes/termos, nao pagina agressivamente, limita a 20
 
 Depois dos filtros do provider, o runner central normaliza, aplica qualidade, deduplica e cria registros como `DRAFT` com `useAi = false`. A coleta Programathor nao chama Gemini/IA, nao envia ao Discord e nao transforma vagas em `PENDING`.
 
-## Fluxo de coleta experimental Remotar
+## Fluxo de coleta Remotar
 
 A rota `POST /admin/jobs/collect-remotar`, exibida na listagem como `Coletar Remotar`, executa apenas `remotarProvider`.
 
@@ -224,13 +224,15 @@ O provider consulta poucos termos/fontes, nao pagina agressivamente, limita a 20
 
 Depois dos filtros do provider, o runner central normaliza, aplica qualidade, deduplica e cria registros como `DRAFT` com `useAi = false`. A coleta Remotar nao chama Gemini/IA, nao envia ao Discord e nao transforma vagas em `PENDING`.
 
+A Remotar tambem roda na coleta automatica diaria por estar em `realJobProviders`. A promocao nao altera o fluxo de revisao: nenhuma vaga e preparada, aprovada ou publicada automaticamente.
+
 ## Fluxo de coleta automatica
 
 O painel admin inicia `scheduledCollector` junto com o processo de `npm run admin`.
 
 A coleta automatica roda diariamente as 08:00 no timezone `America/Sao_Paulo`, usando `node-cron` com a expressao `0 8 * * *`.
 
-Ela executa apenas os providers reais registrados em `realJobProviders`, atualmente GitHub, Himalayas, Jobicy, RemoteOK e Remotive. O `mockJobsProvider` fica em `testJobProviders` e nao roda automaticamente. Os providers ATS ficam em `atsJobProviders`; Gupy, Programathor e Remotar ficam em `experimentalJobProviders`. Nesta etapa, ATS e experimentais rodam apenas por coleta manual.
+Ela executa apenas os providers reais registrados em `realJobProviders`, atualmente GitHub, Himalayas, Jobicy, RemoteOK, Remotive e Remotar. O `mockJobsProvider` fica em `testJobProviders` e nao roda automaticamente. Os providers ATS ficam em `atsJobProviders` e nao entram na coleta automatica nesta etapa. Gupy e Programathor ficam em `experimentalJobProviders` e rodam apenas por coleta manual.
 
 A coleta automatica chama o mesmo runner de providers, entao preserva as regras centrais:
 
@@ -269,7 +271,7 @@ O painel admin e a interface operacional do projeto. Ele permite criar, revisar,
 
 A listagem `/admin/jobs` organiza as vagas por fluxo operacional:
 
-- `Para revisar`: vagas `DRAFT`, principalmente coletadas por providers, exibidas como uma fila de curadoria. Cada card mostra contexto de decisao, como titulo, empresa, fonte, localizacao, modalidade, nivel, stacks, resumo curto, link original e data de criacao/coleta. As acoes principais continuam sendo `Preparar`, `Ver detalhes` e `Arquivar`.
+- `Para revisar`: vagas `DRAFT`, principalmente coletadas por providers, exibidas como uma fila de curadoria. Cada card mostra contexto de decisao, como prioridade, score, principais motivos da prioridade, titulo, empresa, fonte, localizacao, modalidade, nivel, stacks, resumo curto, link original e data de criacao/coleta. A secao ordena primeiro `HIGH`, depois `MEDIUM`, `LOW`, sem prioridade e, dentro de cada grupo, `createdAt` desc. As acoes principais continuam sendo `Preparar`, `Ver detalhes` e `Arquivar`.
 - `Prontas para envio`: vagas `PENDING`, que podem ser enviadas manualmente pela listagem ou pelo agendamento.
 - `Historico recente`: vagas `SENT` e `ERROR`, limitado visualmente as mais recentes para manter a tela leve.
 - `Arquivadas`: vagas `ARCHIVED`, exibidas no final com limite visual simples.

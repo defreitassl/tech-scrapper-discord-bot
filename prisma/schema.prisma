@@ -15,6 +15,12 @@ enum JobStatus {
   ARCHIVED
 }
 
+enum JobPriority {
+  HIGH
+  MEDIUM
+  LOW
+}
+
 model JobPost {
   id               String    @id @default(cuid())
   title            String?
@@ -32,6 +38,9 @@ model JobPost {
   aiGeneratedText  String?
   useAi            Boolean   @default(false)
   status           JobStatus @default(DRAFT)
+  priority         JobPriority?
+  priorityScore    Int?
+  priorityReasons  String?
   sentAt           DateTime?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt

@@ -13,6 +13,8 @@
 - Geracao de mensagem com Google AI Studio/Gemini.
 - Primeiro provider real via API oficial do GitHub, coletando issues abertas e recentes de repositorios brasileiros de vagas como `DRAFT`.
 - Providers externos por APIs publicas JSON: Himalayas, Jobicy, RemoteOK e Remotive.
+- Provider Remotar por JSON publico promovido para a coleta automatica diaria, mantendo vagas como `DRAFT`.
+- Prioridade de vagas coletadas persistida em `JobPost` e exibida no painel para apoiar revisao humana.
 - Acao manual para preparar rascunhos coletados com IA e coloca-los na fila como `PENDING`.
 - Coleta automatica diaria dos providers reais as 08:00, criando apenas `DRAFT`.
 
@@ -55,6 +57,21 @@ Observacao: o envio agendado de vagas `PENDING` ja existe e e configurado no pai
 - Mantidas regras de seguranca: vagas entram como `DRAFT`, `useAi = false`, sem Gemini, sem Discord e sem `PENDING` automatico.
 - Adicionados filtros conservadores de data, senioridade e localidade remota.
 - Preservada URL original para atribuicao/linkback de Jobicy, RemoteOK e Remotive.
+
+## V1.4.1 Remotar na coleta automatica
+
+- Promovida Remotar para `realJobProviders` apos revisao operacional em 2026-05-25.
+- Mantida rota manual `Coletar Remotar`.
+- Gupy e Programathor continuam apenas manuais/experimentais.
+- Coleta automatica continua criando apenas `DRAFT`, sem Gemini, sem Discord e sem `PENDING` automatico.
+
+## V1.4.2 Prioridade persistida para revisao
+
+- Adicionados `priority`, `priorityScore` e `priorityReasons` ao `JobPost`.
+- `providerRunner` salva a prioridade calculada por `evaluateJobPriority`.
+- Painel mostra badge, score e motivos na fila `Para revisar` e nos detalhes.
+- A fila `Para revisar` ordena `HIGH`, `MEDIUM`, `LOW`, sem prioridade e `createdAt` desc.
+- Prioridade ainda nao autoaprova, nao chama Gemini, nao muda `PENDING` e nao publica no Discord.
 
 ## V1.5 autenticacao simples
 

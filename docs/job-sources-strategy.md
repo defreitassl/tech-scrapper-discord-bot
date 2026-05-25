@@ -80,11 +80,11 @@ Depois da coleta, a revisao humana continua obrigatoria. O admin pode usar `Prep
 
 O filtro de qualidade nao substitui a revisao humana. Ele apenas reduz ruido antes da criacao do rascunho e registra rejeicoes em `ignoredByQuality` com os motivos no terminal.
 
-Alem do filtro de qualidade, o runner calcula uma prioridade deterministica em memoria para cada vaga aprovada antes de salvar. A prioridade valoriza principalmente estagio remoto em tecnologia, estagio em Minas Gerais/BH/regiao, trainee remoto e junior remoto. Vagas junior, hibridas ou presenciais boas continuam podendo ser salvas como `DRAFT`; a prioridade apenas ordena melhor a criacao e melhora o diagnostico. Vagas `LOW` nao sao descartadas por prioridade se ja passaram no filtro de qualidade atual.
+Alem do filtro de qualidade, o runner calcula uma prioridade deterministica para cada vaga aprovada antes de salvar. A prioridade valoriza principalmente estagio remoto em tecnologia, estagio em Minas Gerais/BH/regiao, trainee remoto e junior remoto. Vagas junior, hibridas ou presenciais boas continuam podendo ser salvas como `DRAFT`; a prioridade ordena melhor a criacao, melhora o diagnostico e aparece no painel para revisao humana. Vagas `LOW` nao sao descartadas por prioridade se ja passaram no filtro de qualidade atual.
 
-A prioridade ainda nao e persistida no banco e nao altera schema Prisma. O resumo operacional conta vagas criadas por `HIGH`, `MEDIUM` e `LOW`, e os logs mostram pontuacao e motivos. No futuro, `priority` e `score` podem virar campos persistidos e apoiar uma regra de autoaprovacao, mas vagas coletadas seguem exigindo curadoria humana nesta etapa.
+A prioridade agora e persistida no banco no `JobPost` com `priority`, `priorityScore` e `priorityReasons`. `priority` usa o enum `JobPriority` (`HIGH`, `MEDIUM`, `LOW`), `priorityScore` guarda a pontuacao numerica e `priorityReasons` guarda os motivos serializados como JSON string. O resumo operacional continua contando vagas criadas por prioridade, e os logs mostram pontuacao e motivos. Esses campos ajudam a curadoria, mas nao autoaprovam vagas; vagas coletadas seguem exigindo revisao humana nesta etapa.
 
-Alem da coleta manual no painel, o processo admin agenda a coleta dos providers reais diariamente as 08:00 em `America/Sao_Paulo`. Essa rotina executa GitHub e as APIs externas registradas, nao executa providers de teste/mock nem ATS publicos, nao chama IA, nao publica no Discord e salva somente rascunhos `DRAFT`.
+Alem da coleta manual no painel, o processo admin agenda a coleta dos providers reais diariamente as 08:00 em `America/Sao_Paulo`. Essa rotina executa GitHub, as APIs externas registradas e Remotar, nao executa providers de teste/mock nem ATS publicos, nao chama IA, nao publica no Discord e salva somente rascunhos `DRAFT`.
 
 ### Paginas publicas simples
 
@@ -139,7 +139,7 @@ Regras do experimento:
 
 Se o Programathor passar a exigir login, captcha, Cloudflare/bypass, proxy, credenciais ou qualquer contorno tecnico, a coleta deve ser interrompida.
 
-### Remotar experimental
+### Remotar automatica
 
 A Remotar foi investigada com Playwright MCP em `docs/remotar-scraping-research.md`. A UI publica renderiza listagens com JavaScript, mas os dados foram observados em endpoint JSON publico:
 
@@ -147,9 +147,9 @@ A Remotar foi investigada com Playwright MCP em `docs/remotar-scraping-research.
 https://api.remotar.com.br/jobs
 ```
 
-Por isso, a estrategia recomendada para a primeira versao e usar esse JSON publico em provider experimental manual, com baixo volume e sem coleta automatica. O provider `src/providers/remotar.provider.ts` fica em `experimentalJobProviders`, mas a rota manual `POST /admin/jobs/collect-remotar` chama apenas esse provider.
+Por isso, a estrategia atual usa esse JSON publico em baixo volume. Apos a revisao operacional de 2026-05-25, a Remotar foi promovida para `realJobProviders` e passou a rodar na coleta automatica diaria por apresentar melhor volume e aderencia entre os providers avaliados. A rota manual `POST /admin/jobs/collect-remotar` continua chamando apenas esse provider.
 
-Regras do experimento:
+Regras da coleta:
 
 - reconhecimento feito com Playwright MCP;
 - sem login;
@@ -164,6 +164,8 @@ Regras do experimento:
 - `useAi = false`;
 - sem IA;
 - sem Discord.
+
+A promocao da Remotar nao autoaprova vagas, nao prepara mensagens, nao marca vagas como `PENDING` e nao publica no Discord. Gupy e Programathor permanecem manuais.
 
 Se a Remotar passar a exigir login, captcha, Cloudflare/bypass, proxy, credenciais ou qualquer contorno tecnico, a coleta deve ser interrompida.
 
@@ -180,7 +182,7 @@ LinkedIn, Gupy, Solides e plataformas similares podem ter:
 
 Essas fontes nao devem ser o ponto de partida. Tambem nao se deve tentar burlar login, captcha ou bloqueios.
 
-Antes de implementar qualquer plataforma maior, consulte `docs/scraping-platforms-research.md`. A recomendacao atual e priorizar Greenhouse, Lever, Ashby, sites proprios de empresas e paginas publicas de carreiras quando houver API publica, RSS, endpoint JSON publico ou HTML simples. LinkedIn deve ser evitado; Gupy e Remotar ficam apenas como experimentos manuais por endpoint publico validado; Programathor fica apenas como experimento manual por HTML publico simples; Solides fica para depois e apenas com endpoints publicos permitidos.
+Antes de implementar qualquer plataforma maior, consulte `docs/scraping-platforms-research.md`. A recomendacao atual e priorizar Greenhouse, Lever, Ashby, sites proprios de empresas e paginas publicas de carreiras quando houver API publica, RSS, endpoint JSON publico ou HTML simples. LinkedIn deve ser evitado; Remotar foi promovida para coleta automatica por endpoint publico validado e baixa frequencia; Gupy fica apenas como experimento manual por endpoint publico validado; Programathor fica apenas como experimento manual por HTML publico simples; Solides fica para depois e apenas com endpoints publicos permitidos.
 
 ## Recomendacao
 
@@ -194,4 +196,4 @@ Comecar por fontes simples, publicas e revisaveis:
 
 Na fase inicial, qualquer vaga coletada automaticamente deve entrar como `DRAFT` ou equivalente para revisao humana antes de publicacao.
 
-Fontes como Arbeitnow, Findwork, Jobdata, LinkedIn e Solides continuam fora desta etapa por menor aderencia, necessidade de chave/login, uso comercial, captcha, protecoes anti-bot ou risco de scraping pesado. Gupy e Remotar ficam apenas como experimentos manuais por endpoint publico observado. Programathor fica apenas como experimento manual por HTML publico simples. Greenhouse, Lever e Ashby ficam limitados a endpoints publicos por empresa cadastrada e revisao humana.
+Fontes como Arbeitnow, Findwork, Jobdata, LinkedIn e Solides continuam fora desta etapa por menor aderencia, necessidade de chave/login, uso comercial, captcha, protecoes anti-bot ou risco de scraping pesado. Remotar fica na coleta automatica diaria por endpoint publico observado e revisao humana obrigatoria. Gupy fica apenas como experimento manual por endpoint publico observado. Programathor fica apenas como experimento manual por HTML publico simples. Greenhouse, Lever e Ashby ficam limitados a endpoints publicos por empresa cadastrada e revisao humana.

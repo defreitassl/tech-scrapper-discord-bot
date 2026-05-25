@@ -8,7 +8,7 @@ Fontes recomendadas primeiro:
 
 - Greenhouse, Lever e Ashby ja foram iniciados por endpoints JSON publicos da propria empresa. Workable continua para depois/avaliar caso a caso.
 - Sites proprios de empresas e paginas publicas de carreiras com HTML simples ou RSS.
-- Programathor ja foi iniciado como experimento manual por HTML publico simples apos pesquisa especifica. Remotar ja foi iniciada como experimento manual por JSON publico apos pesquisa especifica com Playwright MCP.
+- Programathor ja foi iniciado como experimento manual por HTML publico simples apos pesquisa especifica. Remotar foi iniciada como experimento manual por JSON publico apos pesquisa especifica com Playwright MCP e promovida para coleta automatica diaria em 2026-05-25 por melhor volume e aderencia.
 
 Fontes para evitar nesta etapa:
 
@@ -67,8 +67,8 @@ Fontes para evitar nesta etapa:
 - JS-heavy: medio na UI, mas a coleta pode usar JSON publico.
 - Risco de captcha/bloqueio: baixo no reconhecimento feito; se surgir captcha, login obrigatorio, bloqueio ou necessidade de bypass, a coleta deve parar.
 - Dificuldade estimada: baixa a media.
-- Recomendacao: iniciado como provider experimental manual.
-- Estrategia implementada: JSON publico via `fetchPublicJson`, filtros por `search`, `tagId` e `categoryId`, limite de 20 vagas por execucao, sem Playwright operacional, login, cookies autenticados, credenciais, proxy, rotacao de IP, captcha ou bypass.
+- Recomendacao: iniciado como provider experimental manual e promovido para coleta automatica diaria em 2026-05-25.
+- Estrategia implementada: JSON publico via `fetchPublicJson`, filtros por `search`, `tagId` e `categoryId`, limite de 20 vagas por execucao, sem Playwright operacional, login, cookies autenticados, credenciais, proxy, rotacao de IP, captcha ou bypass. A coleta continua criando apenas `DRAFT`, sem Gemini, sem Discord e sem `PENDING` automatico.
 
 ## Sites proprios de empresas
 

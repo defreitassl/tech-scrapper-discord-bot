@@ -114,6 +114,8 @@ Para vagas antigas ou rascunhos, a acao `Aprovar para envio` continua disponivel
 
 Para vagas coletadas como rascunho, use `Preparar e colocar na fila` nos detalhes da vaga. Essa acao gera `aiGeneratedText` com Google AI Studio/Gemini, marca `useAi = true` e altera o status para `PENDING`, sem enviar a vaga ao Discord. Se a IA falhar, a vaga permanece como `DRAFT` e o painel mostra um aviso de erro.
 
+Vagas coletadas por providers tambem recebem uma prioridade persistida (`HIGH`, `MEDIUM` ou `LOW`), score e motivos calculados. A secao `Para revisar` usa esses dados para destacar e ordenar rascunhos, mas a prioridade nao aprova, nao prepara e nao publica vagas automaticamente.
+
 Para enviar vagas pendentes ao Discord, use o botao `Enviar vagas pendentes` na listagem. O painel busca ate 5 vagas com status `PENDING`, envia no canal configurado em `DISCORD_CHANNEL_ID` e atualiza cada vaga enviada para `SENT`.
 
 Para enviar uma vaga especifica, acesse os detalhes e use `Enviar esta vaga agora`. Vagas ja enviadas nao sao reenviadas e vagas arquivadas nao sao publicadas.
@@ -220,9 +222,9 @@ O provider filtra vagas vencidas, vagas com `datePosted` acima de 30 dias, senio
 
 As vagas Programathor passam pelo runner central, entram como `DRAFT`, com `useAi = false`, sem chamar Gemini/IA e sem enviar ao Discord.
 
-### Coleta experimental Remotar
+### Coleta Remotar
 
-A listagem tambem possui o botao `Coletar Remotar`. Ele executa apenas o provider experimental `src/providers/remotar.provider.ts`, registrado em `experimentalJobProviders` e fora da coleta automatica.
+A listagem tambem possui o botao `Coletar Remotar`. Ele executa apenas o provider `src/providers/remotar.provider.ts`. A Remotar tambem foi promovida para `realJobProviders`, entao entra na coleta automatica diaria junto com GitHub e as fontes externas.
 
 O provider foi criado apos reconhecimento obrigatorio com Playwright MCP, documentado em `docs/remotar-scraping-research.md`. A Remotar carrega listagens por endpoint JSON publico em `https://api.remotar.com.br/jobs`, com filtros publicos por busca, categoria e tags. Como JSON publico e preferivel a browser scraping, a coleta usa `fetchPublicJson` pela camada `src/scraping/`, sem Playwright operacional.
 
@@ -230,13 +232,13 @@ A coleta consulta poucos termos de tecnologia para estagio, junior, desenvolvime
 
 O provider filtra vagas antigas acima de 30 dias, senioridade acima de entrada, falta de sinal de nivel, ruido fora de tecnologia e localizacao fora da regra. Como a Remotar e focada em remoto, vagas remotas sao aceitas quando nao ha restricao explicita incompatível com Brasil/LATAM/Americas; hibridas/presenciais so entram quando indicam Minas Gerais/Belo Horizonte/regiao. O limite e de 20 vagas retornadas por execucao.
 
-As vagas Remotar passam pelo runner central, entram como `DRAFT`, com `useAi = false`, sem chamar Gemini/IA e sem enviar ao Discord.
+As vagas Remotar passam pelo runner central, entram como `DRAFT`, com `useAi = false`, sem chamar Gemini/IA e sem enviar ao Discord. A promocao para coleta automatica nao prepara vagas, nao marca como `PENDING` e nao publica nada automaticamente.
 
 ### Coleta automatica diaria
 
 Quando o painel admin esta rodando com `npm run admin`, o sistema agenda automaticamente a coleta dos providers reais todos os dias as 08:00 no timezone `America/Sao_Paulo`.
 
-Essa rotina executa apenas providers reais de baixa frequencia ja habilitados para agendamento, incluindo GitHub, Himalayas, Jobicy, RemoteOK e Remotive. O provider mock/de teste e os providers ATS publicos nao rodam automaticamente nesta etapa.
+Essa rotina executa apenas providers reais de baixa frequencia ja habilitados para agendamento, incluindo GitHub, Himalayas, Jobicy, RemoteOK, Remotive e Remotar. O provider mock/de teste, os providers ATS publicos, Gupy e Programathor nao rodam automaticamente nesta etapa.
 
 A coleta automatica segue as mesmas regras da coleta manual de providers: cria vagas apenas como `DRAFT`, com `useAi = false`, nao chama Gemini/IA, nao marca vagas como `PENDING` e nao envia nada ao Discord.
 

@@ -50,8 +50,13 @@ export async function runRealJobCollection(
   trigger: JobCollectionTrigger,
   providers: JobSourceProvider[] = realJobProviders,
 ): Promise<JobCollectionRunResult> {
+  const providerNames = providers.map((provider) => provider.name);
+
   if (isCollecting) {
-    logger.info('Coleta de providers ignorada porque outra coleta ja esta em execucao.', { trigger });
+    logger.info('Coleta de providers ignorada porque outra coleta ja esta em execucao.', {
+      trigger,
+      providers: providerNames,
+    });
 
     return {
       skipped: true,
@@ -64,14 +69,14 @@ export async function runRealJobCollection(
   try {
     logger.info('Coleta de providers reais iniciada.', {
       trigger,
-      providers: providers.map((provider) => provider.name),
+      providers: providerNames,
     });
 
     const summary = await runJobProviders(providers);
 
     logger.info('Coleta de providers reais finalizada.', {
       trigger,
-      providers: providers.map((provider) => provider.name),
+      providers: providerNames,
       providersExecuted: summary.providersExecuted,
       totalIssuesRead: summary.totalIssuesRead,
       createdJobs: summary.createdJobs,

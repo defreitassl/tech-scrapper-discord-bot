@@ -295,7 +295,7 @@ export function createJobsRouter(): express.Router {
 
   router.post('/admin/jobs/collect-remotar', async (_request, response) => {
     try {
-      logger.info('Coleta manual experimental Remotar iniciada pelo admin.');
+      logger.info('Coleta manual Remotar iniciada pelo admin.');
       const collectionResult = await runRealJobCollection('manual', [remotarProvider]);
 
       if (collectionResult.skipped || !collectionResult.summary) {
@@ -566,9 +566,35 @@ function getJobCreatedNoticeMessage(message: string, possibleDuplicate: { id: st
 
 function groupJobsByStatus(jobs: JobPost[]): JobsByStatus {
   return {
-    draft: jobs.filter((job) => job.status === JobStatus.DRAFT),
+    draft: jobs.filter((job) => job.status === JobStatus.DRAFT).sort(compareDraftJobsByPriority),
     pending: jobs.filter((job) => job.status === JobStatus.PENDING),
     history: jobs.filter((job) => job.status === JobStatus.SENT || job.status === JobStatus.ERROR),
     archived: jobs.filter((job) => job.status === JobStatus.ARCHIVED),
   };
+}
+
+function compareDraftJobsByPriority(a: JobPost, b: JobPost): number {
+  const priorityDifference = getPrioritySortValue(a.priority) - getPrioritySortValue(b.priority);
+
+  if (priorityDifference !== 0) {
+    return priorityDifference;
+  }
+
+  return b.createdAt.getTime() - a.createdAt.getTime();
+}
+
+function getPrioritySortValue(priority: JobPost['priority']): number {
+  if (priority === 'HIGH') {
+    return 0;
+  }
+
+  if (priority === 'MEDIUM') {
+    return 1;
+  }
+
+  if (priority === 'LOW') {
+    return 2;
+  }
+
+  return 3;
 }

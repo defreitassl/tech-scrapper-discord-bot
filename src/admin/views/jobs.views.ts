@@ -1,4 +1,4 @@
-import { JobPost, JobStatus } from '@prisma/client';
+import { JobPost, JobPriority, JobStatus } from '@prisma/client';
 import { JobFormData, formFromJob } from '../helpers/forms';
 import { escapeHtml, formatDate } from '../helpers/formatters';
 import type { AdminNotice } from '../helpers/notifications';
@@ -150,6 +150,7 @@ function renderReviewCard(job: JobPost): string {
   const jobId = escapeHtml(job.id);
   const source = job.source?.trim() || 'Fonte nao informada';
   const url = job.url?.trim();
+  const priorityReasons = parsePriorityReasons(job.priorityReasons);
 
   return `
     <article class="review-card">
@@ -159,7 +160,10 @@ function renderReviewCard(job: JobPost): string {
             <a class="job-title review-title" href="/admin/jobs/${jobId}">${escapeHtml(job.title ?? 'Sem titulo')}</a>
             <p class="review-company">${escapeHtml(job.company ?? 'Empresa nao informada')}</p>
           </div>
-          <span class="source-pill">${escapeHtml(source)}</span>
+          <div class="review-badges">
+            ${renderPriorityBadge(job.priority)}
+            <span class="source-pill">${escapeHtml(source)}</span>
+          </div>
         </div>
         <dl class="review-meta-grid">
           ${renderReviewMetaItem('Localizacao', job.location)}
@@ -171,6 +175,7 @@ function renderReviewCard(job: JobPost): string {
           <span class="review-label">Stacks</span>
           <span class="${job.stacks?.trim() ? 'review-stacks' : 'review-stacks muted'}">${escapeHtml(job.stacks?.trim() || 'Stacks nao informadas')}</span>
         </div>
+        ${renderReviewPriorityDetails(job.priorityScore, priorityReasons)}
         ${
           job.shortDescription?.trim()
             ? `<p class="review-description">${escapeHtml(job.shortDescription.trim())}</p>`
@@ -288,7 +293,7 @@ function renderJobRowActions(job: JobPost, flow: JobsSectionOptions['flow']): st
 }
 
 export function renderJobDetails(job: JobPost, feedback: { notice?: AdminNotice } = {}): string {
-  const fields: Array<[string, string | null]> = [
+  const fields: Array<[string, string | null, string?]> = [
     ['Titulo', job.title],
     ['Empresa', job.company],
     ['Localizacao', job.location],
@@ -300,14 +305,22 @@ export function renderJobDetails(job: JobPost, feedback: { notice?: AdminNotice 
     ['Fonte', job.source],
     ['Usar IA', job.useAi ? 'Sim' : 'Nao'],
     ['Status', getStatusLabel(job.status)],
+    ['Prioridade', job.priority, 'priority'],
+    ['Score de prioridade', job.priorityScore === null ? null : String(job.priorityScore)],
+    ['Motivos da prioridade', formatPriorityReasons(job.priorityReasons)],
     ['Criada em', formatDate(job.createdAt)],
     ['Atualizada em', formatDate(job.updatedAt)],
     ['Enviada em', job.sentAt ? formatDate(job.sentAt) : null],
   ];
 
   const details = fields
-    .map(([label, value]) => {
-      const renderedValue = label === 'Status' ? renderStatusBadge(job.status) : escapeHtml(value ?? '-');
+    .map(([label, value, kind]) => {
+      const renderedValue =
+        label === 'Status'
+          ? renderStatusBadge(job.status)
+          : kind === 'priority'
+            ? renderPriorityBadge(job.priority)
+            : escapeHtml(value ?? '-');
       return `<div class="detail-item"><dt>${escapeHtml(label)}</dt><dd>${renderedValue}</dd></div>`;
     })
     .join('');
@@ -472,6 +485,54 @@ function renderMessagePreview(job: JobPost): string {
       <pre class="message-preview">${escapeHtml(preview.message)}</pre>
     </section>
   `;
+}
+
+function renderPriorityBadge(priority: JobPriority | null): string {
+  if (!priority) {
+    return '<span class="priority-badge priority-none">Sem prioridade</span>';
+  }
+
+  return `<span class="priority-badge priority-${priority.toLowerCase()}">${escapeHtml(priority)}</span>`;
+}
+
+function renderReviewPriorityDetails(priorityScore: number | null, reasons: string[]): string {
+  if (priorityScore === null && reasons.length === 0) {
+    return '';
+  }
+
+  const score = priorityScore === null ? '' : `<span class="priority-score">Score ${priorityScore}</span>`;
+  const reasonsText = reasons.length > 0 ? reasons.slice(0, 3).join(', ') : 'Motivos nao registrados';
+
+  return `
+    <div class="review-priority-details">
+      ${score}
+      <span class="priority-reasons">${escapeHtml(reasonsText)}</span>
+    </div>
+  `;
+}
+
+function formatPriorityReasons(value: string | null): string | null {
+  const reasons = parsePriorityReasons(value);
+
+  return reasons.length > 0 ? reasons.join(', ') : null;
+}
+
+function parsePriorityReasons(value: string | null): string[] {
+  if (!value?.trim()) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+
+    if (Array.isArray(parsed)) {
+      return parsed.filter((reason): reason is string => typeof reason === 'string' && reason.trim().length > 0);
+    }
+  } catch {
+    return [value];
+  }
+
+  return [];
 }
 
 function resolvePreviewMessage(job: JobPost): { message: string; source: string; description: string } {

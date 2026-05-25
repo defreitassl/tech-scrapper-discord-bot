@@ -1,6 +1,6 @@
 # Revisao Operacional: Providers Experimentais
 
-Data da revisao: 2026-05-22.
+Data da revisao: 2026-05-25.
 
 ## Escopo
 
@@ -11,6 +11,8 @@ Esta revisao executou diretamente os providers experimentais:
 - `remotarProvider`.
 
 O teste nao salvou vagas no banco, nao chamou Gemini, nao publicou no Discord, nao alterou schema Prisma e nao colocou nenhum provider na coleta automatica. O diagnostico aplicou localmente a mesma normalizacao, o filtro deterministico de qualidade e a prioridade em memoria para estimar quais vagas passariam pelo runner antes da deduplicacao em banco.
+
+Atualizacao posterior: a partir desta revisao, a Remotar foi promovida para a coleta automatica diaria por ter apresentado melhor volume e aderencia operacional. Gupy e Programathor permanecem manuais. A promocao da Remotar nao muda o fluxo de seguranca: vagas continuam sendo criadas apenas como `DRAFT`, com `useAi = false`, sem Gemini, sem `PENDING` automatico e sem envio ao Discord.
 
 Comando usado apos build:
 
@@ -24,9 +26,9 @@ Observacao: a primeira execucao sem permissao de rede retornou `fetch failed` pa
 
 | Provider | Analisadas | Retornadas pelo provider | Passariam pela qualidade do runner | Principais descartes | Links testados |
 | --- | ---: | ---: | ---: | --- | --- |
-| Gupy | 46 | 10 | 10 | localizacao fora da regra, data antiga, senioridade | 5/5 OK |
+| Gupy | 44 | 8 | 8 | localizacao fora da regra, data antiga, senioridade | 5/5 OK |
 | Programathor | 123 | 2 | 2 | vagas antigas/vencidas, localizacao fora da regra, senioridade | 2/2 OK |
-| Remotar | 26 | 20 | 18 | senioridade, data antiga, rejeicoes de qualidade do runner | 5/5 OK |
+| Remotar | 32 | 20 | 18 | data antiga, senioridade, rejeicoes de qualidade do runner | 5/5 OK |
 
 `Passariam pela qualidade do runner` significa que a vaga retornada pelo provider passaria por `evaluateCollectedJobQuality`. A revisao nao executou `checkJobDuplicate`, porque isso consultaria o banco; duplicidade real ainda depende do runner em execucao normal.
 
@@ -34,33 +36,32 @@ Observacao: a primeira execucao sem permissao de rede retornou `fetch failed` pa
 
 Resumo numerico:
 
-- vagas analisadas: 46;
-- vagas retornadas pelo provider: 10;
-- vagas que passariam pela qualidade do runner: 10;
-- prioridades estimadas: 10 `HIGH`, 0 `MEDIUM`, 0 `LOW`;
+- vagas analisadas: 44;
+- vagas retornadas pelo provider: 8;
+- vagas que passariam pela qualidade do runner: 8;
+- prioridades estimadas: 8 `HIGH`, 0 `MEDIUM`, 0 `LOW`;
 - erros de provider: 0.
 
 Principais motivos de descarte no provider:
 
-- `ignoredByLocation`: 29;
-- `ignoredByDate`: 5;
+- `ignoredByLocation`: 30;
+- `ignoredByDate`: 4;
 - `ignoredBySeniority`: 2;
 - `ignoredByMissingEntryLevel`: 0.
 
 Termos que mais trouxeram resultado:
 
 - `desenvolvedor junior`: 5 retornadas em 10 analisadas;
-- `suporte tecnico junior`: 2 retornadas em 10 analisadas;
 - `dados junior`: 2 retornadas em 10 analisadas;
-- `qa junior`: 1 retornada em 4 analisadas.
+- `suporte tecnico junior`: 1 retornada em 10 analisadas.
 
 Qualidade aparente:
 
-- URLs: 10/10;
-- `shortDescription`: 10/10;
-- `rawText` util: 10/10;
-- stacks: 8/10;
-- localizacao: 10/10.
+- URLs: 8/8;
+- `shortDescription`: 8/8;
+- `rawText` util: 8/8;
+- stacks: 7/8;
+- localizacao: 8/8.
 
 Links testados:
 
@@ -68,7 +69,7 @@ Links testados:
 
 Leitura operacional:
 
-Gupy trouxe poucas vagas, mas bem estruturadas. As vagas retornadas tinham descricao, URL, localizacao e nivel claros, e todas passaram no filtro de qualidade. O maior descarte veio de localizacao, o que indica que o provider esta conservador para hibridas/presenciais fora de Minas Gerais. O termo `estagio tecnologia` nao retornou vaga aproveitavel nesta execucao; a amostra util foi majoritariamente junior remoto ou junior em MG.
+Gupy trouxe poucas vagas, mas bem estruturadas. As vagas retornadas tinham descricao, URL, localizacao e nivel claros, e todas passaram no filtro de qualidade. O maior descarte veio de localizacao, o que indica que o provider esta conservador para hibridas/presenciais fora de Minas Gerais. Os termos `estagio tecnologia`, `junior tecnologia` e `qa junior` nao retornaram vaga aproveitavel nesta execucao; a amostra util foi majoritariamente junior remoto ou junior em MG.
 
 Recomendacao:
 
@@ -86,8 +87,8 @@ Resumo numerico:
 
 Principais motivos de descarte no provider:
 
-- `ignoredByDate`: 56;
-- `ignoredByLocation`: 5;
+- `ignoredByDate`: 57;
+- `ignoredByLocation`: 4;
 - `ignoredBySeniority`: 1;
 - `ignoredByMissingEntryLevel`: 0.
 
@@ -120,7 +121,7 @@ Programathor deve permanecer manual/experimental por enquanto. Antes de consider
 
 Resumo numerico:
 
-- vagas analisadas: 26;
+- vagas analisadas: 32;
 - vagas retornadas pelo provider: 20;
 - vagas que passariam pela qualidade do runner: 18;
 - prioridades estimadas: 20 `HIGH`, 0 `MEDIUM`, 0 `LOW`;
@@ -128,8 +129,8 @@ Resumo numerico:
 
 Principais motivos de descarte no provider:
 
+- `ignoredByDate`: 7;
 - `ignoredBySeniority`: 4;
-- `ignoredByDate`: 1;
 - `ignoredByLocation`: 0;
 - `ignoredByQuality`: 0 no provider.
 
@@ -140,15 +141,16 @@ Rejeicoes adicionais pelo filtro de qualidade do runner:
 
 Termos que mais trouxeram resultado:
 
-- `desenvolvedor junior`: 11 retornadas em 15 analisadas;
-- `estagio tecnologia`: 9 retornadas em 11 analisadas.
+- `estagio tecnologia`: 10 retornadas em 15 analisadas;
+- `desenvolvedor junior`: 9 retornadas em 15 analisadas;
+- `junior tecnologia`: 1 retornada em 2 analisadas.
 
 Qualidade aparente:
 
 - URLs: 20/20;
 - `shortDescription`: 20/20;
 - `rawText` util: 20/20;
-- stacks: 12/20;
+- stacks: 10/20;
 - localizacao: 20/20.
 
 Links testados:
@@ -157,19 +159,19 @@ Links testados:
 
 Leitura operacional:
 
-Remotar teve o melhor rendimento bruto e a melhor aderencia operacional para automacao: 20 retornadas em 26 analisadas e 18 passariam na qualidade do runner. As vagas vieram com URL, descricao e localizacao consistentes. O ponto de atencao e que o termo `estagio tecnologia` trouxe ruido fora de tecnologia e uma vaga com exigencia forte de experiencia; portanto, ainda precisa de curadoria e talvez de filtros internos mais alinhados ao `jobQualityFilter`.
+Remotar teve o melhor rendimento bruto e a melhor aderencia operacional para automacao: 20 retornadas em 32 analisadas e 18 passariam na qualidade do runner. As vagas vieram com URL, descricao e localizacao consistentes. O ponto de atencao e que o termo `estagio tecnologia` trouxe ruido fora de tecnologia e uma vaga com exigencia forte de experiencia; portanto, ainda precisa de curadoria e talvez de filtros internos mais alinhados ao `jobQualityFilter`.
 
 Recomendacao:
 
-Remotar parece o melhor candidato para automacao futura, por usar JSON publico, ter alto rendimento e ser naturalmente focado em remoto. Ainda assim, nao deve entrar na coleta automatica agora sem ajustes de filtros e uma decisao explicita.
+Remotar foi promovida para a coleta automatica diaria por usar JSON publico, ter alto rendimento e ser naturalmente focada em remoto. A rota manual continua disponivel. Ainda precisa de curadoria humana e de filtros mais fortes antes de qualquer autoaprovacao.
 
 ## Recomendacao geral
 
-Ordem atual de maturidade para automacao futura:
+Ordem atual de maturidade:
 
-1. Remotar: melhor candidato, alto volume util e JSON publico.
-2. Gupy: boa qualidade e links estaveis, mas menor volume e muitos descartes por localizacao.
-3. Programathor: qualidade boa nas poucas aceitas, mas baixo rendimento e dependencia de HTML.
+1. Remotar: promovida para coleta automatica diaria, com alto volume util, JSON publico e melhor cobertura de estagio/junior remoto.
+2. Gupy: boa qualidade e links estaveis, mas menor volume e muitos descartes por localizacao; permanece manual.
+3. Programathor: qualidade boa nas poucas aceitas, mas baixo rendimento e dependencia de HTML; permanece manual.
 
 Antes de qualquer autoaprovacao:
 
@@ -180,4 +182,4 @@ Antes de qualquer autoaprovacao:
 - manter todas as coletas automaticas como `DRAFT` ate decisao explicita;
 - validar mais de uma execucao em dias diferentes para confirmar estabilidade dos endpoints e volume.
 
-Conclusao: nenhum provider experimental deve ser movido para coleta automatica nesta etapa. Remotar e Gupy merecem nova rodada de endurecimento de filtros; Programathor merece reducao/ajuste de fontes antes de qualquer automacao.
+Conclusao: Remotar entra na coleta automatica diaria como provider real de baixa frequencia, mas sem autoaprovacao. Gupy e Programathor continuam manuais. Remotar e Gupy merecem nova rodada de endurecimento de filtros; Programathor merece reducao/ajuste de fontes antes de qualquer automacao.

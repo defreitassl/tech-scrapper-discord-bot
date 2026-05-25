@@ -42,7 +42,7 @@ Os providers Greenhouse, Lever e Ashby tambem nao fazem scraping HTML pesado. El
 
 O provider experimental Gupy foi criado apos reconhecimento com Playwright MCP e fica documentado em `docs/gupy-scraping-research.md`. Ele deve continuar manual, com poucas chamadas, limite de 20 vagas por execucao, sem paginacao agressiva e fora da coleta automatica.
 
-O provider experimental Remotar foi criado apos reconhecimento com Playwright MCP e fica documentado em `docs/remotar-scraping-research.md`. A implementacao usa JSON publico, deve continuar manual, com poucas chamadas, limite de 20 vagas por execucao, sem paginacao agressiva e fora da coleta automatica.
+O provider Remotar foi criado apos reconhecimento com Playwright MCP e fica documentado em `docs/remotar-scraping-research.md`. A implementacao usa JSON publico e, apos revisao operacional em 2026-05-25, foi promovida para a coleta automatica diaria por melhor volume e aderencia. Deve continuar com poucas chamadas, limite de 20 vagas por execucao e sem paginacao agressiva. A rota manual continua disponivel.
 
 ## Tratamento de falhas
 
@@ -64,6 +64,8 @@ Para browser scraping, a politica tambem deve bloquear uso de credenciais, cooki
 No caso da Gupy, se o endpoint publico passar a exigir login, captcha, Cloudflare/bypass ou qualquer credencial, a coleta deve ser parada em vez de contornada.
 
 No caso da Remotar, se o endpoint publico ou as paginas publicas passarem a exigir login, captcha, Cloudflare/bypass, cookies autenticados, proxy, rotacao de IP ou qualquer credencial, a coleta deve ser parada em vez de contornada.
+
+A promocao da Remotar para coleta automatica nao muda a politica de publicacao: as vagas continuam entrando como `DRAFT`, com `useAi = false`, sem Gemini, sem `PENDING` automatico e sem envio ao Discord. Gupy e Programathor permanecem manuais.
 
 ## Revisao antes de publicar
 

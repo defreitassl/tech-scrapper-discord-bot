@@ -24,7 +24,7 @@ Greenhouse, Lever e Ashby foram adicionados nessa categoria para a primeira leva
 
 Esses providers usam `fetchPublicJson` e passam pela politica `api`. Nao usam browser, Cheerio, login, cookies, credenciais pessoais, proxy, captcha, Cloudflare bypass ou bypass anti-bot.
 
-A Remotar tambem foi classificada nesta categoria apos reconhecimento com Playwright MCP: a UI publica carrega vagas por `https://api.remotar.com.br/jobs`, com filtros publicos por `search`, `tagId` e `categoryId`. O provider experimental usa `fetchPublicJson`, limite baixo, rota manual e segue fora da coleta automatica.
+A Remotar tambem foi classificada nesta categoria apos reconhecimento com Playwright MCP: a UI publica carrega vagas por `https://api.remotar.com.br/jobs`, com filtros publicos por `search`, `tagId` e `categoryId`. O provider usa `fetchPublicJson`, limite baixo, rota manual propria e, desde 2026-05-25, tambem roda na coleta automatica diaria por `realJobProviders`.
 
 ### RSS publico
 
@@ -71,7 +71,7 @@ A pesquisa Gupy (`docs/gupy-scraping-research.md`) usou Playwright MCP para obse
 
 A pesquisa Programathor (`docs/programathor-scraping-research.md`) tambem usou validacao de paginas publicas durante o reconhecimento, mas a implementacao nao usa browser scraping. Como o HTML inicial e suficiente, o provider `src/providers/programathor.provider.ts` usa a camada publica simples de `src/scraping/`, fica em `experimentalJobProviders`, roda apenas por `POST /admin/jobs/collect-programathor` e deve ser removido/desativado se surgir login, captcha, Cloudflare/bypass ou exigencia de credenciais.
 
-A pesquisa Remotar (`docs/remotar-scraping-research.md`) usou Playwright MCP para navegar na UI publica, clicar em vaga, observar filtros e inspecionar a rede. A implementacao nao usa browser scraping porque o JSON publico observado e suficiente. O provider `src/providers/remotar.provider.ts` usa `fetchPublicJson`, fica em `experimentalJobProviders`, roda apenas por `POST /admin/jobs/collect-remotar` e deve ser removido/desativado se surgir login, captcha, Cloudflare/bypass ou exigencia de credenciais.
+A pesquisa Remotar (`docs/remotar-scraping-research.md`) usou Playwright MCP para navegar na UI publica, clicar em vaga, observar filtros e inspecionar a rede. A implementacao nao usa browser scraping porque o JSON publico observado e suficiente. O provider `src/providers/remotar.provider.ts` usa `fetchPublicJson`, fica em `realJobProviders`, tambem roda por `POST /admin/jobs/collect-remotar` e deve ser removido/desativado se surgir login, captcha, Cloudflare/bypass ou exigencia de credenciais.
 
 ## Riscos de plataformas com login/captcha
 
