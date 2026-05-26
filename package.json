@@ -7,6 +7,9 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "admin": "node dist/admin/server.js",
+    "diagnose:domain": "node dist/scripts/diagnoseJobDomainClassifier.js",
+    "diagnose:experimental-providers": "node dist/scripts/diagnoseExperimentalProviders.js",
+    "diagnose:priority": "node dist/scripts/diagnoseJobPriority.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio"

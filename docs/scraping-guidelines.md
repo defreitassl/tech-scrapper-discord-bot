@@ -14,7 +14,7 @@ A infraestrutura Playwright fica em `src/scraping/browser/` e e documentada em `
 - Registre a fonte e a URL original.
 - Preserve o texto bruto quando fizer sentido.
 - Mantenha logs suficientes para diagnosticar falhas.
-- Evite publicar automaticamente sem revisao na fase inicial.
+- Nunca envie ao Discord durante a coleta. A coleta pode aprovar vagas como `PENDING`, mas a publicacao continua restrita ao scheduler ou acoes manuais.
 
 ## O que evitar
 
@@ -40,7 +40,7 @@ Os providers Himalayas, Jobicy, RemoteOK e Remotive tambem nao fazem scraping HT
 
 Os providers Greenhouse, Lever e Ashby tambem nao fazem scraping HTML pesado. Eles usam somente endpoints JSON publicos de ATS por empresa cadastrada, via coleta manual no painel. Nao usam Playwright, Cheerio, login, cookies, credenciais pessoais, proxy, captcha, Cloudflare bypass ou bypass anti-bot. Nesta etapa, eles nao entram na coleta automatica diaria.
 
-O provider experimental Gupy foi criado apos reconhecimento com Playwright MCP e fica documentado em `docs/gupy-scraping-research.md`. Ele deve continuar manual, com poucas chamadas, limite de 20 vagas por execucao, sem paginacao agressiva e fora da coleta automatica.
+O provider Gupy foi criado apos reconhecimento com Playwright MCP e fica documentado em `docs/gupy-scraping-research.md`. Ele roda automaticamente em baixo volume, com poucas chamadas, limite de 20 vagas por execucao e sem paginacao agressiva.
 
 O provider Remotar foi criado apos reconhecimento com Playwright MCP e fica documentado em `docs/remotar-scraping-research.md`. A implementacao usa JSON publico e, apos revisao operacional em 2026-05-25, foi promovida para a coleta automatica diaria por melhor volume e aderencia. Deve continuar com poucas chamadas, limite de 20 vagas por execucao e sem paginacao agressiva. A rota manual continua disponivel.
 
@@ -65,11 +65,11 @@ No caso da Gupy, se o endpoint publico passar a exigir login, captcha, Cloudflar
 
 No caso da Remotar, se o endpoint publico ou as paginas publicas passarem a exigir login, captcha, Cloudflare/bypass, cookies autenticados, proxy, rotacao de IP ou qualquer credencial, a coleta deve ser parada em vez de contornada.
 
-A promocao da Remotar para coleta automatica nao muda a politica de publicacao: as vagas continuam entrando como `DRAFT`, com `useAi = false`, sem Gemini, sem `PENDING` automatico e sem envio ao Discord. Gupy e Programathor permanecem manuais.
+A coleta automatica atual aprova vagas elegiveis como `PENDING`, com `useAi = true` e `aiGeneratedText` gerado por Gemini, ou recusa sem persistir. Ela nao envia ao Discord. Remotar, Gupy e Programathor rodam automaticamente em baixo volume por fontes publicas validadas; ATS publicos continuam manuais.
 
 ## Revisao antes de publicar
 
-Na fase inicial, vagas coletadas automaticamente devem ser criadas como `DRAFT`.
+`DRAFT` foi aposentado do fluxo principal. Vagas coletadas automaticamente devem ser aprovadas como `PENDING` ou recusadas sem persistencia.
 
 O fluxo recomendado e:
 
@@ -77,9 +77,10 @@ O fluxo recomendado e:
 2. Normalizar.
 3. Aplicar filtros determinísticos de qualidade quando existirem.
 4. Deduplicar.
-5. Salvar como `DRAFT`.
-6. Revisar no painel.
-7. Marcar como `PENDING`.
-8. Publicar manualmente.
+5. Calcular prioridade.
+6. Selecionar apenas a quantidade necessaria pelo limite diario.
+7. Gerar mensagem com Gemini.
+8. Salvar aprovadas como `PENDING`.
+9. Publicar depois pelo scheduler ou manualmente.
 
-No futuro, pode existir auto-avaliacao para promover vagas boas para `PENDING`, mas isso deve ser uma decisao separada do scraper bruto, com logs, criterios claros e preservacao da revisao humana quando houver duvida.
+Se a vaga for `NON_TECH`, `LOW`, duplicada, sem URL, sem descricao util, com senioridade alta ou com falha de IA, ela deve ser recusada e nao persistida. Rascunhos `DRAFT` antigos sao apenas legado.

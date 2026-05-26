@@ -12,7 +12,7 @@ Esta revisao executou diretamente os providers experimentais:
 
 O teste nao salvou vagas no banco, nao chamou Gemini, nao publicou no Discord, nao alterou schema Prisma e nao colocou nenhum provider na coleta automatica. O diagnostico aplicou localmente a mesma normalizacao, o filtro deterministico de qualidade e a prioridade em memoria para estimar quais vagas passariam pelo runner antes da deduplicacao em banco.
 
-Atualizacao posterior: a partir desta revisao, a Remotar foi promovida para a coleta automatica diaria por ter apresentado melhor volume e aderencia operacional. Gupy e Programathor permanecem manuais. A promocao da Remotar nao muda o fluxo de seguranca: vagas continuam sendo criadas apenas como `DRAFT`, com `useAi = false`, sem Gemini, sem `PENDING` automatico e sem envio ao Discord.
+Atualizacao posterior: a partir desta revisao, a Remotar foi promovida para a coleta automatica diaria por ter apresentado melhor volume e aderencia operacional. Gupy e Programathor permanecem manuais. A promocao da Remotar nao muda o contrato do provider: vagas continuam sendo criadas apenas como `DRAFT`, com `useAi = false`, sem Gemini e sem envio ao Discord. A autoaprovacao V1 posterior pode preparar rascunhos elegiveis para `PENDING`, mas nao publica no Discord.
 
 Comando usado apos build:
 
@@ -163,7 +163,7 @@ Remotar teve o melhor rendimento bruto e a melhor aderencia operacional para aut
 
 Recomendacao:
 
-Remotar foi promovida para a coleta automatica diaria por usar JSON publico, ter alto rendimento e ser naturalmente focada em remoto. A rota manual continua disponivel. Ainda precisa de curadoria humana e de filtros mais fortes antes de qualquer autoaprovacao.
+Remotar foi promovida para a coleta automatica diaria por usar JSON publico, ter alto rendimento e ser naturalmente focada em remoto. A rota manual continua disponivel. Com a autoaprovacao V1, vagas Remotar elegiveis podem ser preparadas para `PENDING` depois da coleta automatica, mas o provider continua apenas criando `DRAFT` e o envio segue restrito ao scheduler ou acoes manuais.
 
 ## Recomendacao geral
 

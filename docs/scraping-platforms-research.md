@@ -68,7 +68,7 @@ Fontes para evitar nesta etapa:
 - Risco de captcha/bloqueio: baixo no reconhecimento feito; se surgir captcha, login obrigatorio, bloqueio ou necessidade de bypass, a coleta deve parar.
 - Dificuldade estimada: baixa a media.
 - Recomendacao: iniciado como provider experimental manual e promovido para coleta automatica diaria em 2026-05-25.
-- Estrategia implementada: JSON publico via `fetchPublicJson`, filtros por `search`, `tagId` e `categoryId`, limite de 20 vagas por execucao, sem Playwright operacional, login, cookies autenticados, credenciais, proxy, rotacao de IP, captcha ou bypass. A coleta continua criando apenas `DRAFT`, sem Gemini, sem Discord e sem `PENDING` automatico.
+- Estrategia implementada: JSON publico via `fetchPublicJson`, filtros por `search`, `tagId` e `categoryId`, limite de 20 vagas por execucao, sem Playwright operacional, login, cookies autenticados, credenciais, proxy, rotacao de IP, captcha ou bypass. O provider continua criando apenas `DRAFT`, sem Gemini e sem Discord; a autoaprovacao V1 posterior pode preparar rascunhos elegiveis para `PENDING`.
 
 ## Sites proprios de empresas
 

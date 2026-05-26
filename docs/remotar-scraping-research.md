@@ -38,7 +38,7 @@ Como JSON publico e preferivel a browser scraping, a estrategia recomendada e us
 Termos avaliados no reconhecimento:
 
 - `desenvolvedor júnior`
-- `estágio tecnologia`
+- `estágio tecnologia` (removido da implementacao atual por ser amplo demais)
 - `junior tecnologia`
 - `front-end junior`
 - `backend junior`
@@ -218,9 +218,12 @@ Regras recomendadas:
 - sem captcha ou bypass;
 - sem paginacao agressiva;
 - maximo de 20 vagas retornadas por execucao;
+- evitar buscas amplas como `estagio tecnologia`, que podem trazer estagios genericos fora de tecnologia;
+- exigir categoria tech ou classificacao `TECH` pelo classificador de dominio;
+- rejeitar sinais fortes de Direito, Marketing, Comercial, Administrativo, RH, Afiliados, Parcerias e areas similares quando nao houver sinal tech forte;
 - vagas criadas apenas como `DRAFT` via `providerRunner`;
 - `useAi = false`;
 - sem Gemini;
 - sem Discord.
 
-A promocao para coleta automatica nao altera revisao humana, nao prepara vagas, nao marca `PENDING` e nao publica no Discord.
+A promocao para coleta automatica nao mudou o provider: ele continua criando apenas `DRAFT`, sem IA e sem Discord. A etapa separada de autoaprovacao, executada depois da coleta automatica, pode preparar vagas Remotar elegiveis para `PENDING`; a publicacao continua sendo feita apenas pelo scheduler de envio ou por acao manual.

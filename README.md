@@ -2,7 +2,7 @@
 
 Bot de Discord em Node.js + TypeScript para enviar vagas de emprego para iniciantes em tecnologia em um canal especifico.
 
-Nesta etapa, o projeto conecta o bot no Discord, possui banco com Prisma e PostgreSQL, inclui um painel web simples para cadastrar, gerenciar e publicar vagas pendentes manualmente, pode gerar mensagens com IA usando Google AI Studio e possui providers com coleta mock/de teste, coleta real via issues publicas do GitHub, fontes externas por APIs publicas JSON e primeira leva manual de ATS publicos.
+Nesta etapa, o projeto conecta o bot no Discord, possui banco com Prisma e PostgreSQL, inclui um painel web simples para cadastrar, gerenciar e publicar vagas pendentes manualmente, pode gerar mensagens com IA usando Google AI Studio e possui providers reais para GitHub, APIs publicas JSON, Remotar, ATS publicos e fontes experimentais manuais.
 
 ## Requisitos
 
@@ -110,11 +110,33 @@ Na pagina de detalhes, o painel mostra um preview da mensagem que seria enviada 
 
 Tambem e possivel usar a acao `Regenerar mensagem com IA` nos detalhes da vaga. Essa acao chama o Google AI Studio, salva o resultado em `aiGeneratedText` e volta para a pagina de detalhes. Ela nao envia a vaga ao Discord.
 
-Para vagas antigas ou rascunhos, a acao `Aprovar para envio` continua disponivel. Internamente o status continua sendo `PENDING`, mas no painel ele aparece como `Pronta para envio`.
+Para vagas antigas ou rascunhos legados, a acao `Aprovar para envio` continua disponivel. Internamente o status continua sendo `PENDING`, mas no painel ele aparece como `Pronta para envio`.
 
-Para vagas coletadas como rascunho, use `Preparar e colocar na fila` nos detalhes da vaga. Essa acao gera `aiGeneratedText` com Google AI Studio/Gemini, marca `useAi = true` e altera o status para `PENDING`, sem enviar a vaga ao Discord. Se a IA falhar, a vaga permanece como `DRAFT` e o painel mostra um aviso de erro.
+`DRAFT` foi aposentado do fluxo principal de coleta. O enum continua no Prisma por compatibilidade, e vagas antigas nesse status nao sao deletadas automaticamente. Quando houver rascunhos legados, o painel mostra uma secao discreta `Rascunhos legados` e permite processa-los com IA para coloca-los como `PENDING`.
 
-Vagas coletadas por providers tambem recebem uma prioridade persistida (`HIGH`, `MEDIUM` ou `LOW`), score e motivos calculados. A secao `Para revisar` usa esses dados para destacar e ordenar rascunhos, mas a prioridade nao aprova, nao prepara e nao publica vagas automaticamente.
+Vagas coletadas por providers recebem prioridade persistida (`HIGH`, `MEDIUM` ou `LOW`), score e motivos calculados antes da decisao de aprovacao. O novo fluxo automatizado nunca persiste vagas recusadas.
+
+A coleta manual e a coleta automatica diaria usam o mesmo pipeline: provider, normalizacao, filtro TECH/NON_TECH, filtro de qualidade, deduplicacao, prioridade, selecao pelo limite diario, geracao de mensagem com Gemini e criacao do `JobPost` como `PENDING`. A coleta nao envia nada ao Discord; o envio continua sendo feito pelo scheduler nos horarios configurados ou pelas acoes manuais.
+
+Vagas `HIGH` sao elegiveis. Vagas `MEDIUM` so entram se forem estagio, trainee, remotas ou tiverem `priorityScore >= 75`. Vagas `LOW`, `NON_TECH`, sem URL, sem descricao util, com senioridade alta, duplicadas ou com falha na geracao de IA sao recusadas e nao sao persistidas. O fluxo usa o limite diario configurado no agendamento, desconta vagas ja `PENDING` e vagas `SENT` hoje, e cria apenas o necessario para completar a fila do dia.
+
+Para diagnosticar se a pontuacao de prioridade esta coerente e calibrar a autoaprovacao, compile o projeto e rode:
+
+```bash
+npm run build
+npm run diagnose:priority
+```
+
+O diagnostico le vagas `DRAFT` legadas recentes, imprime distribuicoes, top/bottom por score e motivos de prioridade. Ele nao altera dados, nao chama Gemini e nao envia nada ao Discord. Por padrao analisa ate 100 rascunhos; para outro limite, use `PRIORITY_DIAG_LIMIT=200 npm run diagnose:priority`.
+
+Para validar rapidamente o filtro de dominio tech/non-tech sem acessar banco nem fontes externas, compile e rode:
+
+```bash
+npm run build
+npm run diagnose:domain
+```
+
+O diagnostico cobre exemplos como Direito Societario, Marketing de Performance, Afiliados e Parcerias, Suporte Tecnico, Desenvolvimento Front-end e QA Junior.
 
 Para enviar vagas pendentes ao Discord, use o botao `Enviar vagas pendentes` na listagem. O painel busca ate 5 vagas com status `PENDING`, envia no canal configurado em `DISCORD_CHANNEL_ID` e atualiza cada vaga enviada para `SENT`.
 
@@ -122,17 +144,19 @@ Para enviar uma vaga especifica, acesse os detalhes e use `Enviar esta vaga agor
 
 Quando `readyText` estiver preenchido, ele tem prioridade. Se nao houver `readyText`, o bot reutiliza `aiGeneratedText` quando existir. Se a vaga estiver com `useAi` habilitado e ainda nao tiver texto gerado, o bot gera a mensagem com Google AI Studio, salva em `aiGeneratedText` e envia. Se a IA falhar, o template padrao e usado para nao bloquear o envio.
 
-### Coleta de teste/mock
+### Coleta de vagas
 
-A listagem de vagas possui o botao `Coletar vagas de teste`. Ele executa a base inicial de providers em `src/providers/` usando apenas um provider mock.
+A listagem possui um unico botao `Coletar vagas`. Ele chama `POST /admin/jobs/collect-all` e executa todos os providers coletaveis manualmente:
 
-Essa coleta cria vagas fake como `DRAFT`, exibidas no painel como `Rascunho`. Ela nao chama Gemini/IA, nao marca vagas como `PENDING` e nao envia nada ao Discord.
+- GitHub, por issues publicas;
+- Himalayas, Jobicy, RemoteOK e Remotive, por APIs JSON publicas;
+- Remotar, por JSON publico;
+- Gupy e Programathor, tambem incluidos na coleta automatica;
+- Greenhouse, Lever e Ashby, como ATS publicos por empresas cadastradas.
 
-Ao clicar novamente, vagas com a mesma URL normalizada sao ignoradas como duplicatas fortes.
+O provider mock/de teste foi removido do fluxo atual. A coleta manual unificada respeita o lock de coleta existente, aprova vagas elegiveis direto como `PENDING`, salva `useAi = true` com `aiGeneratedText`, nao envia nada ao Discord e nao persiste vagas recusadas. O toast do painel e compacto: `Coleta concluida: X aprovadas para envio, Y recusadas, Z duplicatas, W erros.`
 
-### Coleta GitHub
-
-A listagem tambem possui o botao `Coletar vagas do GitHub`. Ele executa apenas o provider `src/providers/githubJobs.provider.ts`, que usa a API oficial do GitHub para ler issues abertas dos repositorios:
+O provider GitHub usa a API oficial do GitHub para ler issues abertas dos repositorios:
 
 - `frontendbr/vagas`
 - `backend-br/vagas`
@@ -157,15 +181,11 @@ O filtro geografico aceita vagas remotas de qualquer lugar. Vagas hibridas ou pr
 
 O provider tenta preencher `shortDescription` a partir de secoes como `Descricao da vaga`, `Sobre a vaga`, `Nossa empresa` e `Responsabilidades`, mantendo um resumo curto. Ele tambem tenta extrair `stacks` do corpo da issue a partir de termos tecnicos conhecidos, sem inventar tecnologias.
 
-As vagas coletadas do GitHub sao normalizadas, passam por um filtro deterministico de qualidade, passam pela deduplicacao existente e entram como `DRAFT`. O filtro rejeita vagas sem titulo, sem canal claro de candidatura (URL ou e-mail no texto), sem descricao util, com sinais fortes de senioridade ou experiencia alta, ou que nao parecam ser de tecnologia. Duplicatas fortes por URL sao ignoradas. Possiveis duplicatas por titulo + empresa sao criadas como rascunho e contabilizadas no resumo da coleta.
+As vagas coletadas do GitHub sao normalizadas, passam pelo filtro TECH/NON_TECH, pelo filtro deterministico de qualidade, pela deduplicacao existente e pela priorizacao. Vagas aprovadas geram mensagem com Gemini e entram como `PENDING`. Vagas sem URL, sem descricao util, com sinais fortes de senioridade ou experiencia alta, que nao parecam ser de tecnologia, duplicadas ou cuja IA falhe sao recusadas sem persistencia.
 
 Se um repositorio GitHub falhar, o provider registra o erro e continua nos demais repositorios. O resumo da coleta informa novas vagas criadas, duplicatas ignoradas, possiveis duplicatas, vagas ignoradas por localizacao, vagas ignoradas por qualidade e quantidade de erros. Os motivos de rejeicao por qualidade aparecem nos logs do terminal.
 
-Essa coleta nao chama Gemini/IA, nao marca vagas como `PENDING` e nao envia nada ao Discord.
-
-### Coleta de fontes externas
-
-A listagem tambem possui o botao `Coletar fontes externas`. Ele executa providers baseados em APIs publicas JSON, sem Playwright, Cheerio ou scraping com navegador:
+Os providers externos usam APIs publicas JSON, sem Playwright, Cheerio ou scraping com navegador:
 
 - Himalayas: `https://himalayas.app/jobs/api/search`
 - Jobicy: `https://jobicy.com/api/v2/remote-jobs`
@@ -178,11 +198,7 @@ Como as fontes sao majoritariamente remotas, a coleta externa aceita apenas vaga
 
 Jobicy, RemoteOK e Remotive exigem atribuicao/linkback. Por isso a URL original da vaga e preservada, a fonte fica registrada em `source` e o admin deve manter o link original ao revisar/publicar a vaga. A coleta respeita abordagem conservadora de rate limit: Himalayas usa limite de 20 por busca, Jobicy usa poucas buscas com `count=50`, RemoteOK faz uma chamada unica e Remotive faz poucas buscas para respeitar a recomendacao de baixa frequencia.
 
-As vagas coletadas dessas fontes sao normalizadas, passam pelo filtro de qualidade e pela deduplicacao existente e entram como `DRAFT`, com `useAi = false`. A coleta externa nao chama Gemini/IA, nao marca vagas como `PENDING` e nao envia nada ao Discord. Para publicar, revise a vaga e use `Preparar e colocar na fila`.
-
-### Coleta de ATS publicos
-
-A listagem tambem possui o botao `Coletar ATS publicos`. Ele executa providers baseados em endpoints publicos de ATS, sem Playwright, Cheerio, login, cookies, credenciais pessoais, proxy, captcha ou bypass anti-bot:
+Os providers ATS usam endpoints publicos, sem Playwright, Cheerio, login, cookies, credenciais pessoais, proxy, captcha ou bypass anti-bot:
 
 - Greenhouse: `https://boards-api.greenhouse.io/v1/boards/{empresa}/jobs?content=true`
 - Lever: `https://api.lever.co/v0/postings/{empresa}?mode=json`
@@ -198,49 +214,31 @@ Esses providers buscam apenas empresas cadastradas nessa lista. Se uma empresa f
 
 A coleta ATS filtra vagas publicadas nos ultimos 30 dias quando o ATS fornece data, exige sinal claro de perfil iniciante (`junior`, `jr`, `entry-level`, `intern`, `internship`, `estagio` ou `trainee`), rejeita senioridade intermediaria/alta e aceita remoto apenas quando for global, Brasil, LATAM ou Americas, ou sem restricao incompatível. Vagas hibridas ou presenciais sao aceitas somente em Minas Gerais.
 
-As vagas coletadas de ATS sao normalizadas, passam pelo filtro de qualidade e pela deduplicacao existente e entram como `DRAFT`, com `useAi = false`. A coleta ATS nao chama Gemini/IA, nao marca vagas como `PENDING` e nao envia nada ao Discord.
-
-### Coleta experimental Gupy
-
-A listagem tambem possui o botao `Coletar Gupy`. Ele executa apenas o provider experimental `src/providers/gupy.provider.ts`, registrado em `experimentalJobProviders` e fora da coleta automatica.
-
-O provider foi criado apos investigacao tecnica documentada em `docs/gupy-scraping-research.md`. A pagina publica da Gupy carrega vagas por endpoint JSON publico em `https://employability-portal.gupy.io/api/v1/jobs`, sem login, captcha, cookies autenticados, proxy ou bypass durante a validacao. Como JSON publico e preferivel a browser scraping, a coleta usa o cliente publico da camada `src/scraping/` e consulta poucas buscas com `limit=10`, sem paginacao agressiva.
+O provider Gupy foi criado apos investigacao tecnica documentada em `docs/gupy-scraping-research.md`. A pagina publica da Gupy carrega vagas por endpoint JSON publico em `https://employability-portal.gupy.io/api/v1/jobs`, sem login, captcha, cookies autenticados, proxy ou bypass durante a validacao. Como JSON publico e preferivel a browser scraping, a coleta usa o cliente publico da camada `src/scraping/` e consulta poucas buscas com `limit=10`, sem paginacao agressiva.
 
 A coleta prioriza sinais de entrada (`estagio`, `junior`, `trainee`) em tecnologia, suporte tecnico, desenvolvimento, dados e QA. Vagas remotas sao aceitas de qualquer lugar; vagas hibridas ou presenciais sao aceitas somente em Minas Gerais/Belo Horizonte/regiao. Vagas publicadas ha mais de 30 dias sao ignoradas quando a data publica existe.
 
-As vagas Gupy passam pelo runner central, entram como `DRAFT`, com `useAi = false`, sem chamar Gemini/IA e sem enviar ao Discord.
-
-### Coleta experimental Programathor
-
-A listagem tambem possui o botao `Coletar Programathor`. Ele executa apenas o provider experimental `src/providers/programathor.provider.ts`, registrado em `experimentalJobProviders` e fora da coleta automatica.
-
-O provider foi criado apos investigacao tecnica documentada em `docs/programathor-scraping-research.md`. Nao foi encontrado endpoint JSON publico de vagas; como as listagens publicas entregam cards no HTML inicial e as paginas de detalhe possuem JSON-LD `JobPosting`, a coleta usa HTML publico simples via `src/scraping/`, sem Playwright operacional.
+O provider Programathor foi criado apos investigacao tecnica documentada em `docs/programathor-scraping-research.md`. Nao foi encontrado endpoint JSON publico de vagas; como as listagens publicas entregam cards no HTML inicial e as paginas de detalhe possuem JSON-LD `JobPosting`, a coleta usa HTML publico simples via `src/scraping/`, sem Playwright operacional.
 
 A coleta consulta poucas URLs publicas para estagio, junior, front-end, QA, dados, remoto e Belo Horizonte/regiao, sem login, cookies autenticados, credenciais pessoais, proxy, rotacao de IP, captcha ou bypass. Se a fonte passar a exibir captcha, login obrigatorio, bloqueio tecnico ou desafio Cloudflare que exija contorno, a coleta deve ser interrompida.
 
 O provider filtra vagas vencidas, vagas com `datePosted` acima de 30 dias, senioridade acima de entrada e localizacao fora da regra do projeto. Vagas remotas sao aceitas de qualquer lugar; hibridas/presenciais so entram quando indicam Minas Gerais/Belo Horizonte/regiao. O limite e de 20 vagas retornadas por execucao.
 
-As vagas Programathor passam pelo runner central, entram como `DRAFT`, com `useAi = false`, sem chamar Gemini/IA e sem enviar ao Discord.
+O provider Remotar foi criado apos reconhecimento obrigatorio com Playwright MCP, documentado em `docs/remotar-scraping-research.md`. A Remotar carrega listagens por endpoint JSON publico em `https://api.remotar.com.br/jobs`, com filtros publicos por busca, categoria e tags. Como JSON publico e preferivel a browser scraping, a coleta usa `fetchPublicJson` pela camada `src/scraping/`, sem Playwright operacional.
 
-### Coleta Remotar
+A coleta Remotar consulta termos mais aderentes a tecnologia para estagio, junior, desenvolvimento, suporte tecnico, QA, dados e remoto. A busca ampla `estagio tecnologia` foi removida para nao aceitar estagios genericos. A Remotar agora exige categoria tech ou classificador `TECH`, e rejeita sinais fortes de Direito, Marketing, Comercial, Administrativo, RH, Afiliados, Parcerias e areas similares quando nao houver sinal tech forte.
 
-A listagem tambem possui o botao `Coletar Remotar`. Ele executa apenas o provider `src/providers/remotar.provider.ts`. A Remotar tambem foi promovida para `realJobProviders`, entao entra na coleta automatica diaria junto com GitHub e as fontes externas.
+Todos os providers filtram vagas antigas quando ha data publica, senioridade acima de entrada, falta de sinal de nivel, ruido fora de tecnologia e localizacao fora da regra. Como a Remotar e focada em remoto, vagas remotas sao aceitas quando nao ha restricao explicita incompatível com Brasil/LATAM/Americas; hibridas/presenciais so entram quando indicam Minas Gerais/Belo Horizonte/regiao. O limite da Remotar e de 20 vagas retornadas por execucao.
 
-O provider foi criado apos reconhecimento obrigatorio com Playwright MCP, documentado em `docs/remotar-scraping-research.md`. A Remotar carrega listagens por endpoint JSON publico em `https://api.remotar.com.br/jobs`, com filtros publicos por busca, categoria e tags. Como JSON publico e preferivel a browser scraping, a coleta usa `fetchPublicJson` pela camada `src/scraping/`, sem Playwright operacional.
-
-A coleta consulta poucos termos de tecnologia para estagio, junior, desenvolvimento, suporte tecnico, QA, dados e remoto, sem login, cookies autenticados, credenciais pessoais, proxy, rotacao de IP, captcha ou bypass. Se a fonte passar a exigir login, captcha, bloqueio tecnico ou desafio Cloudflare que exija contorno, a coleta deve ser interrompida.
-
-O provider filtra vagas antigas acima de 30 dias, senioridade acima de entrada, falta de sinal de nivel, ruido fora de tecnologia e localizacao fora da regra. Como a Remotar e focada em remoto, vagas remotas sao aceitas quando nao ha restricao explicita incompatível com Brasil/LATAM/Americas; hibridas/presenciais so entram quando indicam Minas Gerais/Belo Horizonte/regiao. O limite e de 20 vagas retornadas por execucao.
-
-As vagas Remotar passam pelo runner central, entram como `DRAFT`, com `useAi = false`, sem chamar Gemini/IA e sem enviar ao Discord. A promocao para coleta automatica nao prepara vagas, nao marca como `PENDING` e nao publica nada automaticamente.
+As vagas coletadas passam pelo runner automatizado central. As boas geram mensagem com Gemini e entram como `PENDING`; as ruins sao recusadas sem registro no banco. A coleta nunca envia direto ao Discord.
 
 ### Coleta automatica diaria
 
 Quando o painel admin esta rodando com `npm run admin`, o sistema agenda automaticamente a coleta dos providers reais todos os dias as 08:00 no timezone `America/Sao_Paulo`.
 
-Essa rotina executa apenas providers reais de baixa frequencia ja habilitados para agendamento, incluindo GitHub, Himalayas, Jobicy, RemoteOK, Remotive e Remotar. O provider mock/de teste, os providers ATS publicos, Gupy e Programathor nao rodam automaticamente nesta etapa.
+Essa rotina executa os providers automaticos de baixa frequencia ja habilitados para agendamento: GitHub, Himalayas, Jobicy, RemoteOK, Remotive, Remotar, Gupy e Programathor. Os providers ATS publicos continuam apenas no botao manual `Coletar vagas`.
 
-A coleta automatica segue as mesmas regras da coleta manual de providers: cria vagas apenas como `DRAFT`, com `useAi = false`, nao chama Gemini/IA, nao marca vagas como `PENDING` e nao envia nada ao Discord.
+A coleta automatica segue as mesmas regras da coleta manual: calcula o espaco restante do limite diario, seleciona as melhores vagas elegiveis, gera mensagem com IA e cria somente `PENDING`. Se nao houver espaco no limite diario, nao cria nada. O scheduler continua sendo o unico responsavel por publicar vagas automaticamente no Discord.
 
 Se uma coleta manual ou automatica ja estiver em execucao, uma nova execucao e ignorada e registrada em log para evitar concorrencia.
 
@@ -302,10 +300,10 @@ npm run admin
 - Model `JobPost` para armazenar vagas
 - Model `SchedulerSettings` para configuracao de envio agendado
 - Painel admin simples para cadastrar, listar, visualizar e editar vagas
-- Base inicial de providers com coleta mock/de teste
+- Providers reais e experimentais com coleta manual unificada
 - Provider GitHub para coletar issues publicas recentes de repositorios brasileiros de vagas no GitHub
 - Providers externos por APIs publicas JSON: Himalayas, Jobicy, RemoteOK e Remotive
 - Providers manuais de ATS publicos: Greenhouse, Lever e Ashby
-- Coleta automatica diaria dos providers reais as 08:00, criando apenas rascunhos
+- Coleta automatica diaria dos providers automaticos as 08:00, criando apenas vagas aprovadas como `PENDING`
 
 Ainda nao ha scraping HTML real, browser automation ou autenticacao.

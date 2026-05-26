@@ -3,25 +3,14 @@ import { JobPost, JobStatus } from '@prisma/client';
 import { logger } from '../../lib/logger';
 import { prisma } from '../../lib/prisma';
 import { generateJobMessage } from '../../services/aiMessageGenerator';
+import { autoApproveJobsForToday } from '../../services/autoApproveJobs';
 import { checkJobDuplicate } from '../../services/jobDeduplication';
 import { publishPendingJobs, publishSingleJob } from '../../services/publishPendingJobs';
 import { runRealJobCollection } from '../../services/scheduledCollector';
-import { atsJobProviders, externalJobProviders } from '../../providers/providerRegistry';
-import { githubJobsProvider } from '../../providers/githubJobs.provider';
-import { gupyProvider } from '../../providers/gupy.provider';
-import { mockJobsProvider } from '../../providers/mockJobs.provider';
-import { programathorProvider } from '../../providers/programathor.provider';
-import { remotarProvider } from '../../providers/remotar.provider';
-import { runJobProviders } from '../../providers/providerRunner';
+import { manualCollectableJobProviders } from '../../providers/providerRegistry';
 import { parseJobForm } from '../helpers/forms';
 import { getNoticeFromQuery, redirectWithNotice } from '../helpers/notifications';
-import {
-  buildGithubCollectionNotice,
-  buildGupyCollectionNotice,
-  buildProgramathorCollectionNotice,
-  buildProviderCollectionNotice,
-  buildRemotarCollectionNotice,
-} from '../helpers/providerSummary';
+import { buildCompactCollectionNotice } from '../helpers/providerSummary';
 import { validateJob, validatePending } from '../helpers/validators';
 import { renderLayout } from '../views/layout';
 import { renderJobDetails, renderJobForm, renderJobsList, type JobsByStatus } from '../views/jobs.views';
@@ -149,173 +138,64 @@ export function createJobsRouter(): express.Router {
     }
   });
 
-  router.post('/admin/jobs/collect', async (_request, response) => {
+  router.post('/admin/jobs/auto-approve', async (_request, response) => {
     try {
-      logger.info('Coleta manual de vagas de teste iniciada pelo admin.');
-      const result = await runJobProviders([mockJobsProvider]);
-      const message = `Coleta concluida: ${result.createdJobs} novas vagas, ${result.ignoredDuplicates} duplicatas ignoradas.`;
-      const noticeType = result.errors.length > 0 ? 'warning' : result.createdJobs > 0 ? 'success' : 'info';
+      logger.info('Processamento manual de rascunhos legados iniciado pelo admin.');
+      const result = await autoApproveJobsForToday();
 
-      redirectWithNotice(response, '/admin/jobs', message, noticeType);
+      logger.info('Processamento manual de rascunhos legados finalizado pelo admin.', {
+        candidatesFound: result.candidatesFound,
+        approved: result.approved,
+        failed: result.failed,
+        skipped: result.skipped,
+        requestedLimit: result.requestedLimit,
+      });
+
+      if (result.approved > 0) {
+        redirectWithNotice(
+          response,
+          '/admin/jobs',
+          `Processamento de rascunhos legados concluido: ${result.approved} vagas colocadas na fila.`,
+          result.failed > 0 ? 'warning' : 'success',
+        );
+        return;
+      }
+
+      if (result.failed > 0) {
+        redirectWithNotice(response, '/admin/jobs', 'Erro ao processar rascunhos legados.', 'error');
+        return;
+      }
+
+      redirectWithNotice(response, '/admin/jobs', 'Nenhum rascunho legado elegivel para processamento.', 'info');
     } catch (error) {
-      logger.error('Erro ao coletar vagas de teste pelo admin.', error);
-      redirectWithNotice(response, '/admin/jobs', 'Erro ao coletar vagas de teste.', 'error');
+      logger.error('Erro ao processar rascunhos legados pelo admin.', error);
+      redirectWithNotice(response, '/admin/jobs', 'Erro ao processar rascunhos legados.', 'error');
     }
   });
 
-  router.post('/admin/jobs/collect-github', async (_request, response) => {
+  router.post('/admin/jobs/collect-all', async (_request, response) => {
     try {
-      logger.info('Coleta manual de vagas GitHub iniciada pelo admin.');
-      const collectionResult = await runRealJobCollection('manual', [githubJobsProvider]);
+      logger.info('Coleta manual unificada de vagas iniciada pelo admin.');
+      const collectionResult = await runRealJobCollection('manual', manualCollectableJobProviders);
 
       if (collectionResult.skipped || !collectionResult.summary) {
         redirectWithNotice(
           response,
           '/admin/jobs',
-          'Coleta GitHub ignorada porque outra coleta ja esta em execucao.',
+          'Coleta ignorada porque outra coleta ja esta em execucao.',
           'warning',
         );
         return;
       }
 
       const result = collectionResult.summary;
-      const message = buildGithubCollectionNotice(result);
-      const noticeType = result.errors.length > 0 ? 'warning' : result.createdJobs > 0 ? 'success' : 'info';
+      const message = buildCompactCollectionNotice(result);
+      const noticeType = result.errors.length > 0 ? 'warning' : result.approvedAsPending > 0 ? 'success' : 'info';
 
       redirectWithNotice(response, '/admin/jobs', message, noticeType);
     } catch (error) {
-      logger.error('Erro ao coletar vagas GitHub pelo admin.', error);
-      redirectWithNotice(response, '/admin/jobs', 'Erro ao coletar vagas GitHub.', 'error');
-    }
-  });
-
-  router.post('/admin/jobs/collect-external', async (_request, response) => {
-    try {
-      logger.info('Coleta manual de providers externos iniciada pelo admin.');
-      const collectionResult = await runRealJobCollection('manual', externalJobProviders);
-
-      if (collectionResult.skipped || !collectionResult.summary) {
-        redirectWithNotice(
-          response,
-          '/admin/jobs',
-          'Coleta externa ignorada porque outra coleta ja esta em execucao.',
-          'warning',
-        );
-        return;
-      }
-
-      const result = collectionResult.summary;
-      const message = buildProviderCollectionNotice('Coleta externa', result);
-      const noticeType = result.errors.length > 0 ? 'warning' : result.createdJobs > 0 ? 'success' : 'info';
-
-      redirectWithNotice(response, '/admin/jobs', message, noticeType);
-    } catch (error) {
-      logger.error('Erro ao coletar providers externos pelo admin.', error);
-      redirectWithNotice(response, '/admin/jobs', 'Erro ao coletar fontes externas.', 'error');
-    }
-  });
-
-  router.post('/admin/jobs/collect-ats', async (_request, response) => {
-    try {
-      logger.info('Coleta manual de providers ATS publicos iniciada pelo admin.');
-      const collectionResult = await runRealJobCollection('manual', atsJobProviders);
-
-      if (collectionResult.skipped || !collectionResult.summary) {
-        redirectWithNotice(
-          response,
-          '/admin/jobs',
-          'Coleta ATS ignorada porque outra coleta ja esta em execucao.',
-          'warning',
-        );
-        return;
-      }
-
-      const result = collectionResult.summary;
-      const message = buildProviderCollectionNotice('Coleta ATS', result);
-      const noticeType = result.errors.length > 0 ? 'warning' : result.createdJobs > 0 ? 'success' : 'info';
-
-      redirectWithNotice(response, '/admin/jobs', message, noticeType);
-    } catch (error) {
-      logger.error('Erro ao coletar providers ATS pelo admin.', error);
-      redirectWithNotice(response, '/admin/jobs', 'Erro ao coletar ATS publicos.', 'error');
-    }
-  });
-
-  router.post('/admin/jobs/collect-gupy', async (_request, response) => {
-    try {
-      logger.info('Coleta manual experimental Gupy iniciada pelo admin.');
-      const collectionResult = await runRealJobCollection('manual', [gupyProvider]);
-
-      if (collectionResult.skipped || !collectionResult.summary) {
-        redirectWithNotice(
-          response,
-          '/admin/jobs',
-          'Coleta Gupy ignorada porque outra coleta ja esta em execucao.',
-          'warning',
-        );
-        return;
-      }
-
-      const result = collectionResult.summary;
-      const message = buildGupyCollectionNotice(result);
-      const noticeType = result.errors.length > 0 ? 'warning' : result.createdJobs > 0 ? 'success' : 'info';
-
-      redirectWithNotice(response, '/admin/jobs', message, noticeType);
-    } catch (error) {
-      logger.error('Erro ao coletar Gupy pelo admin.', error);
-      redirectWithNotice(response, '/admin/jobs', 'Erro ao coletar Gupy.', 'error');
-    }
-  });
-
-  router.post('/admin/jobs/collect-programathor', async (_request, response) => {
-    try {
-      logger.info('Coleta manual experimental Programathor iniciada pelo admin.');
-      const collectionResult = await runRealJobCollection('manual', [programathorProvider]);
-
-      if (collectionResult.skipped || !collectionResult.summary) {
-        redirectWithNotice(
-          response,
-          '/admin/jobs',
-          'Coleta Programathor ignorada porque outra coleta ja esta em execucao.',
-          'warning',
-        );
-        return;
-      }
-
-      const result = collectionResult.summary;
-      const message = buildProgramathorCollectionNotice(result);
-      const noticeType = result.errors.length > 0 ? 'warning' : result.createdJobs > 0 ? 'success' : 'info';
-
-      redirectWithNotice(response, '/admin/jobs', message, noticeType);
-    } catch (error) {
-      logger.error('Erro ao coletar Programathor pelo admin.', error);
-      redirectWithNotice(response, '/admin/jobs', 'Erro ao coletar Programathor.', 'error');
-    }
-  });
-
-  router.post('/admin/jobs/collect-remotar', async (_request, response) => {
-    try {
-      logger.info('Coleta manual Remotar iniciada pelo admin.');
-      const collectionResult = await runRealJobCollection('manual', [remotarProvider]);
-
-      if (collectionResult.skipped || !collectionResult.summary) {
-        redirectWithNotice(
-          response,
-          '/admin/jobs',
-          'Coleta Remotar ignorada porque outra coleta ja esta em execucao.',
-          'warning',
-        );
-        return;
-      }
-
-      const result = collectionResult.summary;
-      const message = buildRemotarCollectionNotice(result);
-      const noticeType = result.errors.length > 0 ? 'warning' : result.createdJobs > 0 ? 'success' : 'info';
-
-      redirectWithNotice(response, '/admin/jobs', message, noticeType);
-    } catch (error) {
-      logger.error('Erro ao coletar Remotar pelo admin.', error);
-      redirectWithNotice(response, '/admin/jobs', 'Erro ao coletar Remotar.', 'error');
+      logger.error('Erro ao executar coleta manual unificada pelo admin.', error);
+      redirectWithNotice(response, '/admin/jobs', 'Erro ao coletar vagas.', 'error');
     }
   });
 

@@ -1,4 +1,4 @@
-import type { ProviderRunnerSummary } from '../../providers/providerRunner';
+import type { AutomatedJobCollectionSummary, ProviderRunnerSummary } from '../../providers/providerRunner';
 import type { ProviderRepositorySummary } from '../../providers/types';
 
 type ProviderBreakdownOptions = {
@@ -33,6 +33,17 @@ export function buildProviderCollectionNotice(prefix: string, summary: ProviderR
   }
 
   return `${prefix} concluida: ${details.join(', ')}.`;
+}
+
+export function buildCompactCollectionNotice(summary: AutomatedJobCollectionSummary): string {
+  const rejected =
+    summary.rejectedByDomain +
+    summary.rejectedByQuality +
+    summary.rejectedByPriority +
+    summary.failedAiGeneration;
+  const errors = Math.max(summary.repositoryErrors, summary.errors.length);
+
+  return `Coleta concluida: ${summary.approvedAsPending} aprovadas para envio, ${rejected} recusadas, ${summary.rejectedDuplicates} duplicatas, ${errors} erros.`;
 }
 
 export function buildGithubCollectionNotice(summary: ProviderRunnerSummary): string {

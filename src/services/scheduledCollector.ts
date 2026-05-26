@@ -1,7 +1,7 @@
 import cron, { ScheduledTask } from 'node-cron';
 import { logger } from '../lib/logger';
-import { realJobProviders } from '../providers/providerRegistry';
-import { runJobProviders, ProviderRunnerSummary } from '../providers/providerRunner';
+import { automaticJobProviders } from '../providers/providerRegistry';
+import { runAutomatedJobCollection, AutomatedJobCollectionSummary } from '../providers/providerRunner';
 import type { JobSourceProvider } from '../providers/types';
 
 const COLLECTOR_TIME = '08:00';
@@ -15,7 +15,7 @@ export type JobCollectionTrigger = 'manual' | 'scheduled';
 
 export type JobCollectionRunResult = {
   skipped: boolean;
-  summary: ProviderRunnerSummary | null;
+  summary: AutomatedJobCollectionSummary | null;
 };
 
 export function startScheduledCollector(): void {
@@ -37,7 +37,7 @@ export function startScheduledCollector(): void {
     collectTime: COLLECTOR_TIME,
     timezone: COLLECTOR_TIMEZONE,
     expression: COLLECTOR_CRON_EXPRESSION,
-    providers: realJobProviders.map((provider) => provider.name),
+    providers: automaticJobProviders.map((provider) => provider.name),
   });
 }
 
@@ -48,7 +48,7 @@ export function stopScheduledCollector(): void {
 
 export async function runRealJobCollection(
   trigger: JobCollectionTrigger,
-  providers: JobSourceProvider[] = realJobProviders,
+  providers: JobSourceProvider[] = automaticJobProviders,
 ): Promise<JobCollectionRunResult> {
   const providerNames = providers.map((provider) => provider.name);
 
@@ -72,24 +72,21 @@ export async function runRealJobCollection(
       providers: providerNames,
     });
 
-    const summary = await runJobProviders(providers);
+    const summary = await runAutomatedJobCollection(providers);
 
-    logger.info('Coleta de providers reais finalizada.', {
+    logger.info('Coleta automatizada de providers finalizada.', {
       trigger,
       providers: providerNames,
       providersExecuted: summary.providersExecuted,
-      totalIssuesRead: summary.totalIssuesRead,
-      createdJobs: summary.createdJobs,
-      ignoredDuplicates: summary.ignoredDuplicates,
-      possibleDuplicates: summary.possibleDuplicates,
-      ignoredByDate: summary.ignoredByDate,
-      ignoredBySeniority: summary.ignoredBySeniority,
-      ignoredByMissingEntryLevel: summary.ignoredByMissingEntryLevel,
-      ignoredByLocation: summary.ignoredByLocation,
-      ignoredByQuality: summary.ignoredByQuality,
-      highPriority: summary.highPriority,
-      mediumPriority: summary.mediumPriority,
-      lowPriority: summary.lowPriority,
+      analyzed: summary.analyzed,
+      rejectedByDomain: summary.rejectedByDomain,
+      rejectedByQuality: summary.rejectedByQuality,
+      rejectedDuplicates: summary.rejectedDuplicates,
+      rejectedByPriority: summary.rejectedByPriority,
+      selectedForApproval: summary.selectedForApproval,
+      approvedAsPending: summary.approvedAsPending,
+      failedAiGeneration: summary.failedAiGeneration,
+      requestedLimit: summary.requestedLimit,
       repositoryErrors: summary.repositoryErrors,
       errors: summary.errors.length,
     });

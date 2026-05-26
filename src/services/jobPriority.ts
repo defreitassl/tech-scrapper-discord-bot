@@ -1,4 +1,5 @@
 import type { CollectedJob, NormalizedCollectedJob } from '../providers/types';
+import { classifyJobDomain } from './jobDomainClassifier';
 
 export type JobPriorityLevel = 'HIGH' | 'MEDIUM' | 'LOW';
 
@@ -180,9 +181,17 @@ export function evaluateJobPriority(job: CollectedJob | NormalizedCollectedJob):
     reasons.push('location:other_non_remote:-30');
   }
 
-  if (hasAnyTerm(searchableText, TECH_PROFILE_TERMS)) {
+  const domainClassification = classifyJobDomain(job);
+
+  if (domainClassification.domain === 'NON_TECH') {
+    score -= 100;
+    reasons.push(`penalty:non_tech_domain:${domainClassification.nonTechMatches.join('|') || 'unknown'}:-100`);
+  } else if (domainClassification.domain === 'TECH' || hasAnyTerm(searchableText, TECH_PROFILE_TERMS)) {
     score += 20;
     reasons.push('profile:technology:+20');
+  } else if (domainClassification.domain === 'POSSIBLY_TECH') {
+    score += 8;
+    reasons.push('profile:possibly_technology:+8');
   }
 
   if (job.shortDescription?.trim()) {
@@ -234,7 +243,7 @@ export function evaluateJobPriority(job: CollectedJob | NormalizedCollectedJob):
   }
 
   return {
-    priority: classifyPriority(score),
+    priority: domainClassification.domain === 'NON_TECH' ? 'LOW' : classifyPriority(score),
     score,
     reasons,
   };

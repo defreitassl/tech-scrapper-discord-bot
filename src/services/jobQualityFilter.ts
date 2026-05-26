@@ -1,4 +1,5 @@
 import type { CollectedJob } from '../providers/types';
+import { classifyJobDomain } from './jobDomainClassifier';
 
 export type JobQualityResult = {
   accepted: boolean;
@@ -27,29 +28,6 @@ const STRONG_EXPERIENCE_PATTERNS = [
   { reason: 'strong_experience:solida experiencia', pattern: /\bsolida\s+experiencia\b/ },
   { reason: 'strong_experience:forte experiencia', pattern: /\bforte\s+experiencia\b/ },
   { reason: 'strong_experience:dominio avancado', pattern: /\bdominio\s+avancado\b/ },
-];
-
-const TECHNOLOGY_TERMS = [
-  'desenvolvimento',
-  'desenvolvedor',
-  'frontend',
-  'front end',
-  'backend',
-  'back end',
-  'fullstack',
-  'full stack',
-  'software',
-  'suporte tecnico',
-  'qa',
-  'dados',
-  'tecnologia',
-  'programacao',
-  'react',
-  'node',
-  'java',
-  'python',
-  'sql',
-  'cloud',
 ];
 
 export function evaluateCollectedJobQuality(job: CollectedJob): JobQualityResult {
@@ -84,8 +62,10 @@ export function evaluateCollectedJobQuality(job: CollectedJob): JobQualityResult
     }
   }
 
-  if (!TECHNOLOGY_TERMS.some((term) => containsSearchTerm(searchableText, normalizeSearchText(term)))) {
-    reasons.push('outside_technology_profile');
+  const domainClassification = classifyJobDomain(job);
+  if (domainClassification.domain === 'NON_TECH') {
+    const matchedTerm = domainClassification.nonTechMatches.find((term) => term !== 'missing_tech_signal');
+    reasons.push(matchedTerm ? `non_tech_domain:${matchedTerm}` : 'outside_technology_profile');
   }
 
   const uniqueReasons = Array.from(new Set(reasons));

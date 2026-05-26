@@ -46,40 +46,22 @@ export function renderJobsList(jobsByStatus: JobsByStatus, notice?: AdminNotice)
         <form method="post" action="/admin/jobs/publish-pending">
           <button type="submit" class="primary-action" data-loading-label="Enviando...">Enviar vagas pendentes</button>
         </form>
-        <form method="post" action="/admin/jobs/collect-github">
-          <button type="submit" class="secondary" data-loading-label="Coletando...">Coletar vagas do GitHub</button>
-        </form>
-        <form method="post" action="/admin/jobs/collect-external">
-          <button type="submit" class="secondary" data-loading-label="Coletando...">Coletar fontes externas</button>
-        </form>
-        <form method="post" action="/admin/jobs/collect-ats">
-          <button type="submit" class="secondary" data-loading-label="Coletando...">Coletar ATS publicos</button>
-        </form>
-        <form method="post" action="/admin/jobs/collect-gupy">
-          <button type="submit" class="secondary" data-loading-label="Coletando...">Coletar Gupy</button>
-        </form>
-        <form method="post" action="/admin/jobs/collect-programathor">
-          <button type="submit" class="secondary" data-loading-label="Coletando...">Coletar Programathor</button>
-        </form>
-        <form method="post" action="/admin/jobs/collect-remotar">
-          <button type="submit" class="secondary" data-loading-label="Coletando...">Coletar Remotar</button>
-        </form>
-        <form method="post" action="/admin/jobs/collect">
-          <button type="submit" class="secondary" data-loading-label="Coletando...">Coletar vagas de teste</button>
+        ${
+          jobsByStatus.draft.length > 0
+            ? `<form method="post" action="/admin/jobs/auto-approve">
+                <button type="submit" class="secondary" data-loading-label="Processando...">Processar rascunhos legados</button>
+              </form>`
+            : ''
+        }
+        <form method="post" action="/admin/jobs/collect-all">
+          <button type="submit" class="secondary" data-loading-label="Coletando...">Coletar vagas</button>
         </form>
         <a class="button" href="/admin/jobs/new">Nova vaga</a>
       </div>
     </div>
-    <p class="collection-note">Coletas criam apenas rascunhos para revisao, nao chamam IA e nao publicam no Discord. GitHub coleta issues abertas recentes; fontes externas, ATS publicos, Gupy, Programathor e Remotar usam fontes publicas com filtro conservador de nivel.</p>
+    <p class="collection-note">Coletas aprovam vagas elegiveis com IA e salvam direto como PENDING. Vagas recusadas nao sao persistidas; o envio continua a cargo do agendamento ou das acoes manuais.</p>
     ${renderNotification(notice)}
     <div class="jobs-sections" aria-label="Lista de vagas por fluxo">
-      ${renderJobsSection({
-        title: 'Para revisar',
-        description: 'Vagas coletadas automaticamente entram aqui antes de irem para a fila.',
-        jobs: jobsByStatus.draft,
-        emptyMessage: 'Nenhum rascunho aguardando revisao.',
-        flow: 'review',
-      })}
       ${renderJobsSection({
         title: 'Prontas para envio',
         description: 'Essas vagas podem ser enviadas manualmente ou pelo agendamento.',
@@ -103,6 +85,18 @@ export function renderJobsList(jobsByStatus: JobsByStatus, notice?: AdminNotice)
         flow: 'archived',
         visibleLimit: 10,
       })}
+      ${
+        jobsByStatus.draft.length > 0
+          ? renderJobsSection({
+              title: 'Rascunhos legados',
+              description: 'Vagas DRAFT antigas, fora do fluxo principal automatizado.',
+              jobs: jobsByStatus.draft,
+              emptyMessage: 'Nenhum rascunho legado.',
+              flow: 'review',
+              visibleLimit: 10,
+            })
+          : ''
+      }
     </div>
     <p class="jobs-total">${totalJobs} vaga${totalJobs === 1 ? '' : 's'} cadastrada${totalJobs === 1 ? '' : 's'} no total.</p>
   `;
@@ -140,7 +134,7 @@ function renderReviewQueue(jobs: JobPost[], emptyMessage: string): string {
   }
 
   return `
-    <div class="review-queue" aria-label="Fila de curadoria de rascunhos">
+    <div class="review-queue" aria-label="Rascunhos legados">
       ${jobs.map(renderReviewCard).join('')}
     </div>
   `;
@@ -184,7 +178,7 @@ function renderReviewCard(job: JobPost): string {
         ${renderOriginalJobLink(url)}
       </div>
       <div class="review-actions">
-        ${renderPostButton(`/admin/jobs/${jobId}/prepare`, 'Preparar', 'primary-action', 'Preparando...')}
+        ${renderPostButton(`/admin/jobs/${jobId}/prepare`, 'Preparar legado', 'primary-action', 'Preparando...')}
         <a class="button secondary" href="/admin/jobs/${jobId}">Ver detalhes</a>
         ${renderPostButton(`/admin/jobs/${jobId}/archive`, 'Arquivar', 'secondary', 'Salvando...')}
       </div>
@@ -271,7 +265,7 @@ function renderJobRowActions(job: JobPost, flow: JobsSectionOptions['flow']): st
 
   if (flow === 'review') {
     return [
-      renderPostButton(`/admin/jobs/${jobId}/prepare`, 'Preparar', 'primary-action', 'Preparando...'),
+      renderPostButton(`/admin/jobs/${jobId}/prepare`, 'Preparar legado', 'primary-action', 'Preparando...'),
       editAction,
       renderPostButton(`/admin/jobs/${jobId}/archive`, 'Arquivar', 'secondary', 'Salvando...'),
     ].join('');
@@ -353,7 +347,8 @@ export function renderJobDetails(job: JobPost, feedback: { notice?: AdminNotice 
       ${renderLongText('Texto gerado por IA', job.aiGeneratedText)}
     </div>
     <div class="actions footer-actions">
-      ${job.status === JobStatus.DRAFT || job.status === JobStatus.PENDING ? renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/prepare`, 'Preparar e colocar na fila', 'primary-action', 'Preparando...') : ''}
+      ${job.status === JobStatus.DRAFT ? renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/prepare`, 'Preparar rascunho legado', 'primary-action', 'Preparando...') : ''}
+      ${job.status === JobStatus.PENDING ? renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/prepare`, 'Regenerar IA e manter na fila', 'secondary', 'Preparando...') : ''}
       ${renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/publish`, 'Enviar esta vaga agora', 'primary-action', 'Enviando...')}
       ${renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/generate-ai-message`, 'Regenerar mensagem com IA', 'secondary', 'Gerando...')}
       ${renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/pending`, 'Aprovar para envio', 'secondary', 'Salvando...')}

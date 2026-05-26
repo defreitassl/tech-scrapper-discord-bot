@@ -1,5 +1,6 @@
 import { logger } from '../lib/logger';
 import { fetchPublicJson } from '../scraping/scrapingClient';
+import { classifyJobDomain } from '../services/jobDomainClassifier';
 import { isRecentDate } from './providerDateUtils';
 import { detectEntryLevel, hasDisallowedSeniority } from './providerSeniorityUtils';
 import {
@@ -26,13 +27,20 @@ const SEARCH_SOURCES = [
     tagIds: [17],
   },
   {
-    term: 'estagio tecnologia',
-    search: 'estagio tecnologia',
+    term: 'estagio desenvolvimento',
+    search: 'estagio desenvolvimento',
+    categoryId: 13,
     tagIds: [10],
   },
   {
-    term: 'junior tecnologia',
-    search: 'junior tecnologia',
+    term: 'estagio dados',
+    search: 'estagio dados',
+    categoryId: 4,
+    tagIds: [10],
+  },
+  {
+    term: 'junior software',
+    search: 'junior software',
     tagIds: [17],
   },
   {
@@ -81,41 +89,6 @@ const TECH_CATEGORY_NAMES = [
   'qa',
   'sysadmin',
   'ux/ui',
-];
-
-const TECH_TERMS = [
-  'desenvolvedor',
-  'desenvolvimento',
-  'developer',
-  'software',
-  'front end',
-  'front-end',
-  'frontend',
-  'back end',
-  'back-end',
-  'backend',
-  'fullstack',
-  'full stack',
-  'suporte tecnico',
-  'qa',
-  'quality assurance',
-  'dados',
-  'data',
-  'analytics',
-  'devops',
-  'programacao',
-  'tecnologia',
-  'tech',
-  'ti',
-  'java',
-  'javascript',
-  'typescript',
-  'react',
-  'node',
-  'python',
-  'php',
-  'sql',
-  'cloud',
 ];
 
 const MINAS_GERAIS_TERMS = [
@@ -444,15 +417,24 @@ function detectRemotarLevel(apiJob: RemotarApiJob, jobText: string): string | nu
 }
 
 function isTechJob(apiJob: RemotarApiJob, jobText: string): boolean {
-  const categories = getCategoryNames(apiJob).map(normalizeSearchText);
+  const categoryNames = getCategoryNames(apiJob);
+  const tagNames = getTagNames(apiJob);
+  const domainClassification = classifyJobDomain({
+    title: apiJob.title,
+    shortDescription: apiJob.subtitle,
+    rawText: jobText,
+    categoryNames,
+    tagNames,
+    source: SOURCE,
+  });
 
-  if (categories.some((category) => TECH_CATEGORY_NAMES.includes(category))) {
-    return true;
+  if (domainClassification.domain === 'NON_TECH') {
+    return false;
   }
 
-  const text = normalizeSearchText(jobText);
+  const categories = categoryNames.map(normalizeSearchText);
 
-  return TECH_TERMS.some((term) => text.includes(normalizeSearchText(term)));
+  return categories.some((category) => TECH_CATEGORY_NAMES.includes(category)) || domainClassification.domain === 'TECH';
 }
 
 function isAllowedLocation(apiJob: RemotarApiJob, jobText: string): boolean {

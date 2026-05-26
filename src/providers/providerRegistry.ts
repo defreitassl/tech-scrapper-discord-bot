@@ -5,14 +5,12 @@ import { githubJobsProvider } from './githubJobs.provider';
 import { himalayasProvider } from './himalayas.provider';
 import { jobicyProvider } from './jobicy.provider';
 import { leverProvider } from './lever.provider';
-import { mockJobsProvider } from './mockJobs.provider';
 import { programathorProvider } from './programathor.provider';
 import { remotarProvider } from './remotar.provider';
 import { remoteOkProvider } from './remoteOk.provider';
 import { remotiveProvider } from './remotive.provider';
 import type { JobSourceProvider } from './types';
 
-export const testJobProviders: JobSourceProvider[] = [mockJobsProvider];
 export const externalJobProviders: JobSourceProvider[] = [
   himalayasProvider,
   jobicyProvider,
@@ -20,6 +18,17 @@ export const externalJobProviders: JobSourceProvider[] = [
   remotiveProvider,
 ];
 export const atsJobProviders: JobSourceProvider[] = [greenhouseProvider, leverProvider, ashbyProvider];
+export const automaticJobProviders: JobSourceProvider[] = [
+  githubJobsProvider,
+  ...externalJobProviders,
+  remotarProvider,
+  gupyProvider,
+  programathorProvider,
+];
+export const manualCollectableJobProviders: JobSourceProvider[] = [
+  ...automaticJobProviders,
+  ...atsJobProviders,
+];
 export const experimentalJobProviders: JobSourceProvider[] = [gupyProvider, programathorProvider];
-export const realJobProviders: JobSourceProvider[] = [githubJobsProvider, ...externalJobProviders, remotarProvider];
-export const activeJobProviders: JobSourceProvider[] = [...testJobProviders, ...realJobProviders, ...atsJobProviders];
+export const realJobProviders: JobSourceProvider[] = automaticJobProviders;
+export const collectableJobProviders: JobSourceProvider[] = manualCollectableJobProviders;

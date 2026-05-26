@@ -1,6 +1,6 @@
 # Contrato de Providers
 
-Este documento define o contrato inicial para fontes de coleta de vagas. A implementacao atual possui um provider mock/de teste em `src/providers/mockJobs.provider.ts`, um provider real para issues publicas do GitHub em `src/providers/githubJobs.provider.ts`, providers externos por APIs publicas JSON em `src/providers/himalayas.provider.ts`, `src/providers/jobicy.provider.ts`, `src/providers/remoteOk.provider.ts` e `src/providers/remotive.provider.ts`, provider Remotar por JSON publico em `src/providers/remotar.provider.ts`, providers manuais de ATS publicos em `src/providers/greenhouse.provider.ts`, `src/providers/lever.provider.ts` e `src/providers/ashby.provider.ts`, e providers experimentais manuais Gupy em `src/providers/gupy.provider.ts` e Programathor em `src/providers/programathor.provider.ts`.
+Este documento define o contrato inicial para fontes de coleta de vagas. A implementacao atual possui um provider real para issues publicas do GitHub em `src/providers/githubJobs.provider.ts`, providers externos por APIs publicas JSON em `src/providers/himalayas.provider.ts`, `src/providers/jobicy.provider.ts`, `src/providers/remoteOk.provider.ts` e `src/providers/remotive.provider.ts`, provider Remotar por JSON publico em `src/providers/remotar.provider.ts`, providers manuais de ATS publicos em `src/providers/greenhouse.provider.ts`, `src/providers/lever.provider.ts` e `src/providers/ashby.provider.ts`, e providers experimentais manuais Gupy em `src/providers/gupy.provider.ts` e Programathor em `src/providers/programathor.provider.ts`. O provider mock/teste foi removido do fluxo atual.
 
 ## Interface sugerida
 
@@ -46,7 +46,7 @@ export type ProviderRepositorySummary = {
 
 O provider deve ser pequeno, testavel e responsavel por uma unica fonte ou familia de fontes.
 
-Providers ativos devem ser registrados em `src/providers/providerRegistry.ts`. O registry separa `testJobProviders`, `externalJobProviders`, `atsJobProviders`, `experimentalJobProviders` e `realJobProviders`; a coleta automatica usa somente `realJobProviders`. O runner central fica em `src/providers/providerRunner.ts`. Rotas especificas podem chamar o runner com uma lista explicita de providers quando precisam executar apenas uma familia de fontes, como a coleta mock, a coleta GitHub, a coleta externa, a coleta ATS manual, a coleta experimental Gupy, a coleta experimental Programathor ou a coleta manual Remotar.
+Providers ativos devem ser registrados em `src/providers/providerRegistry.ts`. O registry separa `externalJobProviders`, `atsJobProviders`, `automaticJobProviders` e `manualCollectableJobProviders`. A coleta automatica usa `automaticJobProviders`; a coleta manual usa `manualCollectableJobProviders`, que combina automaticos e ATS publicos, excluindo fontes mock/teste. O runner central fica em `src/providers/providerRunner.ts`.
 
 Futuras fontes que dependam de scraping ou pesquisa de paginas publicas devem usar a camada isolada `src/scraping/` antes de virar provider. Essa camada contem tipos genericos (`ScrapingStrategy`, `ScrapingSourceConfig`, `ScrapingResult`, `ScrapedJob`), politica de permissao, helpers leves de HTML e cliente publico simples. Ela nao substitui este contrato: providers continuam entregando `CollectedJob[]` ou `ProviderCollectResult` ao runner.
 
@@ -108,13 +108,13 @@ Possiveis chaves:
 
 No estado atual, a duplicata forte usa URL normalizada com trim e remocao de barra final. Quando nao ha URL duplicada, titulo + empresa normalizados indicam apenas possivel duplicata e nao bloqueiam criacao.
 
-No inicio, a deduplicacao deve ser conservadora. Em caso de duvida, criar como `DRAFT` para revisao em vez de descartar automaticamente. Nao ha constraint unica no banco nesta etapa.
+No fluxo automatizado atual, deduplicacao e conservadora para proteger o canal: URL duplicada e titulo + empresa duplicados bloqueiam criacao. Nao ha constraint unica no banco nesta etapa.
 
 O runner atual aplica exatamente essa regra:
 
 - URL duplicada bloqueia a criacao e incrementa `ignoredDuplicates`;
-- titulo + empresa iguais incrementam `possibleDuplicates`, mas a vaga ainda e criada como `DRAFT`.
-- filtro de qualidade rejeita vagas coletadas antes da criacao no banco e incrementa `ignoredByQuality`;
+- titulo + empresa iguais bloqueiam a criacao automatizada e incrementam o diagnostico de duplicidade.
+- filtro de qualidade rejeita vagas coletadas antes da criacao no banco, incluindo vagas `NON_TECH`, e incrementa `ignoredByQuality`;
 - priorizacao e aplicada depois do filtro de qualidade e antes da deduplicacao/escrita no banco;
 - providers podem retornar metadados de coleta, como `ignoredByLocation`, para aparecer no resumo operacional sem criar vagas no banco.
 - providers podem retornar erros internos, como falha por repositorio, sem interromper a execucao dos demais itens.
@@ -123,11 +123,11 @@ O runner atual aplica exatamente essa regra:
 
 ## Filtro de qualidade
 
-Antes de salvar uma vaga coletada, o runner executa `evaluateCollectedJobQuality(job)` em `src/services/jobQualityFilter.ts`. O filtro e deterministico, barato e nao chama IA.
+Antes de salvar uma vaga coletada, o runner executa `evaluateCollectedJobQuality(job)` em `src/services/jobQualityFilter.ts`. O filtro e deterministico, barato e nao chama IA. Ele usa `classifyJobDomain(job)` em `src/services/jobDomainClassifier.ts` para classificar o dominio da vaga como `TECH`, `POSSIBLY_TECH` ou `NON_TECH`.
 
 O resultado contem:
 
-- `accepted`: indica se a vaga pode seguir para deduplicacao e criacao como `DRAFT`;
+- `accepted`: indica se a vaga pode seguir para deduplicacao, prioridade e aprovacao automatizada;
 - `reasons`: motivos estaveis de rejeicao, registrados no terminal;
 - `score`: pontuacao simples para diagnostico operacional.
 
@@ -138,11 +138,15 @@ A vaga e rejeitada quando:
 - falta texto util em `rawText` ou `shortDescription`;
 - o texto contem sinais fortes de senioridade alta, como `pleno`, `senior`, `sênior`, `tech lead`, `lead developer`, `lead`, `especialista`, `staff`, `principal` ou `arquitetura avançada`;
 - o texto exige experiencia forte, como `3 anos`, `4 anos`, `5 anos`, `mais de 3 anos`, `experiência sólida`, `sólida experiência`, `forte experiência` ou `domínio avançado`;
-- a vaga nao parece ser de tecnologia.
+- a vaga e classificada como `NON_TECH`.
 
-Para o perfil de tecnologia, o filtro aceita vagas com termos como `desenvolvimento`, `desenvolvedor`, `frontend`, `backend`, `fullstack`, `software`, `suporte técnico`, `QA`, `dados`, `tecnologia`, `programação`, `React`, `Node`, `Java`, `Python`, `SQL` ou `cloud`.
+O classificador considera `TECH` quando ha sinais fortes como desenvolvimento, desenvolvedor, developer, software, programação, frontend, backend, fullstack, QA, testes de software, dados, BI, SQL, suporte tecnico, suporte de TI, help desk, infraestrutura, redes, cloud, devops, segurança da informação, React, Node, Java, Python, JavaScript, TypeScript, PHP, Docker, AWS, Azure ou GCP. Ele considera `NON_TECH` quando ha sinais fortes de Direito, Juridico, Marketing, Social Media, Conteudo, Comercial, Vendas, SDR, BDR, Administrativo, Financeiro, Contabilidade, RH, Departamento Pessoal, Parcerias, Afiliados, Agencias, Logistica, Engenharia Civil, Arquitetura, Design Grafico, Medicina, Enfermagem ou Psicologia sem sinal tech forte.
 
-Esse filtro nao altera schema, nao cria migrations, nao chama Gemini, nao marca vagas como `PENDING` e nao publica no Discord.
+Exemplos rejeitados: `Estagio em Direito Societario`, `Estagio em Marketing de Performance` e `Estagio em Afiliados e Parcerias`. Exemplos aceitos: `Estagio em Suporte Tecnico`, `Estagio em QA`, `Estagio em Dados` e `Estagio em Desenvolvimento`.
+
+Motivos de rejeicao de dominio usam `non_tech_domain:<termo>` quando ha termo forte identificado, ou `outside_technology_profile` quando falta sinal tech.
+
+Esse filtro nao altera schema, nao cria migrations, nao chama Gemini e nao publica no Discord. A chamada a Gemini acontece depois, apenas para candidatas selecionadas pelo runner automatizado.
 
 ## Priorizacao persistida
 
@@ -169,6 +173,7 @@ Regras de alto nivel:
 - remoto soma mais que hibrido ou presencial;
 - remoto global/Brasil/LATAM/Americas e Minas Gerais/BH/regiao somam pontos extras;
 - perfil tecnico e campos de qualidade como descricao, stacks e URL aumentam o score;
+- vagas `NON_TECH` recebem penalidade `-100` e prioridade final `LOW`, mesmo se tiverem outros pontos positivos;
 - experiencia de 2+ ou 3+ anos, texto generico, localizacao incompatível, falta de descricao e falta de URL reduzem o score.
 
 Classificacao:
@@ -177,7 +182,7 @@ Classificacao:
 - `score >= 55`: `MEDIUM`;
 - abaixo disso: `LOW`.
 
-O runner ordena as vagas aceitas por qualidade antes de salvar: `HIGH`, depois `MEDIUM`, depois `LOW`, preservando a ordem original dentro da mesma prioridade. Vagas `LOW` nao sao descartadas por essa etapa; se passarem na qualidade e na deduplicacao forte, continuam sendo salvas como `DRAFT`.
+O runner ordena as vagas aceitas por qualidade antes da aprovacao: `HIGH`, depois `MEDIUM`, depois `LOW`, preservando a ordem original dentro da mesma prioridade. Vagas `LOW` sao recusadas pelo fluxo automatizado. Vagas `MEDIUM` so seguem se forem estagio, trainee, remotas ou tiverem `priorityScore >= 75`.
 
 A prioridade e persistida no banco em `JobPost`:
 
@@ -185,32 +190,32 @@ A prioridade e persistida no banco em `JobPost`:
 - `priorityScore`: pontuacao numerica;
 - `priorityReasons`: motivos serializados como JSON string.
 
-O diagnostico da coleta contabiliza quantas vagas criadas foram `highPriority`, `mediumPriority` e `lowPriority`, e os logs do terminal mostram `priority`, `score` e `reasons`. O painel usa esses campos para ordenar e destacar a fila `Para revisar`. Eles ainda nao autoaprovam vagas; em etapa futura, podem apoiar autoaprovacao mantendo revisao humana quando houver duvida.
+O diagnostico da coleta registra `priority`, `score` e `reasons` nos logs. As vagas aprovadas persistem esses campos no `JobPost`. O pipeline automatizado usa esses campos para nunca aprovar `LOW`, preparar `HIGH` elegivel e preparar `MEDIUM` apenas quando houver sinal de estagio, trainee, remoto ou `priorityScore >= 75`.
 
-## Status sugerido apos coleta
+## Status apos coleta
 
-Vagas coletadas automaticamente devem entrar como `DRAFT`.
+Vagas coletadas nao entram mais como `DRAFT` no fluxo principal.
 
-Motivos:
+O status `DRAFT` permanece no enum Prisma apenas por compatibilidade e para rascunhos legados. Vagas `DRAFT` existentes nao sao deletadas automaticamente.
 
-- permite revisao humana;
-- evita publicar vagas ruins, duplicadas ou mal formatadas;
-- reduz risco de divulgar dados incorretos;
-- mantem controle editorial do canal.
+Fluxo atual:
 
-Somente apos revisao a vaga deve ser marcada como `PENDING`.
+- vaga elegivel: gera mensagem com Gemini, salva `aiGeneratedText`, marca `useAi = true` e cria `JobPost` como `PENDING`;
+- vaga recusada: nao e persistida;
+- falha de IA: nao cria `DRAFT`, apenas loga e incrementa `failedAiGeneration`;
+- coleta nunca envia direto ao Discord.
 
-Na implementacao atual, `runJobProviders()` cria vagas coletadas com:
+Na implementacao atual, `runAutomatedJobCollection()` cria vagas aprovadas com:
 
-- `status = DRAFT`;
-- `useAi = false`;
+- `status = PENDING`;
+- `useAi = true`;
 - sem `readyText`;
-- sem `aiGeneratedText`.
+- `aiGeneratedText` preenchido por Gemini;
 - `priority`, `priorityScore` e `priorityReasons` preenchidos a partir de `evaluateJobPriority`.
 
-Isso garante que a coleta automatica nao dispare Gemini/IA nem publique vagas no Discord.
+Isso garante que a coleta automatica prepare a fila sem publicar no Discord.
 
-Scrapers futuros tambem devem respeitar essa regra. Mesmo que uma fonte retorne `ScrapedJob`, a conversao para `CollectedJob` e a criacao no banco devem passar pelo `providerRunner`, que mantem `DRAFT`, filtro de qualidade e deduplicacao central.
+Scrapers futuros tambem devem respeitar essa regra. Mesmo que uma fonte retorne `ScrapedJob`, a conversao para `CollectedJob` e a criacao no banco devem passar pelo `providerRunner`, que centraliza filtro de dominio, qualidade, deduplicacao, prioridade, limite diario e geracao de IA.
 
 ## Politica para fontes dificeis
 
@@ -222,15 +227,15 @@ Regras obrigatorias:
 - HTML publico simples pode ser usado quando estavel.
 - Browser scraping e ultimo caso. A infraestrutura Playwright existe, mas providers reais devem continuar manuais/experimentais ate decisao explicita.
 - Fontes com login, captcha, Cloudflare/bloqueio anti-bot que exija bypass, paywall, credenciais pessoais ou termos explicitamente incompativeis devem ser bloqueadas.
-- LinkedIn, Gupy, Solides e similares nao devem ser implementados sem avaliacao especifica e decisao explicita. A Gupy ja possui uma primeira avaliacao em `docs/gupy-scraping-research.md` e fica limitada a provider experimental manual. O Programathor possui avaliacao em `docs/programathor-scraping-research.md` e tambem fica limitado a provider experimental manual por HTML publico simples. A Remotar possui avaliacao em `docs/remotar-scraping-research.md` e foi promovida para `realJobProviders` em 2026-05-25 por melhor volume e aderencia operacional, mantendo JSON publico, baixa frequencia, revisao humana e criacao apenas como `DRAFT`.
+- LinkedIn, Solides e similares nao devem ser implementados sem avaliacao especifica e decisao explicita. A Gupy ja possui avaliacao em `docs/gupy-scraping-research.md` e usa endpoint publico validado. O Programathor possui avaliacao em `docs/programathor-scraping-research.md` e usa HTML publico simples. A Remotar possui avaliacao em `docs/remotar-scraping-research.md`. As tres fontes rodam com baixo volume, sem login/captcha/bypass, dentro do pipeline que aprova como `PENDING` ou recusa sem persistir.
 
-A coleta automatica diaria em `src/services/scheduledCollector.ts` reaproveita o mesmo runner e executa apenas `realJobProviders`. Ela roda as 08:00 em `America/Sao_Paulo` enquanto o processo admin estiver ativo, nao executa o provider mock e usa lock simples em memoria para ignorar execucoes concorrentes.
+A coleta automatica diaria em `src/services/scheduledCollector.ts` reaproveita o mesmo runner automatizado e executa `automaticJobProviders`. Ela roda as 08:00 em `America/Sao_Paulo` enquanto o processo admin estiver ativo e usa lock simples em memoria para ignorar execucoes concorrentes.
 
-Os providers ATS publicos ficam em `atsJobProviders` e nao entram na coleta automatica diaria nesta etapa. Gupy e Programathor ficam em `experimentalJobProviders` e nao entram na coleta automatica. Remotar fica em `realJobProviders` e entra na coleta automatica diaria junto com GitHub e fontes externas, mas tambem pode ser executada manualmente pelo painel. Essas coletas usam o mesmo lock de coletas reais. A Gupy retorna diagnostico por termo de busca em `repositorySummaries`, com `source` como `gupy:<termo>`, `term` e `returnedByProvider`.
+Os providers ATS publicos ficam em `atsJobProviders` e nao entram na coleta automatica diaria nesta etapa. Gupy e Programathor entram em `automaticJobProviders` junto com GitHub, fontes externas e Remotar. A coleta manual unificada roda `manualCollectableJobProviders` pelo botao `Coletar vagas` (`POST /admin/jobs/collect-all`) e usa o mesmo lock de coletas reais. A Gupy retorna diagnostico por termo de busca em `repositorySummaries`, com `source` como `gupy:<termo>`, `term` e `returnedByProvider`.
 
-O Programathor retorna diagnostico por termo/fonte em `repositorySummaries`, com `source` como `programathor:<termo>`, `term` e `returnedByProvider`. Ele usa apenas paginas publicas, sem login, cookies autenticados, proxy, rotacao de IP, captcha ou bypass; nao foi encontrado endpoint JSON publico de listagem, entao a estrategia atual usa HTML publico simples e JSON-LD publico nas paginas de detalhe. A rota manual `POST /admin/jobs/collect-programathor` chama explicitamente apenas `programathorProvider`.
+O Programathor retorna diagnostico por termo/fonte em `repositorySummaries`, com `source` como `programathor:<termo>`, `term` e `returnedByProvider`. Ele usa apenas paginas publicas, sem login, cookies autenticados, proxy, rotacao de IP, captcha ou bypass; nao foi encontrado endpoint JSON publico de listagem, entao a estrategia atual usa HTML publico simples e JSON-LD publico nas paginas de detalhe.
 
-O Remotar retorna diagnostico por termo/fonte em `repositorySummaries`, com `source` como `remotar:<termo>`, `term` e `returnedByProvider`. O reconhecimento foi feito com Playwright MCP, mas a coleta usa apenas endpoint JSON publico em `https://api.remotar.com.br/jobs`, sem login, cookies autenticados, proxy, rotacao de IP, captcha ou bypass. A rota manual `POST /admin/jobs/collect-remotar` chama explicitamente apenas `remotarProvider`, e a coleta automatica diaria tambem executa `remotarProvider` via `realJobProviders`.
+O Remotar retorna diagnostico por termo/fonte em `repositorySummaries`, com `source` como `remotar:<termo>`, `term` e `returnedByProvider`. O reconhecimento foi feito com Playwright MCP, mas a coleta usa apenas endpoint JSON publico em `https://api.remotar.com.br/jobs`, sem login, cookies autenticados, proxy, rotacao de IP, captcha ou bypass. A Remotar exige categoria tech ou classificacao `TECH`, rejeita sinais fortes de areas nao tech em titulo/categoria/tags/descricao quando nao ha sinal tech forte e nao usa mais a busca ampla `estagio tecnologia`.
 
 ## Provider GitHub
 
@@ -293,7 +298,7 @@ Regras do provider GitHub:
 - tenta extrair `stacks` do corpo a partir de termos tecnicos conhecidos, sem inventar tecnologias;
 - salva o corpo da issue em `rawText` limitado a 300 palavras;
 - retorna `salaryRange` como `null` nesta primeira versao;
-- cria vagas apenas como `DRAFT` via runner quando tambem passam pelo filtro de qualidade;
+- entrega vagas ao runner automatizado, que so persiste as aprovadas como `PENDING`;
 - nao chama IA;
 - nao envia ao Discord.
 
@@ -370,13 +375,13 @@ Regras comuns:
 - preencher `externalId`, `title`, `company`, `location`, `modality`, `level`, `stacks`, `salaryRange`, `shortDescription`, `rawText`, `url`, `source` e `collectedAt` quando a fonte fornece dados suficientes;
 - retornar `ProviderCollectResult` com `repositorySummaries` por alvo.
 
-A coleta ATS manual cria vagas somente via `providerRunner`, como `DRAFT` e `useAi = false`. Ela nao chama Gemini, nao marca `PENDING`, nao envia ao Discord, nao altera schema Prisma e nao cria migrations.
+A coleta ATS manual cria vagas somente via `providerRunner`, que aprova elegiveis como `PENDING` com IA e recusa as demais sem persistir. Ela nao envia ao Discord, nao altera schema Prisma e nao cria migrations.
 
 ## Preparacao de vaga coletada
 
-Vagas coletadas continuam entrando como `DRAFT`, com `useAi = false`, sem `aiGeneratedText` e fora da fila de publicacao.
+Vagas coletadas aprovadas entram como `PENDING`, com `useAi = true`, `aiGeneratedText` preenchido e fora do Discord ate o scheduler publicar. Vagas recusadas nao entram no banco.
 
-O painel possui a acao manual `Preparar e colocar na fila`, voltada principalmente para vagas `DRAFT` revisadas pelo admin. Ela:
+O painel possui a acao manual `Preparar rascunho legado`, voltada para vagas `DRAFT` antigas. Ela:
 
 - chama `generateJobMessage(job)` com Gemini;
 - salva o resultado em `aiGeneratedText`;
@@ -384,4 +389,4 @@ O painel possui a acao manual `Preparar e colocar na fila`, voltada principalmen
 - altera o status para `PENDING`;
 - nao envia a vaga ao Discord.
 
-Se a IA falhar, a vaga permanece como estava, especialmente sem transformar `DRAFT` em `PENDING`. Para vagas ja `PENDING`, a acao pode regenerar `aiGeneratedText` e manter a vaga na fila. Vagas `SENT` ou `ARCHIVED` nao sao preparadas.
+Se a IA falhar, a vaga permanece como estava, especialmente sem transformar `DRAFT` legado em `PENDING`. Para vagas ja `PENDING`, a acao pode regenerar `aiGeneratedText` e manter a vaga na fila. Vagas `SENT` ou `ARCHIVED` nao sao preparadas.
