@@ -85,8 +85,8 @@ export async function runRealJobCollection(
       rejectedByPriority: summary.rejectedByPriority,
       selectedForApproval: summary.selectedForApproval,
       approvedAsPending: summary.approvedAsPending,
-      failedAiGeneration: summary.failedAiGeneration,
-      requestedLimit: summary.requestedLimit,
+      queueTarget: summary.queueTarget,
+      slotsToCreate: summary.slotsToCreate,
       repositoryErrors: summary.repositoryErrors,
       errors: summary.errors.length,
     });

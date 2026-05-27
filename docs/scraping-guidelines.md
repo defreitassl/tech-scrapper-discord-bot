@@ -44,6 +44,8 @@ O provider Gupy foi criado apos reconhecimento com Playwright MCP e fica documen
 
 O provider Remotar foi criado apos reconhecimento com Playwright MCP e fica documentado em `docs/remotar-scraping-research.md`. A implementacao usa JSON publico e, apos revisao operacional em 2026-05-25, foi promovida para a coleta automatica diaria por melhor volume e aderencia. Deve continuar com poucas chamadas, limite de 20 vagas por execucao e sem paginacao agressiva. A rota manual continua disponivel.
 
+O provider Solides foi criado apos reconhecimento com Playwright MCP e fica documentado em `docs/solides-scraping-research.md`. A implementacao usa JSON publico em baixo volume, tem limite de 20 vagas por execucao, entra na coleta manual unificada e tambem na coleta automatica diaria.
+
 ## Tratamento de falhas
 
 Scrapers quebram. O sistema deve tolerar:
@@ -65,7 +67,9 @@ No caso da Gupy, se o endpoint publico passar a exigir login, captcha, Cloudflar
 
 No caso da Remotar, se o endpoint publico ou as paginas publicas passarem a exigir login, captcha, Cloudflare/bypass, cookies autenticados, proxy, rotacao de IP ou qualquer credencial, a coleta deve ser parada em vez de contornada.
 
-A coleta automatica atual aprova vagas elegiveis como `PENDING`, com `useAi = true` e `aiGeneratedText` gerado por Gemini, ou recusa sem persistir. Ela nao envia ao Discord. Remotar, Gupy e Programathor rodam automaticamente em baixo volume por fontes publicas validadas; ATS publicos continuam manuais.
+No caso da Solides, se o endpoint publico ou as paginas publicas passarem a exigir login, captcha, Cloudflare/bypass, cookies autenticados, proxy, rotacao de IP ou qualquer credencial, a coleta deve ser parada em vez de contornada.
+
+A coleta automatica atual aprova vagas elegiveis como `PENDING`, com `useAi = true` e `aiGeneratedText` vazio quando ainda nao ha mensagem pronta, ou recusa sem persistir. Ela nao chama Gemini e nao envia ao Discord. Remotar, Gupy, Programathor e Solides rodam automaticamente em baixo volume por fontes publicas validadas; ATS publicos continuam manuais.
 
 ## Revisao antes de publicar
 
@@ -78,9 +82,9 @@ O fluxo recomendado e:
 3. Aplicar filtros determinísticos de qualidade quando existirem.
 4. Deduplicar.
 5. Calcular prioridade.
-6. Selecionar apenas a quantidade necessaria pelo limite diario.
-7. Gerar mensagem com Gemini.
-8. Salvar aprovadas como `PENDING`.
+6. Selecionar apenas a quantidade necessaria para preencher a fila `PENDING` alvo.
+7. Salvar aprovadas como `PENDING`, com `useAi = true` e sem gerar IA.
+8. Gerar mensagem somente no envio, com fallback deterministico se Gemini falhar.
 9. Publicar depois pelo scheduler ou manualmente.
 
-Se a vaga for `NON_TECH`, `LOW`, duplicada, sem URL, sem descricao util, com senioridade alta ou com falha de IA, ela deve ser recusada e nao persistida. Rascunhos `DRAFT` antigos sao apenas legado.
+Se a vaga for `NON_TECH`, `LOW`, duplicada, sem URL, sem descricao util ou com senioridade alta, ela deve ser recusada e nao persistida. Falha de IA nao bloqueia mais a coleta nem o envio, porque o publisher usa fallback. Rascunhos `DRAFT` antigos sao apenas legado.

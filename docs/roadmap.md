@@ -9,16 +9,16 @@
 - Envio manual de vagas `PENDING`.
 - Envio agendado de vagas `PENDING` configurado pelo painel.
 - PostgreSQL + Prisma.
-- Mensagens com `readyText`, `aiGeneratedText`, IA ou template padrao.
-- Geracao de mensagem com Google AI Studio/Gemini.
+- Mensagens com `readyText`, `aiGeneratedText`, IA no envio ou fallback deterministico.
+- Geracao de mensagem com Google AI Studio/Gemini no momento do envio.
 - Primeiro provider real via API oficial do GitHub, coletando issues abertas e recentes de repositorios brasileiros de vagas e aprovando elegiveis como `PENDING`.
 - Providers externos por APIs publicas JSON: Himalayas, Jobicy, RemoteOK e Remotive.
-- Providers Remotar, Gupy e Programathor incluidos na coleta automatica diaria por fontes publicas validadas.
-- Coleta manual unificada pelo botao `Coletar vagas`, executando providers reais, experimentais e ATS publicos sem mock/teste.
+- Providers Remotar, Gupy, Programathor e Solides incluidos na coleta automatica diaria por fontes publicas validadas.
+- Coleta manual unificada pelo botao `Coletar vagas`, executando providers automaticos e ATS publicos sem mock/teste.
 - Filtro de dominio tech/non-tech rejeitando vagas fora de tecnologia antes de salvar.
 - Prioridade de vagas coletadas persistida em `JobPost` e exibida no painel para apoiar revisao humana.
-- Acao manual para processar rascunhos legados com IA e coloca-los na fila como `PENDING`.
-- Coleta automatica diaria dos providers automaticos as 08:00, criando direto `PENDING` para vagas aprovadas e recusando as demais sem persistir.
+- Acao manual para processar rascunhos legados e coloca-los na fila como `PENDING` sem IA.
+- Coleta automatica diaria dos providers automaticos as 08:00, preenchendo fila `PENDING` para vagas aprovadas sem chamar Gemini e recusando as demais sem persistir.
 
 ## V1.1 documentacao + providers
 
@@ -39,7 +39,7 @@
 - Filtra apenas issues abertas, criadas nos ultimos 30 dias, com labels de junior/estagio/trainee e sem labels de pleno/senior ou similares.
 - Aplica filtro deterministico de qualidade antes de salvar vagas aprovadas.
 - Isola falhas por repositorio para continuar a coleta nas demais fontes.
-- Chama Gemini apenas para candidatas selecionadas pelo limite diario.
+- Nao chama Gemini na coleta; a mensagem e resolvida no envio.
 
 ## V1.3 agendamento de coletas/providers
 
@@ -47,7 +47,7 @@
 - Controla logs e erros por fonte.
 - Mantem limite conservador de frequencia: uma execucao por dia.
 - Continua exigindo scheduler ou acao manual para publicacao no Discord.
-- Executa GitHub, APIs externas, Remotar, Gupy e Programathor; ATS publicos seguem manuais.
+- Executa GitHub, APIs externas, Remotar, Gupy, Programathor e Solides; ATS publicos seguem manuais.
 
 Observacao: o envio agendado de vagas `PENDING` ja existe e e configurado no painel. O agendamento de coleta/providers e separado e nao publica vagas.
 
@@ -65,7 +65,7 @@ Observacao: o envio agendado de vagas `PENDING` ja existe e e configurado no pai
 - Promovida Remotar para `realJobProviders` apos revisao operacional em 2026-05-25.
 - Remotar passou a ser acionada manualmente pelo botao unico `Coletar vagas`.
 - Gupy e Programathor passaram a entrar na coleta automatica.
-- Coleta automatica cria apenas vagas aprovadas como `PENDING`, com Gemini, sem envio ao Discord.
+- Coleta automatica cria apenas vagas aprovadas como `PENDING`, sem Gemini e sem envio ao Discord.
 
 ## V1.4.2 Prioridade persistida para revisao
 
@@ -79,11 +79,11 @@ Observacao: o envio agendado de vagas `PENDING` ja existe e e configurado no pai
 
 - Criado `src/services/autoApproveJobs.ts`.
 - A rotina foi mantida para rascunhos `DRAFT` legados.
-- O fluxo principal agora calcula quantas vagas precisa criar durante a coleta usando o limite diario do scheduler, vagas `SENT` hoje e vagas ja `PENDING`.
+- O fluxo principal agora calcula quantas vagas precisa criar durante a coleta usando uma fila alvo baseada em `dailyLimit * 7`, com teto de 30, e vagas ja `PENDING`.
 - A regra considera apenas vagas elegiveis, nunca aprova `LOW`, exige URL e descricao util.
 - `HIGH` pode ser autoaprovada; `MEDIUM` so entra se for estagio, trainee, remota ou tiver `priorityScore >= 75`.
-- Para cada vaga selecionada, gera `aiGeneratedText` com Gemini, marca `useAi = true` e cria como `PENDING`.
-- Se a IA falhar, a vaga nao e persistida.
+- Para cada vaga selecionada, marca `useAi = true`, deixa `aiGeneratedText` vazio e cria como `PENDING`.
+- Falha de IA nao afeta a coleta, porque Gemini so roda no envio.
 - O envio continua sendo responsabilidade do scheduler de publicacao ou das acoes manuais; a coleta nao chama Discord.
 - O painel mostra `Processar rascunhos legados` apenas quando houver `DRAFT` antigo.
 
@@ -99,10 +99,26 @@ Observacao: o envio agendado de vagas `PENDING` ja existe e e configurado no pai
 ## V1.4.5 Pipeline automatizado sem DRAFT
 
 - `DRAFT` foi aposentado do fluxo principal sem alterar o schema Prisma.
-- `runAutomatedJobCollection()` coleta, normaliza, filtra dominio/qualidade, deduplica, calcula prioridade, seleciona pelo limite diario, gera IA e cria `PENDING`.
-- Vagas recusadas por dominio, qualidade, prioridade, duplicidade ou falha de IA nao sao persistidas.
-- O limite diario considera `dailyLimit - SENT hoje - PENDING atuais`; se nao houver espaco, nada e criado.
+- `runAutomatedJobCollection()` coleta, normaliza, filtra dominio/qualidade, deduplica, calcula prioridade, seleciona pela fila alvo e cria `PENDING` sem IA.
+- Vagas recusadas por dominio, qualidade, prioridade ou duplicidade nao sao persistidas.
+- A fila alvo considera `min(max(dailyLimit * 7, dailyLimit), 30) - PENDING atuais`; se nao houver espaco, nada e criado.
 - Gupy e Programathor entraram em `automaticJobProviders`; ATS publicos continuam apenas no botao manual.
+
+## V1.4.6 Solides automatica
+
+- Criado reconhecimento tecnico da Solides com Playwright MCP.
+- Encontrado endpoint JSON publico `https://apigw.solides.com.br/jobs/v3/portal-vacancies-new`.
+- Criado `src/providers/solides.provider.ts` com limite de 20 vagas por execucao, filtros de TECH/NON_TECH, senioridade, data e localizacao.
+- Solides entrou em `automaticJobProviders` e tambem roda pelo botao unico `Coletar vagas` por estar dentro de `manualCollectableJobProviders`.
+- A coleta continua passando pelo runner central, sem salvar direto no banco e sem enviar Discord.
+
+## V1.4.7 Gemini somente no envio
+
+- A coleta deixou de chamar Gemini e passou a montar estoque de vagas `PENDING`.
+- `PENDING` significa vaga aprovada e aguardando envio; `aiGeneratedText` pode ficar vazio.
+- O publisher resolve a mensagem no envio: `readyText`, `aiGeneratedText` valido, Gemini quando `useAi = true`, ou fallback deterministico.
+- Falha de Gemini nao bloqueia envio quando o fallback consegue montar uma mensagem.
+- O limite diario controla o envio; a coleta preenche fila alvo `min(max(dailyLimit * 7, dailyLimit), 30)`.
 
 ## V1.5 autenticacao simples
 

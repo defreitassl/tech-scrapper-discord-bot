@@ -132,8 +132,20 @@ export function extractStacksFromText(value?: string | null): string | null {
   return foundStacks.length > 0 ? foundStacks.join(', ') : null;
 }
 
-export function compactJoin(values: Array<string | null | undefined>, separator = ' '): string {
-  return values.filter((value): value is string => Boolean(value?.trim())).join(separator);
+export function compactJoin(values: unknown[], separator = ' '): string {
+  return values.map(normalizeJoinValue).filter((value): value is string => Boolean(value?.trim())).join(separator);
+}
+
+function normalizeJoinValue(value: unknown): string | null {
+  if (typeof value === 'string') {
+    return value.trim() || null;
+  }
+
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+
+  return null;
 }
 
 function decodeHtmlEntities(value: string): string {

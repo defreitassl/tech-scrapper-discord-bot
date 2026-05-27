@@ -2,6 +2,7 @@ import { gupyProvider } from '../providers/gupy.provider';
 import { normalizeCollectedJob } from '../providers/normalizeCollectedJob';
 import { programathorProvider } from '../providers/programathor.provider';
 import { remotarProvider } from '../providers/remotar.provider';
+import { solidesProvider } from '../providers/solides.provider';
 import type { CollectedJob, JobSourceProvider, ProviderCollectResult, ProviderRepositorySummary } from '../providers/types';
 import { evaluateJobPriority, type JobPriorityLevel } from '../services/jobPriority';
 import { evaluateCollectedJobQuality } from '../services/jobQualityFilter';
@@ -56,7 +57,7 @@ type ProviderDiagnostic = {
   errors: ProviderCollectResult['errors'];
 };
 
-const PROVIDERS = [gupyProvider, programathorProvider, remotarProvider];
+const PROVIDERS = [gupyProvider, programathorProvider, remotarProvider, solidesProvider];
 const LINK_CHECK_LIMIT_PER_PROVIDER = 5;
 
 async function main(): Promise<void> {

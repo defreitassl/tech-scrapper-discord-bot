@@ -41,6 +41,10 @@ export function buildDefaultJobMessage(job: JobPost): string {
   return lines.filter((line, index, allLines) => shouldKeepLine(line, index, allLines)).join('\n');
 }
 
+export function buildFallbackJobMessage(job: JobPost): string {
+  return buildDefaultJobMessage(job);
+}
+
 function formatField(label: string, value: string | null): string | null {
   if (!value?.trim()) {
     return null;

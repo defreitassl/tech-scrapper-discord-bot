@@ -23,7 +23,7 @@ export function validatePending(job: JobApprovalData): string | null {
     return null;
   }
 
-  return 'Para deixar pronta para envio, informe dados da vaga, texto pronto, mensagem gerada por IA ou URL.';
+  return 'Para deixar pronta para envio, informe dados da vaga, texto pronto, mensagem de IA existente ou URL.';
 }
 
 export function hasTemplateData(

@@ -104,21 +104,19 @@ http://localhost:3000/admin/jobs
 
 Para cadastrar uma vaga, clique em `Nova vaga`, preencha pelo menos o titulo ou o texto bruto e salve. O cadastro tambem aceita stacks, faixa salarial e uma descricao breve da vaga.
 
-Novas vagas cadastradas manualmente entram como `PENDING` por padrao, exibidas no painel como `Pronta para envio`. Quando `useAi` esta marcado e nao ha `readyText`, o painel tenta gerar `aiGeneratedText` automaticamente com Google AI Studio/Gemini ao salvar. Se a IA falhar, a vaga continua salva como pronta para envio e o preview usa o template padrao.
+Novas vagas cadastradas manualmente entram como `PENDING` por padrao, exibidas no painel como `Pronta para envio`. Quando `useAi` esta marcado e nao ha `readyText`, a mensagem com Google AI Studio/Gemini e gerada somente no momento do envio.
 
-Na pagina de detalhes, o painel mostra um preview da mensagem que seria enviada ao Discord. Esse preview usa `readyText`, depois `aiGeneratedText` valido e, se nenhum deles existir, o template padrao.
-
-Tambem e possivel usar a acao `Regenerar mensagem com IA` nos detalhes da vaga. Essa acao chama o Google AI Studio, salva o resultado em `aiGeneratedText` e volta para a pagina de detalhes. Ela nao envia a vaga ao Discord.
+Na pagina de detalhes, o painel mostra um preview da mensagem que seria enviada ao Discord. Esse preview usa `readyText`, depois `aiGeneratedText` valido e, se nenhum deles existir, o fallback deterministico.
 
 Para vagas antigas ou rascunhos legados, a acao `Aprovar para envio` continua disponivel. Internamente o status continua sendo `PENDING`, mas no painel ele aparece como `Pronta para envio`.
 
-`DRAFT` foi aposentado do fluxo principal de coleta. O enum continua no Prisma por compatibilidade, e vagas antigas nesse status nao sao deletadas automaticamente. Quando houver rascunhos legados, o painel mostra uma secao discreta `Rascunhos legados` e permite processa-los com IA para coloca-los como `PENDING`.
+`DRAFT` foi aposentado do fluxo principal de coleta. O enum continua no Prisma por compatibilidade, e vagas antigas nesse status nao sao deletadas automaticamente. Quando houver rascunhos legados, o painel mostra uma secao discreta `Rascunhos legados` e permite coloca-los como `PENDING` sem chamar IA.
 
 Vagas coletadas por providers recebem prioridade persistida (`HIGH`, `MEDIUM` ou `LOW`), score e motivos calculados antes da decisao de aprovacao. O novo fluxo automatizado nunca persiste vagas recusadas.
 
-A coleta manual e a coleta automatica diaria usam o mesmo pipeline: provider, normalizacao, filtro TECH/NON_TECH, filtro de qualidade, deduplicacao, prioridade, selecao pelo limite diario, geracao de mensagem com Gemini e criacao do `JobPost` como `PENDING`. A coleta nao envia nada ao Discord; o envio continua sendo feito pelo scheduler nos horarios configurados ou pelas acoes manuais.
+A coleta manual e a coleta automatica diaria usam o mesmo pipeline: provider, normalizacao, filtro TECH/NON_TECH, filtro de qualidade, deduplicacao, prioridade, preenchimento da fila e criacao do `JobPost` como `PENDING`. A coleta nao chama Gemini e nao envia nada ao Discord; o envio continua sendo feito pelo scheduler nos horarios configurados ou pelas acoes manuais.
 
-Vagas `HIGH` sao elegiveis. Vagas `MEDIUM` so entram se forem estagio, trainee, remotas ou tiverem `priorityScore >= 75`. Vagas `LOW`, `NON_TECH`, sem URL, sem descricao util, com senioridade alta, duplicadas ou com falha na geracao de IA sao recusadas e nao sao persistidas. O fluxo usa o limite diario configurado no agendamento, desconta vagas ja `PENDING` e vagas `SENT` hoje, e cria apenas o necessario para completar a fila do dia.
+Vagas `HIGH` sao elegiveis. Vagas `MEDIUM` so entram se forem estagio, trainee, remotas ou tiverem `priorityScore >= 75`. Vagas `LOW`, `NON_TECH`, sem URL, sem descricao util, com senioridade alta ou duplicadas sao recusadas e nao sao persistidas. O fluxo usa o limite diario configurado no agendamento para montar uma fila alvo: `min(max(dailyLimit * 7, dailyLimit), 30)`. Vagas `SENT` hoje nao reduzem a coleta; elas sao responsabilidade do scheduler no envio.
 
 Para diagnosticar se a pontuacao de prioridade esta coerente e calibrar a autoaprovacao, compile o projeto e rode:
 
@@ -142,7 +140,9 @@ Para enviar vagas pendentes ao Discord, use o botao `Enviar vagas pendentes` na 
 
 Para enviar uma vaga especifica, acesse os detalhes e use `Enviar esta vaga agora`. Vagas ja enviadas nao sao reenviadas e vagas arquivadas nao sao publicadas.
 
-Quando `readyText` estiver preenchido, ele tem prioridade. Se nao houver `readyText`, o bot reutiliza `aiGeneratedText` quando existir. Se a vaga estiver com `useAi` habilitado e ainda nao tiver texto gerado, o bot gera a mensagem com Google AI Studio, salva em `aiGeneratedText` e envia. Se a IA falhar, o template padrao e usado para nao bloquear o envio.
+Quando `readyText` estiver preenchido, ele tem prioridade. Se nao houver `readyText`, o bot reutiliza `aiGeneratedText` quando existir e for valido. Se a vaga estiver com `useAi` habilitado e ainda nao tiver texto gerado, o bot gera a mensagem com Google AI Studio no envio, salva em `aiGeneratedText` e envia. Se a IA falhar, o fallback deterministico e usado para nao bloquear o envio.
+
+Cada vaga publicada vai como um Discord embed/card, com um texto curto no `content`, titulo, link quando houver, descricao gerada por `readyText`, `aiGeneratedText`, Gemini ou fallback, campos estruturados opcionais e rodape com a fonte. Isso melhora a separacao visual quando varias vagas sao enviadas pelo mesmo bot. Se o Discord rejeitar o envio com embed, o publisher tenta enviar a mesma mensagem como texto puro antes de marcar erro.
 
 ### Coleta de vagas
 
@@ -151,10 +151,10 @@ A listagem possui um unico botao `Coletar vagas`. Ele chama `POST /admin/jobs/co
 - GitHub, por issues publicas;
 - Himalayas, Jobicy, RemoteOK e Remotive, por APIs JSON publicas;
 - Remotar, por JSON publico;
-- Gupy e Programathor, tambem incluidos na coleta automatica;
+- Gupy, Programathor e Solides, tambem incluidos na coleta automatica;
 - Greenhouse, Lever e Ashby, como ATS publicos por empresas cadastradas.
 
-O provider mock/de teste foi removido do fluxo atual. A coleta manual unificada respeita o lock de coleta existente, aprova vagas elegiveis direto como `PENDING`, salva `useAi = true` com `aiGeneratedText`, nao envia nada ao Discord e nao persiste vagas recusadas. O toast do painel e compacto: `Coleta concluida: X aprovadas para envio, Y recusadas, Z duplicatas, W erros.`
+O provider mock/de teste foi removido do fluxo atual. A coleta manual unificada respeita o lock de coleta existente, aprova vagas elegiveis direto como `PENDING`, salva `useAi = true` e deixa `aiGeneratedText` vazio ate o envio, nao envia nada ao Discord e nao persiste vagas recusadas. O toast do painel e compacto: `Coleta concluida: X vagas aprovadas para fila, Y recusadas, Z duplicatas, W erros.`
 
 O provider GitHub usa a API oficial do GitHub para ler issues abertas dos repositorios:
 
@@ -181,7 +181,7 @@ O filtro geografico aceita vagas remotas de qualquer lugar. Vagas hibridas ou pr
 
 O provider tenta preencher `shortDescription` a partir de secoes como `Descricao da vaga`, `Sobre a vaga`, `Nossa empresa` e `Responsabilidades`, mantendo um resumo curto. Ele tambem tenta extrair `stacks` do corpo da issue a partir de termos tecnicos conhecidos, sem inventar tecnologias.
 
-As vagas coletadas do GitHub sao normalizadas, passam pelo filtro TECH/NON_TECH, pelo filtro deterministico de qualidade, pela deduplicacao existente e pela priorizacao. Vagas aprovadas geram mensagem com Gemini e entram como `PENDING`. Vagas sem URL, sem descricao util, com sinais fortes de senioridade ou experiencia alta, que nao parecam ser de tecnologia, duplicadas ou cuja IA falhe sao recusadas sem persistencia.
+As vagas coletadas do GitHub sao normalizadas, passam pelo filtro TECH/NON_TECH, pelo filtro deterministico de qualidade, pela deduplicacao existente e pela priorizacao. Vagas aprovadas entram como `PENDING` sem gerar Gemini. Vagas sem URL, sem descricao util, com sinais fortes de senioridade ou experiencia alta, que nao parecam ser de tecnologia ou duplicadas sao recusadas sem persistencia.
 
 Se um repositorio GitHub falhar, o provider registra o erro e continua nos demais repositorios. O resumo da coleta informa novas vagas criadas, duplicatas ignoradas, possiveis duplicatas, vagas ignoradas por localizacao, vagas ignoradas por qualidade e quantidade de erros. Os motivos de rejeicao por qualidade aparecem nos logs do terminal.
 
@@ -230,15 +230,19 @@ A coleta Remotar consulta termos mais aderentes a tecnologia para estagio, junio
 
 Todos os providers filtram vagas antigas quando ha data publica, senioridade acima de entrada, falta de sinal de nivel, ruido fora de tecnologia e localizacao fora da regra. Como a Remotar e focada em remoto, vagas remotas sao aceitas quando nao ha restricao explicita incompatível com Brasil/LATAM/Americas; hibridas/presenciais so entram quando indicam Minas Gerais/Belo Horizonte/regiao. O limite da Remotar e de 20 vagas retornadas por execucao.
 
-As vagas coletadas passam pelo runner automatizado central. As boas geram mensagem com Gemini e entram como `PENDING`; as ruins sao recusadas sem registro no banco. A coleta nunca envia direto ao Discord.
+O provider Solides foi criado apos reconhecimento obrigatorio com Playwright MCP, documentado em `docs/solides-scraping-research.md`. A pagina publica geral `https://vagas.solides.com.br/vagas` carrega resultados por JSON publico em `https://apigw.solides.com.br/jobs/v3/portal-vacancies-new`; paginas de empresa usam `https://apigw.solides.com.br/jobs/v3/home/vacancy`. A coleta usa somente JSON publico via `fetchPublicJson`, sem Playwright operacional, login, cookies autenticados, credenciais, proxy, rotacao de IP, captcha ou bypass.
+
+A Solides entra no botao unico `Coletar vagas` e tambem na coleta automatica diaria de baixa frequencia. Ela consulta poucos termos, limita a 20 vagas retornadas por execucao, exige vaga `TECH` ou `POSSIBLY_TECH` com sinal forte, rejeita `NON_TECH`, rejeita pleno/senior/lead/especialista/manager/coordinator e aceita remoto ou vagas hibridas/presenciais apenas em Minas Gerais/Belo Horizonte/regiao.
+
+As vagas coletadas passam pelo runner automatizado central. As boas entram como `PENDING` sem gerar Gemini; as ruins sao recusadas sem registro no banco. A coleta nunca envia direto ao Discord.
 
 ### Coleta automatica diaria
 
 Quando o painel admin esta rodando com `npm run admin`, o sistema agenda automaticamente a coleta dos providers reais todos os dias as 08:00 no timezone `America/Sao_Paulo`.
 
-Essa rotina executa os providers automaticos de baixa frequencia ja habilitados para agendamento: GitHub, Himalayas, Jobicy, RemoteOK, Remotive, Remotar, Gupy e Programathor. Os providers ATS publicos continuam apenas no botao manual `Coletar vagas`.
+Essa rotina executa os providers automaticos de baixa frequencia ja habilitados para agendamento: GitHub, Himalayas, Jobicy, RemoteOK, Remotive, Remotar, Gupy, Programathor e Solides. Os providers ATS publicos continuam apenas no botao manual `Coletar vagas`.
 
-A coleta automatica segue as mesmas regras da coleta manual: calcula o espaco restante do limite diario, seleciona as melhores vagas elegiveis, gera mensagem com IA e cria somente `PENDING`. Se nao houver espaco no limite diario, nao cria nada. O scheduler continua sendo o unico responsavel por publicar vagas automaticamente no Discord.
+A coleta automatica segue as mesmas regras da coleta manual: calcula a fila alvo com base em `dailyLimit * 7`, teto de 30, seleciona as melhores vagas elegiveis e cria somente `PENDING` sem IA. Se a fila `PENDING` ja estiver cheia, nao cria nada. O scheduler continua sendo o unico responsavel por publicar vagas automaticamente no Discord e por respeitar o limite diario.
 
 Se uma coleta manual ou automatica ja estiver em execucao, uma nova execucao e ignorada e registrada em log para evitar concorrencia.
 

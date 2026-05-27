@@ -2,12 +2,12 @@ import { JobPost, JobStatus } from '@prisma/client';
 import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
 import { generateJobMessage } from './aiMessageGenerator';
-import { sendDiscordMessage } from './discordPublisher';
-import { buildDefaultJobMessage } from './jobMessage';
+import { sendDiscordJobMessage } from './discordPublisher';
+import { buildFallbackJobMessage } from './jobMessage';
 
 const MAX_GENERATED_MESSAGE_LENGTH = 1600;
-const MIN_ABOUT_SECTION_LINES = 3;
-const MAX_ABOUT_SECTION_LINES = 6;
+const MIN_GENERATED_MESSAGE_LENGTH = 80;
+const BATCH_SEND_DELAY_MS = 1000;
 
 export type PublishPendingJobsResult = {
   total: number;
@@ -57,7 +57,7 @@ export async function publishPendingJobs(options: { limit?: number } = {}): Prom
 
   logger.info('Vagas pendentes encontradas.', { total: jobs.length });
 
-  for (const job of jobs) {
+  for (const [index, job] of jobs.entries()) {
     const publishResult = await publishSingleJob(job);
 
     if (publishResult.status === 'sent') {
@@ -66,6 +66,10 @@ export async function publishPendingJobs(options: { limit?: number } = {}): Prom
 
     if (publishResult.status === 'failed') {
       result.failed += 1;
+    }
+
+    if (index < jobs.length - 1 && publishResult.status === 'sent') {
+      await delay(BATCH_SEND_DELAY_MS);
     }
   }
 
@@ -104,7 +108,7 @@ export async function publishSingleJob(job: JobPost): Promise<PublishSingleJobRe
       preview: truncate(message, 180),
     });
 
-    await sendDiscordMessage(message);
+    await sendDiscordJobMessage(job, message);
 
     await prisma.jobPost.update({
       where: { id: job.id },
@@ -164,8 +168,8 @@ export async function resolveJobMessage(job: JobPost): Promise<string> {
   }
 
   if (!job.useAi) {
-    logger.info('Usando template padrao porque useAi esta desativado.', { jobId: job.id });
-    return buildDefaultJobMessage(job);
+    logger.info('Usando fallback deterministico porque useAi esta desativado.', { jobId: job.id });
+    return buildFallbackJobMessage(job);
   }
 
   try {
@@ -183,11 +187,11 @@ export async function resolveJobMessage(job: JobPost): Promise<string> {
     logger.info('Mensagem gerada por IA salva em aiGeneratedText.', { jobId: job.id });
     return generatedMessage;
   } catch (error) {
-    logger.error('Erro ao gerar mensagem com IA. Usando template padrao.', error, {
+    logger.error('Erro ao gerar mensagem com IA. Usando fallback deterministico.', error, {
       jobId: job.id,
       title: job.title,
     });
-    return buildDefaultJobMessage(job);
+    return buildFallbackJobMessage(job);
   }
 }
 
@@ -207,16 +211,26 @@ function hasPublishableContent(job: JobPost): boolean {
 }
 
 export function isUsableGeneratedMessage(message: string): boolean {
-  if (message.length > MAX_GENERATED_MESSAGE_LENGTH) {
+  const trimmed = message.trim();
+
+  if (trimmed.length < MIN_GENERATED_MESSAGE_LENGTH || trimmed.length > MAX_GENERATED_MESSAGE_LENGTH) {
     return false;
   }
 
-  const lines = message
+  const lines = trimmed
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean);
 
-  if (lines.length < 3) {
+  if (lines.length < 2) {
+    return false;
+  }
+
+  if (!hasJobSignal(trimmed)) {
+    return false;
+  }
+
+  if (!hasApplicationSignal(trimmed)) {
     return false;
   }
 
@@ -227,43 +241,17 @@ export function isUsableGeneratedMessage(message: string): boolean {
     return false;
   }
 
-  const repeatedLineCount = normalizedLines.filter((line, index, allLines) => allLines.indexOf(line) !== index).length;
-
-  if (repeatedLineCount >= 1) {
-    return false;
-  }
-
-  const aboutSectionLines = countAboutSectionLines(lines);
-
-  if (aboutSectionLines > 0 && aboutSectionLines < MIN_ABOUT_SECTION_LINES) {
-    return false;
-  }
-
-  if (aboutSectionLines > MAX_ABOUT_SECTION_LINES) {
-    return false;
-  }
-
   return true;
 }
 
-function countAboutSectionLines(lines: string[]): number {
-  const aboutStartIndex = lines.findIndex((line) => normalizeLine(line).includes('sobre a vaga'));
+function hasJobSignal(value: string): boolean {
+  const normalized = normalizeLine(value);
 
-  if (aboutStartIndex === -1) {
-    return 0;
-  }
+  return /\bvaga\b/.test(normalized) || /\boportunidade\b/.test(normalized) || /\bcargo\b/.test(normalized);
+}
 
-  let count = 0;
-
-  for (const line of lines.slice(aboutStartIndex + 1)) {
-    if (/^[^\w\s]?[\u{1F300}-\u{1FAFF}]/u.test(line) || normalizeLine(line).includes('candidatura')) {
-      break;
-    }
-
-    count += 1;
-  }
-
-  return count;
+function hasApplicationSignal(value: string): boolean {
+  return /https?:\/\/\S+/i.test(value) || /candidatura|candidate|aplicar|inscri/i.test(normalizeLine(value));
 }
 
 function normalizeLine(line: string): string {
@@ -276,4 +264,10 @@ function normalizeLine(line: string): string {
 
 function truncate(value: string, maxLength: number): string {
   return value.length <= maxLength ? value : `${value.slice(0, maxLength)}...`;
+}
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
 }

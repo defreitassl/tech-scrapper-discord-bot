@@ -59,12 +59,12 @@ export function renderJobsList(jobsByStatus: JobsByStatus, notice?: AdminNotice)
         <a class="button" href="/admin/jobs/new">Nova vaga</a>
       </div>
     </div>
-    <p class="collection-note">Coletas aprovam vagas elegiveis com IA e salvam direto como PENDING. Vagas recusadas nao sao persistidas; o envio continua a cargo do agendamento ou das acoes manuais.</p>
+    <p class="collection-note">Coletas aprovam vagas elegiveis para a fila PENDING sem chamar Gemini. A mensagem e gerada somente no envio; se a IA falhar, o template deterministico e usado.</p>
     ${renderNotification(notice)}
     <div class="jobs-sections" aria-label="Lista de vagas por fluxo">
       ${renderJobsSection({
         title: 'Prontas para envio',
-        description: 'Essas vagas podem ser enviadas manualmente ou pelo agendamento.',
+        description: 'Essas vagas aguardam envio. Quando nao ha texto pronto ou IA salva, a mensagem sera gerada no envio.',
         jobs: jobsByStatus.pending,
         emptyMessage: 'Nenhuma vaga pronta para envio agora.',
         flow: 'pending',
@@ -228,6 +228,7 @@ function renderJobsTable(jobs: JobPost[], flow: JobsSectionOptions['flow'], empt
             <th>Titulo</th>
             <th>Empresa</th>
             <th>Status</th>
+            <th>Mensagem</th>
             <th>Fonte</th>
             <th>Criada em</th>
             <th>Enviada em</th>
@@ -235,7 +236,7 @@ function renderJobsTable(jobs: JobPost[], flow: JobsSectionOptions['flow'], empt
           </tr>
         </thead>
         <tbody>
-          ${rows || `<tr><td colspan="7" class="empty">${escapeHtml(emptyMessage)}</td></tr>`}
+          ${rows || `<tr><td colspan="8" class="empty">${escapeHtml(emptyMessage)}</td></tr>`}
         </tbody>
       </table>
     </div>
@@ -251,6 +252,7 @@ function renderJobRow(job: JobPost, flow: JobsSectionOptions['flow']): string {
       </td>
       <td>${escapeHtml(job.company ?? '-')}</td>
       <td>${renderStatusBadge(job.status)}</td>
+      <td>${renderMessageState(job)}</td>
       <td>${escapeHtml(job.source ?? '-')}</td>
       <td><span class="date-cell">${formatDate(job.createdAt)}</span></td>
       <td><span class="date-cell">${job.sentAt ? formatDate(job.sentAt) : '-'}</span></td>
@@ -347,10 +349,9 @@ export function renderJobDetails(job: JobPost, feedback: { notice?: AdminNotice 
       ${renderLongText('Texto gerado por IA', job.aiGeneratedText)}
     </div>
     <div class="actions footer-actions">
-      ${job.status === JobStatus.DRAFT ? renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/prepare`, 'Preparar rascunho legado', 'primary-action', 'Preparando...') : ''}
-      ${job.status === JobStatus.PENDING ? renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/prepare`, 'Regenerar IA e manter na fila', 'secondary', 'Preparando...') : ''}
+      ${job.status === JobStatus.DRAFT ? renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/prepare`, 'Colocar legado na fila', 'primary-action', 'Preparando...') : ''}
+      ${job.status === JobStatus.PENDING ? renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/prepare`, 'Manter IA no envio', 'secondary', 'Preparando...') : ''}
       ${renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/publish`, 'Enviar esta vaga agora', 'primary-action', 'Enviando...')}
-      ${renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/generate-ai-message`, 'Regenerar mensagem com IA', 'secondary', 'Gerando...')}
       ${renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/pending`, 'Aprovar para envio', 'secondary', 'Salvando...')}
       ${renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/archive`, 'Arquivar', 'secondary', 'Salvando...')}
     </div>
@@ -406,7 +407,7 @@ export function renderJobForm(options: {
       ${renderFormSection(
         'Textos e IA',
         isNewJob
-          ? 'Cole o texto original. Ao salvar, o sistema tenta gerar a mensagem com IA automaticamente, exceto quando houver texto pronto.'
+          ? 'Cole o texto original. A mensagem com IA sera gerada somente no envio, exceto quando houver texto pronto.'
           : 'Cole o texto original ou informe um texto pronto para publicacao.',
         [
           renderTextarea('rawText', 'Texto bruto', form.rawText, 8, 'Texto capturado da fonte original.'),
@@ -415,7 +416,7 @@ export function renderJobForm(options: {
             <input type="checkbox" name="useAi" ${form.useAi ? 'checked' : ''}>
             <span>
               <strong>Usar IA para preparar o texto</strong>
-              <small>${isNewJob ? 'Quando marcado, a mensagem sera gerada automaticamente ao salvar se nao houver texto pronto.' : 'Quando marcado, o sistema pode gerar uma versao melhor formatada antes do envio.'}</small>
+              <small>${isNewJob ? 'Quando marcado, a mensagem sera gerada no envio se nao houver texto pronto.' : 'Quando marcado, o sistema pode gerar uma versao melhor formatada no envio.'}</small>
             </span>
           </label>`,
         ].join(''),
@@ -490,6 +491,22 @@ function renderPriorityBadge(priority: JobPriority | null): string {
   return `<span class="priority-badge priority-${priority.toLowerCase()}">${escapeHtml(priority)}</span>`;
 }
 
+function renderMessageState(job: JobPost): string {
+  if (job.readyText?.trim()) {
+    return '<span class="source-pill">Texto pronto</span>';
+  }
+
+  if (job.aiGeneratedText?.trim() && isUsableGeneratedMessage(job.aiGeneratedText.trim())) {
+    return '<span class="source-pill">Mensagem pronta</span>';
+  }
+
+  if (job.useAi) {
+    return '<span class="source-pill">Gerar no envio</span>';
+  }
+
+  return '<span class="source-pill">Template fallback</span>';
+}
+
 function renderReviewPriorityDetails(priorityScore: number | null, reasons: string[]): string {
   if (priorityScore === null && reasons.length === 0) {
     return '';
@@ -552,8 +569,10 @@ function resolvePreviewMessage(job: JobPost): { message: string; source: string;
   }
 
   const description = aiGeneratedText
-    ? 'O texto gerado por IA salvo nao e considerado valido; o preview usa o template padrao.'
-    : 'Nenhum texto pronto ou texto de IA valido foi encontrado; o preview usa o template padrao.';
+    ? 'O texto gerado por IA salvo nao e considerado valido; o preview usa o fallback deterministico.'
+    : job.useAi
+      ? 'Nenhum texto pronto ou texto de IA valido foi encontrado. A IA sera chamada no envio; este preview mostra o fallback.'
+      : 'Nenhum texto pronto ou texto de IA valido foi encontrado; o preview usa o fallback deterministico.';
 
   return {
     message: buildDefaultJobMessage(job),

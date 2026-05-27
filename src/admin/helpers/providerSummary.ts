@@ -39,11 +39,10 @@ export function buildCompactCollectionNotice(summary: AutomatedJobCollectionSumm
   const rejected =
     summary.rejectedByDomain +
     summary.rejectedByQuality +
-    summary.rejectedByPriority +
-    summary.failedAiGeneration;
+    summary.rejectedByPriority;
   const errors = Math.max(summary.repositoryErrors, summary.errors.length);
 
-  return `Coleta concluida: ${summary.approvedAsPending} aprovadas para envio, ${rejected} recusadas, ${summary.rejectedDuplicates} duplicatas, ${errors} erros.`;
+  return `Coleta concluida: ${summary.approvedAsPending} vagas aprovadas para fila, ${rejected} recusadas, ${summary.rejectedDuplicates} duplicatas, ${errors} erros.`;
 }
 
 export function buildGithubCollectionNotice(summary: ProviderRunnerSummary): string {

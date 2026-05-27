@@ -16,6 +16,11 @@ const HIGH_SENIORITY_TERMS = [
   'especialista',
   'staff',
   'principal',
+  'manager',
+  'coordinator',
+  'coordenador',
+  'coordenadora',
+  'gerente',
   'arquitetura avancada',
 ];
 

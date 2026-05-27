@@ -40,13 +40,14 @@ Fontes para evitar nesta etapa:
 ## LinkedIn
 
 - Tipo de acesso provavel: plataforma grande com protecoes, conteudo dinamico e forte controle de acesso.
-- API publica/endpoints conhecidos: APIs oficiais costumam exigir autorizacao e escopo adequado; scraping publico e arriscado.
-- Exige login: frequentemente sim para uso completo.
+- API publica/endpoints conhecidos: nao foi encontrado JSON publico na pesquisa de 2026-05-27. A UI publica usa endpoints `jobs-guest` que retornam HTML fragmentado/completo, nao contrato JSON. APIs oficiais costumam exigir autorizacao e escopo adequado.
+- Exige login: parcialmente. A primeira listagem publica pode aparecer sem login, mas a pagina mostra modal `Sign in to view more jobs` e acoes como candidatura/salvar exigem login.
 - JS-heavy: sim.
 - Risco de captcha/bloqueio: alto.
 - Dificuldade estimada: muito alta.
 - Recomendacao: evitar.
 - Estrategia ideal: nao implementar scraping. Usar apenas API oficial autorizada, parceria ou fontes alternativas.
+- Pesquisa especifica: `docs/linkedin-scraping-research.md`.
 
 ## Programathor
 

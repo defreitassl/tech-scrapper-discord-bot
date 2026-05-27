@@ -1,14 +1,11 @@
 import { JobPost, JobStatus } from '@prisma/client';
 import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
-import { generateJobMessage } from '../services/aiMessageGenerator';
 import { isAutoApprovalEligible } from '../services/autoApproveJobs';
 import { classifyJobDomain } from '../services/jobDomainClassifier';
 import { checkJobDuplicate } from '../services/jobDeduplication';
 import { evaluateJobPriority, type JobPriorityLevel, type JobPriorityResult } from '../services/jobPriority';
 import { evaluateCollectedJobQuality } from '../services/jobQualityFilter';
-import { isUsableGeneratedMessage } from '../services/publishPendingJobs';
-import { getSchedulerDailyUsage } from '../services/schedulerOperations';
 import { getSchedulerSettings, normalizeSchedulerSettings } from '../services/schedulerSettings';
 import { normalizeCollectedJob } from './normalizeCollectedJob';
 import { automaticJobProviders, collectableJobProviders } from './providerRegistry';
@@ -49,13 +46,12 @@ export type AutomatedJobCollectionSummary = {
   rejectedByPriority: number;
   selectedForApproval: number;
   approvedAsPending: number;
-  failedAiGeneration: number;
   errors: ProviderRunnerError[];
   repositoryErrors: number;
   dailyLimit: number;
-  sentToday: number;
   pendingCount: number;
-  requestedLimit: number;
+  queueTarget: number;
+  slotsToCreate: number;
   approvedJobIds: string[];
   repositorySummaries: ProviderRepositorySummary[];
 };
@@ -260,9 +256,9 @@ export async function runAutomatedJobCollection(
   providers: JobSourceProvider[] = automaticJobProviders,
 ): Promise<AutomatedJobCollectionSummary> {
   const settings = normalizeSchedulerSettings(await getSchedulerSettings());
-  const usage = await getSchedulerDailyUsage(settings);
   const pendingCount = await prisma.jobPost.count({ where: { status: JobStatus.PENDING } });
-  const requestedLimit = Math.max(settings.dailyLimit - usage.sentToday - pendingCount, 0);
+  const queueTarget = Math.min(Math.max(settings.dailyLimit * 7, settings.dailyLimit), 30);
+  const slotsToCreate = Math.max(queueTarget - pendingCount, 0);
   const summary: AutomatedJobCollectionSummary = {
     providersExecuted: 0,
     analyzed: 0,
@@ -272,30 +268,29 @@ export async function runAutomatedJobCollection(
     rejectedByPriority: 0,
     selectedForApproval: 0,
     approvedAsPending: 0,
-    failedAiGeneration: 0,
     errors: [],
     repositoryErrors: 0,
     dailyLimit: settings.dailyLimit,
-    sentToday: usage.sentToday,
     pendingCount,
-    requestedLimit,
+    queueTarget,
+    slotsToCreate,
     approvedJobIds: [],
     repositorySummaries: [],
   };
 
-  logger.info('Coleta automatizada calculou limite de criacao.', {
+  logger.info('Coleta automatizada calculou alvo da fila PENDING.', {
     dailyLimit: settings.dailyLimit,
-    sentToday: usage.sentToday,
     pendingCount,
-    requestedLimit,
+    queueTarget,
+    slotsToCreate,
     timezone: settings.timezone,
   });
 
-  if (requestedLimit <= 0) {
-    logger.info('Coleta automatizada ignorada porque nao ha espaco no limite diario.', {
+  if (slotsToCreate <= 0) {
+    logger.info('Fila PENDING ja esta cheia.', {
       dailyLimit: settings.dailyLimit,
-      sentToday: usage.sentToday,
       pendingCount,
+      queueTarget,
     });
     return summary;
   }
@@ -408,7 +403,7 @@ export async function runAutomatedJobCollection(
   const selectedTitleCompanyKeys = new Set<string>();
 
   for (const candidate of orderedCandidates) {
-    if (selectedCandidates.length >= requestedLimit) {
+    if (selectedCandidates.length >= slotsToCreate) {
       summary.rejectedByPriority += 1;
       continue;
     }
@@ -460,24 +455,10 @@ export async function runAutomatedJobCollection(
 
   for (const candidate of selectedCandidates) {
     try {
-      logger.info('Coleta automatizada gerando mensagem com IA antes de criar vaga.', {
-        provider: candidate.provider,
-        title: candidate.normalizedJob.title,
-        priority: candidate.priorityResult.priority,
-        priorityScore: candidate.priorityResult.score,
-      });
-
-      const syntheticJob = buildSyntheticJob(candidate.normalizedJob, candidate.priorityResult);
-      const generatedMessage = await generateJobMessage(syntheticJob);
-
-      if (!isUsableGeneratedMessage(generatedMessage)) {
-        throw new Error('Mensagem gerada pela IA nao passou na validacao de formato.');
-      }
-
       const job = await prisma.jobPost.create({
         data: {
           ...candidate.normalizedJob,
-          aiGeneratedText: generatedMessage,
+          aiGeneratedText: null,
           status: JobStatus.PENDING,
           useAi: true,
           priority: candidate.priorityResult.priority,
@@ -490,7 +471,7 @@ export async function runAutomatedJobCollection(
       summary.approvedJobIds.push(job.id);
       incrementAutomatedRepositoryCreated(candidate.repositorySummary);
 
-      logger.info('Vaga coletada aprovada e criada como PENDING.', {
+      logger.info('Vaga coletada aprovada e criada como PENDING sem gerar IA.', {
         provider: candidate.provider,
         jobId: job.id,
         title: job.title,
@@ -498,13 +479,12 @@ export async function runAutomatedJobCollection(
         priorityScore: candidate.priorityResult.score,
       });
     } catch (error) {
-      summary.failedAiGeneration += 1;
-      logger.error('Erro ao gerar IA para vaga coletada. Vaga recusada e nao persistida.', error, {
+      const message = error instanceof Error ? error.message : 'Erro desconhecido ao criar vaga coletada.';
+      summary.errors.push({ provider: candidate.provider, message });
+      logger.error('Erro ao criar vaga coletada como PENDING.', error, {
         provider: candidate.provider,
         title: candidate.normalizedJob.title,
         url: candidate.normalizedJob.url,
-        priority: candidate.priorityResult.priority,
-        priorityScore: candidate.priorityResult.score,
       });
     }
   }
@@ -517,7 +497,8 @@ export async function runAutomatedJobCollection(
     rejectedByPriority: summary.rejectedByPriority,
     selectedForApproval: summary.selectedForApproval,
     approvedAsPending: summary.approvedAsPending,
-    failedAiGeneration: summary.failedAiGeneration,
+    queueTarget: summary.queueTarget,
+    slotsToCreate: summary.slotsToCreate,
     errors: summary.errors.length,
   });
 

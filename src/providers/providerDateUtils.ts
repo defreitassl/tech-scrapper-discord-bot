@@ -5,12 +5,14 @@ export function getDateDaysAgo(days: number): Date {
   return date;
 }
 
-export function isRecentDate(value?: string | null, maxAgeDays = 30, referenceDate = getDateDaysAgo(maxAgeDays)): boolean {
-  if (!value?.trim()) {
+export function isRecentDate(value?: unknown, maxAgeDays = 30, referenceDate = getDateDaysAgo(maxAgeDays)): boolean {
+  const text = normalizeDateInput(value);
+
+  if (!text) {
     return false;
   }
 
-  const date = new Date(value);
+  const date = new Date(text);
 
   if (Number.isNaN(date.getTime())) {
     return false;
@@ -20,25 +22,45 @@ export function isRecentDate(value?: string | null, maxAgeDays = 30, referenceDa
 }
 
 export function parseDateOrNow(value?: string | null): Date {
-  if (!value?.trim()) {
+  const text = normalizeDateInput(value);
+
+  if (!text) {
     return new Date();
   }
 
-  const date = new Date(value);
+  const date = new Date(text);
 
   return Number.isNaN(date.getTime()) ? new Date() : date;
 }
 
 export function isOlderThanHours(value: string | null | undefined, hours: number): boolean {
-  if (!value?.trim()) {
+  const text = normalizeDateInput(value);
+
+  if (!text) {
     return true;
   }
 
-  const date = new Date(value);
+  const date = new Date(text);
 
   if (Number.isNaN(date.getTime())) {
     return true;
   }
 
   return Date.now() - date.getTime() >= hours * 60 * 60 * 1000;
+}
+
+function normalizeDateInput(value: unknown): string | null {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value.toISOString();
+  }
+
+  if (typeof value === 'string') {
+    return value.trim() || null;
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(value);
+  }
+
+  return null;
 }

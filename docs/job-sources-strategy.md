@@ -51,6 +51,43 @@ Os providers ATS consultam apenas empresas cadastradas nessa lista. Se um endpoi
 
 Nesta etapa, ATS publicos ficam na coleta manual unificada pelo botao `Coletar vagas`. Eles nao entram na coleta automatica diaria ate a lista de empresas e o volume de chamadas amadurecerem.
 
+### Solides automatica
+
+A Solides foi investigada com Playwright MCP em `docs/solides-scraping-research.md`. O portal publico renderiza a busca com JavaScript, mas os dados foram observados em endpoint JSON publico:
+
+```text
+https://apigw.solides.com.br/jobs/v3/portal-vacancies-new
+```
+
+Paginas publicas de empresa tambem usam JSON publico em:
+
+```text
+https://apigw.solides.com.br/jobs/v3/home/vacancy
+```
+
+Por isso, a estrategia atual usa esse JSON publico com baixo volume. O provider `src/providers/solides.provider.ts` entra na coleta automatica diaria e tambem na coleta manual unificada `POST /admin/jobs/collect-all`.
+
+Regras da coleta:
+
+- reconhecimento feito com Playwright MCP;
+- sem login;
+- sem cookies autenticados;
+- sem credenciais pessoais;
+- sem proxy ou rotacao de IP;
+- sem captcha ou bypass;
+- sem Playwright operacional, porque JSON publico e suficiente;
+- sem paginacao agressiva;
+- limite de 20 vagas retornadas por execucao;
+- vagas aprovadas como `PENDING`;
+- `useAi = true`;
+- sem chamada de IA durante a coleta;
+- sem Discord;
+- exige vaga `TECH` ou `POSSIBLY_TECH` com sinal forte;
+- rejeita `NON_TECH`, pleno, senior, lead, especialista, manager, coordinator e similares;
+- aceita remoto ou hibrido/presencial apenas em Minas Gerais/Belo Horizonte/regiao.
+
+Se a Solides passar a exigir login, captcha, Cloudflare/bypass, proxy, credenciais ou qualquer contorno tecnico, a coleta deve ser interrompida.
+
 ### GitHub e listas publicas
 
 Repositorios, arquivos Markdown, listas publicas e curadorias abertas podem ser boas fontes. Devem ser tratados como dados semi-estruturados e sempre registrar URL de origem.
@@ -72,11 +109,11 @@ Regras atuais do provider GitHub:
 - aplica filtro deterministico de qualidade antes de salvar, rejeitando vagas sem titulo, sem canal claro de candidatura (URL ou e-mail no texto), sem descricao util, vagas com sinais fortes de senioridade/experiencia alta ou vagas fora de tecnologia;
 - extrai `shortDescription` e `stacks` do corpo da issue quando ha informacao suficiente;
 - aprova vagas elegiveis como `PENDING`;
-- chama IA apenas para candidatas selecionadas;
+- nao chama IA durante a coleta;
 - nao envia ao Discord;
 - aceita `GITHUB_TOKEN` opcional para aumentar o rate limit.
 
-Depois da coleta, vagas boas ja entram na fila `PENDING` com mensagem gerada por IA. Vagas ruins, duplicadas ou com falha de IA nao sao persistidas.
+Depois da coleta, vagas boas ja entram na fila `PENDING` sem mensagem gerada por IA. Vagas ruins ou duplicadas nao sao persistidas.
 
 O filtro de qualidade reduz ruido antes da criacao e registra rejeicoes em `rejectedByQuality` com os motivos no terminal.
 
@@ -84,9 +121,9 @@ Alem do filtro de qualidade, o runner calcula uma prioridade deterministica para
 
 A prioridade e persistida no banco no `JobPost` aprovado com `priority`, `priorityScore` e `priorityReasons`. `priority` usa o enum `JobPriority` (`HIGH`, `MEDIUM`, `LOW`), `priorityScore` guarda a pontuacao numerica e `priorityReasons` guarda os motivos serializados como JSON string. Os logs mostram pontuacao e motivos.
 
-A aprovacao roda dentro do pipeline de coleta. Ela nunca aprova `LOW`, exige URL e `rawText` ou `shortDescription`, e bloqueia sinais fortes de senioridade alta. Vagas `HIGH` podem ser preparadas automaticamente. Vagas `MEDIUM` so sao preparadas quando forem estagio, trainee, remotas ou tiverem `priorityScore >= 75`. A rotina gera `aiGeneratedText` com Gemini, marca `useAi = true` e cria `PENDING`; se a IA falhar, a vaga nao e persistida. Ela nao envia ao Discord.
+A aprovacao roda dentro do pipeline de coleta. Ela nunca aprova `LOW`, exige URL e `rawText` ou `shortDescription`, e bloqueia sinais fortes de senioridade alta. Vagas `HIGH` podem ser colocadas automaticamente na fila. Vagas `MEDIUM` so entram quando forem estagio, trainee, remotas ou tiverem `priorityScore >= 75`. A rotina marca `useAi = true`, deixa `aiGeneratedText` vazio e cria `PENDING`; Gemini sera chamado somente no envio. Ela nao envia ao Discord.
 
-Alem da coleta manual no painel, o processo admin agenda a coleta dos providers automaticos diariamente as 08:00 em `America/Sao_Paulo`. Essa rotina executa GitHub, as APIs externas registradas, Remotar, Gupy e Programathor; nao executa ATS publicos. Antes de criar vagas, calcula a quantidade necessaria para completar o limite diario configurado no scheduler, descontando vagas ja `PENDING` e vagas `SENT` hoje.
+Alem da coleta manual no painel, o processo admin agenda a coleta dos providers automaticos diariamente as 08:00 em `America/Sao_Paulo`. Essa rotina executa GitHub, as APIs externas registradas, Remotar, Gupy, Programathor e Solides; nao executa ATS publicos. Antes de criar vagas, calcula a fila alvo `min(max(dailyLimit * 7, dailyLimit), 30)` e cria somente o que falta para completar `PENDING`, sem descontar vagas `SENT` hoje.
 
 ### Paginas publicas simples
 
@@ -136,7 +173,7 @@ Regras do experimento:
 - limite de 20 vagas retornadas por execucao;
 - vagas aprovadas como `PENDING`;
 - `useAi = true`;
-- IA apenas para candidatas selecionadas;
+- sem chamada de IA durante a coleta;
 - sem Discord.
 
 Se o Programathor passar a exigir login, captcha, Cloudflare/bypass, proxy, credenciais ou qualquer contorno tecnico, a coleta deve ser interrompida.
@@ -164,12 +201,12 @@ Regras da coleta:
 - limite de 20 vagas retornadas por execucao;
 - vagas aprovadas como `PENDING`;
 - `useAi = true`;
-- IA apenas para candidatas selecionadas;
+- sem chamada de IA durante a coleta;
 - sem Discord.
 - exige categoria tech ou classificacao `TECH`, rejeitando Direito, Marketing, Comercial, Administrativo, RH, Afiliados, Parcerias e areas similares quando nao houver sinal tech forte;
 - nao usa mais busca ampla como `estagio tecnologia`.
 
-A Remotar segue o mesmo contrato automatizado: vagas elegiveis podem virar `PENDING` com IA; recusadas nao sao persistidas. Gupy e Programathor tambem entram na coleta automatica.
+A Remotar segue o mesmo contrato automatizado: vagas elegiveis podem virar `PENDING` sem IA; recusadas nao sao persistidas. Gupy, Programathor e Solides tambem entram na coleta automatica.
 
 Se a Remotar passar a exigir login, captcha, Cloudflare/bypass, proxy, credenciais ou qualquer contorno tecnico, a coleta deve ser interrompida.
 
@@ -186,7 +223,7 @@ LinkedIn, Gupy, Solides e plataformas similares podem ter:
 
 Essas fontes nao devem ser o ponto de partida. Tambem nao se deve tentar burlar login, captcha ou bloqueios.
 
-Antes de implementar qualquer plataforma maior, consulte `docs/scraping-platforms-research.md`. A recomendacao atual e priorizar Greenhouse, Lever, Ashby, sites proprios de empresas e paginas publicas de carreiras quando houver API publica, RSS, endpoint JSON publico ou HTML simples. LinkedIn deve ser evitado; Remotar, Gupy e Programathor rodam na coleta automatica por fontes publicas validadas e baixa frequencia; Solides fica para depois e apenas com endpoints publicos permitidos.
+Antes de implementar qualquer plataforma maior, consulte `docs/scraping-platforms-research.md`. O LinkedIn ja foi investigado em `docs/linkedin-scraping-research.md`: nao foi encontrado JSON publico de vagas, a UI publica limita navegacao com login e carrega protecoes anti-abuso. A recomendacao atual e priorizar Greenhouse, Lever, Ashby, sites proprios de empresas e paginas publicas de carreiras quando houver API publica, RSS, endpoint JSON publico ou HTML simples. LinkedIn deve ser evitado; Remotar, Gupy, Programathor e Solides rodam na coleta automatica por fontes publicas validadas e baixa frequencia.
 
 ## Recomendacao
 
@@ -198,6 +235,6 @@ Comecar por fontes simples, publicas e revisaveis:
 - APIs;
 - paginas HTML simples.
 
-Na fase atual, vagas coletadas automaticamente nao entram mais como `DRAFT`. O pipeline aprova boas vagas como `PENDING` com IA e recusa as demais sem persistir. A publicacao continua acontecendo somente pelo scheduler de envio ou por acao manual.
+Na fase atual, vagas coletadas automaticamente nao entram mais como `DRAFT`. O pipeline aprova boas vagas como `PENDING` sem chamar Gemini e recusa as demais sem persistir. A publicacao, a geracao de IA e o fallback deterministico acontecem somente pelo scheduler de envio ou por acao manual.
 
-Fontes como Arbeitnow, Findwork, Jobdata, LinkedIn e Solides continuam fora desta etapa por menor aderencia, necessidade de chave/login, uso comercial, captcha, protecoes anti-bot ou risco de scraping pesado. Remotar, Gupy e Programathor ficam na coleta automatica diaria por fontes publicas observadas e baixo volume. Greenhouse, Lever e Ashby ficam limitados ao botao manual por endpoints publicos de empresas cadastradas.
+Fontes como Arbeitnow, Findwork, Jobdata e LinkedIn continuam fora desta etapa por menor aderencia, necessidade de chave/login, uso comercial, captcha, protecoes anti-bot ou risco de scraping pesado. Remotar, Gupy, Programathor e Solides ficam na coleta automatica diaria por fontes publicas observadas e baixo volume. Greenhouse, Lever e Ashby ficam limitados ao botao manual.

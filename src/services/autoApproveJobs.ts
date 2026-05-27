@@ -1,9 +1,6 @@
 import { JobPost, JobPriority, JobStatus } from '@prisma/client';
 import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
-import { generateJobMessage } from './aiMessageGenerator';
-import { isUsableGeneratedMessage } from './publishPendingJobs';
-import { getSchedulerDailyUsage } from './schedulerOperations';
 import { getSchedulerSettings, normalizeSchedulerSettings } from './schedulerSettings';
 
 const CANDIDATE_SCAN_LIMIT = 100;
@@ -29,14 +26,14 @@ export type AutoApproveJobsResult = {
 
 export async function autoApproveJobsForToday(): Promise<AutoApproveJobsResult> {
   const settings = normalizeSchedulerSettings(await getSchedulerSettings());
-  const usage = await getSchedulerDailyUsage(settings);
   const pendingCount = await prisma.jobPost.count({ where: { status: JobStatus.PENDING } });
-  const limit = Math.max(settings.dailyLimit - usage.sentToday - pendingCount, 0);
+  const queueTarget = Math.min(Math.max(settings.dailyLimit * 7, settings.dailyLimit), 30);
+  const limit = Math.max(queueTarget - pendingCount, 0);
 
-  logger.info('Autoaprovacao calculou limite para hoje.', {
+  logger.info('Autoaprovacao legada calculou alvo da fila PENDING.', {
     dailyLimit: settings.dailyLimit,
-    sentToday: usage.sentToday,
     pendingCount,
+    queueTarget,
     limit,
     timezone: settings.timezone,
   });
@@ -56,29 +53,23 @@ export async function autoApproveNextJobs(limit: number): Promise<AutoApproveJob
   };
 
   if (limit <= 0) {
-    logger.info('Autoaprovacao ignorada porque nao ha vagas necessarias para completar o limite diario.', { limit });
+    logger.info('Autoaprovacao ignorada porque a fila PENDING ja esta cheia.', { limit });
     return result;
   }
 
   for (const job of candidates.jobs) {
     try {
-      logger.info('Autoaprovacao gerando mensagem com IA.', {
+      logger.info('Autoaprovacao legada colocando vaga na fila sem gerar IA.', {
         jobId: job.id,
         title: job.title,
         priority: job.priority,
         priorityScore: job.priorityScore,
       });
 
-      const generatedMessage = await generateJobMessage(job);
-
-      if (!isUsableGeneratedMessage(generatedMessage)) {
-        throw new Error('Mensagem gerada pela IA nao passou na validacao de formato.');
-      }
-
       const approvedJob = await prisma.jobPost.update({
         where: { id: job.id },
         data: {
-          aiGeneratedText: generatedMessage,
+          aiGeneratedText: null,
           useAi: true,
           status: JobStatus.PENDING,
         },
@@ -93,11 +84,10 @@ export async function autoApproveNextJobs(limit: number): Promise<AutoApproveJob
         nextStatus: JobStatus.PENDING,
         priority: job.priority,
         priorityScore: job.priorityScore,
-        messageLength: generatedMessage.length,
       });
     } catch (error) {
       result.failed += 1;
-      logger.error('Erro na autoaprovacao de vaga. Vaga mantida como DRAFT.', error, {
+      logger.error('Erro na autoaprovacao legada de vaga. Vaga mantida como DRAFT.', error, {
         jobId: job.id,
         title: job.title,
         priority: job.priority,

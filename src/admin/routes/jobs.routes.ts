@@ -2,7 +2,6 @@ import express from 'express';
 import { JobPost, JobStatus } from '@prisma/client';
 import { logger } from '../../lib/logger';
 import { prisma } from '../../lib/prisma';
-import { generateJobMessage } from '../../services/aiMessageGenerator';
 import { autoApproveJobsForToday } from '../../services/autoApproveJobs';
 import { checkJobDuplicate } from '../../services/jobDeduplication';
 import { publishPendingJobs, publishSingleJob } from '../../services/publishPendingJobs';
@@ -69,52 +68,11 @@ export function createJobsRouter(): express.Router {
       possibleDuplicateJobId: duplicateCheck.possibleDuplicateByTitleAndCompany?.id,
     });
 
-    if (!job.readyText?.trim() && job.useAi) {
-      try {
-        const generatedMessage = await generateJobMessage(job);
-
-        await prisma.jobPost.update({
-          where: { id: job.id },
-          data: { aiGeneratedText: generatedMessage },
-        });
-
-        logger.info('Mensagem gerada automaticamente com IA no cadastro da vaga.', {
-          jobId: job.id,
-          messageLength: generatedMessage.length,
-        });
-
-        redirectWithNotice(
-          response,
-          `/admin/jobs/${job.id}`,
-          getJobCreatedNoticeMessage(
-            'Vaga cadastrada com sucesso. A mensagem com IA foi gerada automaticamente.',
-            duplicateCheck.possibleDuplicateByTitleAndCompany,
-          ),
-          duplicateCheck.possibleDuplicateByTitleAndCompany ? 'warning' : 'success',
-        );
-        return;
-      } catch (error) {
-        logger.error('Erro ao gerar mensagem automaticamente no cadastro. Vaga mantida como PENDING.', error, {
-          jobId: job.id,
-          title: job.title,
-        });
-
-        redirectWithNotice(
-          response,
-          `/admin/jobs/${job.id}`,
-          getJobCreatedNoticeMessage(
-            'Vaga cadastrada com sucesso, mas nao foi possivel gerar a mensagem com IA agora. O preview usa o template padrao e voce pode regenerar depois.',
-            duplicateCheck.possibleDuplicateByTitleAndCompany,
-          ),
-          'warning',
-        );
-        return;
-      }
-    }
-
     const message = job.readyText?.trim()
-      ? 'Vaga cadastrada com sucesso. Como ha texto pronto, a IA nao foi chamada automaticamente.'
-      : 'Vaga cadastrada com sucesso. A IA nao foi chamada porque a opcao de usar IA esta desmarcada.';
+      ? 'Vaga cadastrada com sucesso. Como ha texto pronto, ele sera usado no envio.'
+      : job.useAi
+        ? 'Vaga cadastrada com sucesso. A mensagem sera gerada com IA somente no momento do envio.'
+        : 'Vaga cadastrada com sucesso. O envio usara o template deterministico.';
 
     redirectWithNotice(
       response,
@@ -293,36 +251,16 @@ export function createJobsRouter(): express.Router {
       return;
     }
 
-    try {
-      logger.info('Geracao manual de mensagem com IA iniciada pelo admin.', {
-        jobId: job.id,
-        title: job.title,
-      });
-      const generatedMessage = await generateJobMessage(job);
-
-      await prisma.jobPost.update({
-        where: { id: job.id },
-        data: { aiGeneratedText: generatedMessage },
-      });
-
-      logger.info('Mensagem gerada manualmente com IA e salva.', {
-        jobId: job.id,
-        messageLength: generatedMessage.length,
-      });
-
-      redirectWithNotice(response, `/admin/jobs/${job.id}`, 'Mensagem com IA gerada com sucesso.');
-    } catch (error) {
-      logger.error('Erro ao gerar mensagem com IA pelo admin.', error, {
-        jobId: job.id,
-        title: job.title,
-      });
-      redirectWithNotice(
-        response,
-        `/admin/jobs/${job.id}`,
-        'Erro ao gerar IA. Verifique os dados da vaga e tente novamente.',
-        'error',
-      );
-    }
+    logger.info('Geracao manual de IA ignorada: mensagens agora sao geradas no envio.', {
+      jobId: job.id,
+      title: job.title,
+    });
+    redirectWithNotice(
+      response,
+      `/admin/jobs/${job.id}`,
+      'A mensagem com IA sera gerada somente no momento do envio.',
+      'info',
+    );
   });
 
   router.post('/admin/jobs/:id/prepare', async (request, response) => {
@@ -343,17 +281,16 @@ export function createJobsRouter(): express.Router {
     }
 
     try {
-      logger.info('Preparacao de vaga com IA iniciada pelo admin.', {
+      logger.info('Preparacao de vaga para fila iniciada pelo admin sem gerar IA.', {
         jobId: job.id,
         title: job.title,
         status: job.status,
       });
-      const generatedMessage = await generateJobMessage(job);
 
       await prisma.jobPost.update({
         where: { id: job.id },
         data: {
-          aiGeneratedText: generatedMessage,
+          aiGeneratedText: job.aiGeneratedText,
           status: JobStatus.PENDING,
           useAi: true,
         },
@@ -363,18 +300,17 @@ export function createJobsRouter(): express.Router {
         jobId: job.id,
         previousStatus: job.status,
         nextStatus: JobStatus.PENDING,
-        messageLength: generatedMessage.length,
       });
 
       redirectWithNotice(
         response,
         `/admin/jobs/${job.id}`,
         job.status === JobStatus.PENDING
-          ? 'Mensagem com IA regenerada e vaga mantida na fila.'
-          : 'Vaga preparada com IA e colocada na fila de envio.',
+          ? 'Vaga mantida na fila. A mensagem sera gerada no envio.'
+          : 'Vaga colocada na fila de envio. A mensagem sera gerada no envio.',
       );
     } catch (error) {
-      logger.error('Erro ao preparar vaga com IA pelo admin.', error, {
+      logger.error('Erro ao preparar vaga para fila pelo admin.', error, {
         jobId: job.id,
         title: job.title,
         status: job.status,
@@ -383,8 +319,8 @@ export function createJobsRouter(): express.Router {
         response,
         `/admin/jobs/${job.id}`,
         job.status === JobStatus.PENDING
-          ? 'Nao foi possivel regenerar a mensagem com IA agora. A vaga foi mantida como estava.'
-          : 'Nao foi possivel preparar a vaga com IA agora. A vaga foi mantida sem entrar na fila.',
+          ? 'Nao foi possivel manter a vaga na fila agora.'
+          : 'Nao foi possivel colocar a vaga na fila agora.',
         'error',
       );
     }

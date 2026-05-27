@@ -9,6 +9,7 @@ import { programathorProvider } from './programathor.provider';
 import { remotarProvider } from './remotar.provider';
 import { remoteOkProvider } from './remoteOk.provider';
 import { remotiveProvider } from './remotive.provider';
+import { solidesProvider } from './solides.provider';
 import type { JobSourceProvider } from './types';
 
 export const externalJobProviders: JobSourceProvider[] = [
@@ -24,6 +25,7 @@ export const automaticJobProviders: JobSourceProvider[] = [
   remotarProvider,
   gupyProvider,
   programathorProvider,
+  solidesProvider,
 ];
 export const manualCollectableJobProviders: JobSourceProvider[] = [
   ...automaticJobProviders,
