@@ -22,7 +22,8 @@ ${adminStyles}
             </div>
             <nav>
               <a href="/admin/jobs">Vagas</a>
-              <a href="/admin/settings/schedule">Configuracoes de envio</a>
+              <a href="/admin/settings/collection">Coleta automatica</a>
+              <a href="/admin/settings/schedule">Configuracao de envio</a>
             </nav>
           </div>
         </header>

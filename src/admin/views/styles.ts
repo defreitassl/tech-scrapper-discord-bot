@@ -727,6 +727,29 @@ export const adminStyles = `
             margin-top: 4px;
           }
 
+          .weekday-options {
+            padding: 14px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--surface-soft);
+          }
+
+          .weekday-options-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 10px;
+          }
+
+          .compact-checkbox {
+            align-items: center;
+            min-height: 44px;
+            padding: 10px;
+          }
+
+          .compact-checkbox input {
+            margin-top: 0;
+          }
+
           .text-grid {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -976,6 +999,7 @@ export const adminStyles = `
             .page-heading,
             .form-grid,
             .schedule-slots-grid,
+            .weekday-options-grid,
             .text-grid,
             dl {
               display: block;
@@ -1023,6 +1047,7 @@ export const adminStyles = `
             .form-grid label,
             .form-grid .checkbox,
             .schedule-slots-grid label,
+            .weekday-options-grid label,
             .text-card,
             .detail-item {
               margin-top: 14px;

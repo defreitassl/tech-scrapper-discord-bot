@@ -14,7 +14,8 @@
 - `src/admin/server.ts`: ponto de entrada do painel admin. Cria o app Express, configura middlewares, registra rotas, inicia o servidor, inicia o `scheduledPublisher` e inicia o `scheduledCollector`.
 - `src/admin/routes/jobs.routes.ts`: rotas de vagas do painel admin, incluindo listagem, cadastro, detalhe, edicao, aprovacao, arquivamento e envio manual.
 - `src/admin/routes/schedule.routes.ts`: rotas de configuracao do envio agendado.
-- `src/admin/views/`: renderizacao server-side do painel. `layout.ts` contem o layout base, `styles.ts` contem o CSS inline, `components.ts` contem componentes HTML reutilizaveis, `jobs.views.ts` contem telas de vagas e `schedule.views.ts` contem a tela de agendamento.
+- `src/admin/routes/collectionSchedule.routes.ts`: rotas de configuracao da coleta automatica.
+- `src/admin/views/`: renderizacao server-side do painel. `layout.ts` contem o layout base, `styles.ts` contem o CSS inline, `components.ts` contem componentes HTML reutilizaveis, `jobs.views.ts` contem telas de vagas, `schedule.views.ts` contem a tela de envio agendado e `collectionSchedule.views.ts` contem a tela de coleta automatica.
 - `src/admin/helpers/`: helpers puros do painel. `forms.ts` concentra parse e normalizacao de formularios, `validators.ts` concentra validacoes de formulario/status, `status.ts` concentra labels de status, `formatters.ts` concentra formatacao visual simples e `notifications.ts` concentra notificacoes temporarias via query params.
 - `src/providers/`: base de providers de coleta. Inclui contrato (`types.ts`), normalizacao (`normalizeCollectedJob.ts`), registry de providers ativos (`providerRegistry.ts`), provider GitHub (`githubJobs.provider.ts`), providers externos por APIs publicas JSON (`himalayas.provider.ts`, `jobicy.provider.ts`, `remoteOk.provider.ts`, `remotive.provider.ts`), provider Remotar por JSON publico (`remotar.provider.ts`), providers manuais de ATS publicos (`greenhouse.provider.ts`, `lever.provider.ts`, `ashby.provider.ts`), providers Gupy (`gupy.provider.ts`), Programathor (`programathor.provider.ts`) e Solides (`solides.provider.ts`), lista controlada de empresas (`companyTargets.ts`), helpers compartilhados e runner (`providerRunner.ts`).
 - `src/scraping/`: camada preparatoria e isolada para futuras fontes publicas mais dificeis. Inclui tipos genericos, politica de permissao, helpers leves de HTML, cliente publico simples para HTML/JSON e uma subcamada experimental `src/scraping/browser/` para Playwright. Os providers ATS usam o cliente JSON publico dessa camada. A subcamada Playwright continua isolada, sem salvar no banco e sem alterar regras do runner.
@@ -27,12 +28,13 @@
 - `src/scripts/diagnoseJobPriority.ts`: diagnostico local de prioridade. Consulta vagas `DRAFT` legadas recentes no banco, imprime totais por prioridade, top/bottom por score e distribuicoes por fonte, nivel e modalidade. Nao altera dados, nao chama Gemini e nao envia ao Discord.
 - `src/scripts/diagnoseJobDomainClassifier.ts`: diagnostico local e sem banco do classificador de dominio. Cobre exemplos de Direito, Marketing, Afiliados, Suporte Tecnico, Desenvolvimento Front-end e QA Junior.
 - `src/services/schedulerSettings.ts`: leitura, criacao padrao, validacao e atualizacao das configuracoes de envio agendado.
+- `src/services/collectionSchedulerSettings.ts`: leitura, criacao padrao, validacao e atualizacao das configuracoes de coleta automatica.
 - `src/services/schedulerOperations.ts`: consultas operacionais do agendamento, como limite restante do dia e proximas vagas `PENDING`.
 - `src/services/scheduledPublisher.ts`: registro dos crons de publicacao e aplicacao do limite diario antes de chamar `publishPendingJobs`.
 - `src/services/jobMessage.ts`: montagem de mensagem padrao e fallback de texto.
 - `src/services/aiMessageGenerator.ts`: integracao com Google AI Studio/Gemini para gerar mensagens curtas e formatadas para Discord.
 - `src/services/discordPublisher.ts`: conexao com Discord, montagem do payload de embed/card da vaga e envio ao canal configurado, com fallback para texto puro quando o embed falhar.
-- `src/services/scheduledCollector.ts`: agendamento fixo da coleta automatica diaria dos providers automaticos, com lock simples em memoria para evitar execucoes concorrentes. Usa `runAutomatedJobCollection` e nao cria `DRAFT`.
+- `src/services/scheduledCollector.ts`: agendamento configuravel da coleta automatica dos providers automaticos, com lock simples em memoria para evitar execucoes concorrentes. Usa `runAutomatedJobCollection`, nao cria `DRAFT`, nao chama Gemini e nao executa ATS publicos.
 - `src/lib/prisma.ts`: instancia compartilhada do Prisma Client.
 - `src/lib/logger.ts`: logger simples usado nos fluxos do projeto.
 - `prisma/schema.prisma`: modelo de dados do banco.
@@ -114,7 +116,7 @@ O provider mock/teste foi removido do fluxo atual.
 
 ## Fluxo de coleta GitHub
 
-Na coleta manual, o provider GitHub roda pelo botao unico `Coletar vagas` (`POST /admin/jobs/collect-all`). Na coleta automatica, ele roda por estar em `automaticJobProviders`.
+Na coleta manual, o provider GitHub roda pelo botao unico `Coletar vagas` (`POST /admin/jobs/collect-all`). Na coleta automatica configuravel, ele roda por estar em `automaticJobProviders`.
 
 O provider GitHub usa a API oficial `GET https://api.github.com/repos/{owner}/{repo}/issues` para ler issues publicas abertas de:
 
@@ -153,7 +155,7 @@ A coleta GitHub nao chama IA, nao envia vagas ao Discord e nao altera o agendame
 
 ## Fluxo de coleta de fontes externas
 
-Na coleta manual, os providers externos rodam pelo botao unico `Coletar vagas` (`POST /admin/jobs/collect-all`). Na coleta automatica, eles rodam por estarem em `automaticJobProviders`:
+Na coleta manual, os providers externos rodam pelo botao unico `Coletar vagas` (`POST /admin/jobs/collect-all`). Na coleta automatica configuravel, eles rodam por estarem em `automaticJobProviders`:
 
 - `himalayasProvider`, usando `https://himalayas.app/jobs/api/search`;
 - `jobicyProvider`, usando `https://jobicy.com/api/v2/remote-jobs`;
@@ -206,7 +208,7 @@ Detalhes de data, nivel, localizacao, qualidade, duplicidade e erros continuam n
 
 ## Fluxo de coleta Gupy
 
-Na coleta manual, a Gupy roda pelo botao unico `Coletar vagas` (`POST /admin/jobs/collect-all`). Na coleta automatica, ela tambem roda por estar em `automaticJobProviders`.
+Na coleta manual, a Gupy roda pelo botao unico `Coletar vagas` (`POST /admin/jobs/collect-all`). Na coleta automatica configuravel, ela tambem roda por estar em `automaticJobProviders`.
 
 O provider Gupy foi implementado apos reconhecimento com Playwright MCP. A pagina publica `https://portal.gupy.io/job-search/term=...` carrega os dados pelo endpoint publico `https://employability-portal.gupy.io/api/v1/jobs`. Durante a validacao, a listagem abriu sem login, captcha, Cloudflare ou bloqueio tecnico. Se isso mudar, o provider deve ser pausado.
 
@@ -216,7 +218,7 @@ Depois dos filtros do provider, o runner central normaliza, aplica qualidade, de
 
 ## Fluxo de coleta Programathor
 
-Na coleta manual, o Programathor roda pelo botao unico `Coletar vagas` (`POST /admin/jobs/collect-all`). Na coleta automatica, ele tambem roda por estar em `automaticJobProviders`.
+Na coleta manual, o Programathor roda pelo botao unico `Coletar vagas` (`POST /admin/jobs/collect-all`). Na coleta automatica configuravel, ele tambem roda por estar em `automaticJobProviders`.
 
 O provider Programathor foi implementado apos reconhecimento tecnico documentado em `docs/programathor-scraping-research.md`. A listagem publica `https://programathor.com.br/jobs` e filtros como `?expertise=J%C3%BAnior`, `?contract_type=Est%C3%A1gio`, `?remoto=true`, `?place=Belo%20Horizonte`, `/jobs-front-end`, `/jobs-quality-assurance` e `/jobs-data-science` retornam cards no HTML inicial. As paginas de detalhe publicas possuem JSON-LD `JobPosting`, incluindo `datePosted`.
 
@@ -228,7 +230,7 @@ Depois dos filtros do provider, o runner central normaliza, aplica qualidade, de
 
 ## Fluxo de coleta Remotar
 
-Na coleta manual, a Remotar roda pelo botao unico `Coletar vagas` (`POST /admin/jobs/collect-all`). Na coleta automatica, ela roda por estar em `automaticJobProviders`.
+Na coleta manual, a Remotar roda pelo botao unico `Coletar vagas` (`POST /admin/jobs/collect-all`). Na coleta automatica configuravel, ela roda por estar em `automaticJobProviders`.
 
 O provider Remotar foi implementado apos reconhecimento com Playwright MCP documentado em `docs/remotar-scraping-research.md`. A home, buscas, filtros e detalhes publicos abriram sem login obrigatorio, captcha ou bloqueio tecnico. A UI chama endpoints JSON publicos como `https://api.remotar.com.br/jobs?search=desenvolvedor%20j%C3%BAnior`, `?tagId=17`, `?tagId=10`, `?categoryId=13` e combinacoes de busca, tags e categorias.
 
@@ -240,11 +242,11 @@ A Remotar tambem exige categoria tech ou classificacao `TECH` pelo `jobDomainCla
 
 Depois dos filtros do provider, o runner central normaliza, aplica qualidade, deduplica, prioriza e cria registros como `PENDING` sem IA. A coleta Remotar nao envia ao Discord.
 
-A Remotar tambem roda na coleta automatica diaria por estar em `automaticJobProviders`. A coleta prepara vagas aprovadas como `PENDING`, mas nunca publica no Discord.
+A Remotar tambem roda na coleta automatica configuravel por estar em `automaticJobProviders`. A coleta prepara vagas aprovadas como `PENDING`, mas nunca publica no Discord.
 
 ## Fluxo de coleta Solides
 
-Na coleta manual, a Solides roda pelo botao unico `Coletar vagas` (`POST /admin/jobs/collect-all`). Na coleta automatica, ela tambem roda por estar em `automaticJobProviders`.
+Na coleta manual, a Solides roda pelo botao unico `Coletar vagas` (`POST /admin/jobs/collect-all`). Na coleta automatica configuravel, ela tambem roda por estar em `automaticJobProviders`.
 
 O provider Solides foi implementado apos reconhecimento com Playwright MCP documentado em `docs/solides-scraping-research.md`. A home publica `https://vagas.solides.com.br/`, a listagem `https://vagas.solides.com.br/vagas?search=desenvolvedor%20junior`, a pagina de empresa `https://solides.vagas.solides.com.br/` e detalhes como `https://solides.vagas.solides.com.br/vaga/807304` abriram sem login obrigatorio, captcha ou bloqueio tecnico. A UI chama endpoints JSON publicos como `https://apigw.solides.com.br/jobs/v3/portal-vacancies-new?search=&title=desenvolvedor%20junior&locations=&take=14&page=1` e `https://apigw.solides.com.br/jobs/v3/home/vacancy?take=12&slug=solides&title=&locations=&page=1`.
 
@@ -254,13 +256,15 @@ O provider consulta os termos `estágio tecnologia`, `desenvolvedor junior`, `ju
 
 Depois dos filtros do provider, o runner central normaliza, aplica qualidade, deduplica, prioriza e cria registros como `PENDING` sem IA. A coleta Solides nao envia ao Discord.
 
-A Solides tambem roda na coleta automatica diaria por estar em `automaticJobProviders`. A coleta prepara vagas aprovadas como `PENDING`, mas nunca publica no Discord.
+A Solides tambem roda na coleta automatica configuravel por estar em `automaticJobProviders`. A coleta prepara vagas aprovadas como `PENDING`, mas nunca publica no Discord.
 
 ## Fluxo de coleta automatica
 
 O painel admin inicia `scheduledCollector` junto com o processo de `npm run admin`.
 
-A coleta automatica roda diariamente as 08:00 no timezone `America/Sao_Paulo`, usando `node-cron` com a expressao `0 8 * * *`.
+A coleta automatica e configurada no painel em `/admin/settings/collection`. O admin pode ativar/desativar a rotina, escolher frequencia de 1x ou 2x por semana, os dias da semana e um horario fixo. O timezone nao e editavel; o backend usa `America/Sao_Paulo`.
+
+O scheduler cria um cron por dia escolhido usando o horario configurado. Por exemplo, segunda as 08:00 vira `0 8 * * 1`; quinta as 08:00 vira `0 8 * * 4`.
 
 Ela executa os providers registrados em `automaticJobProviders`: GitHub, Himalayas, Jobicy, RemoteOK, Remotive, Remotar, Gupy, Programathor e Solides. Os providers ATS ficam em `atsJobProviders` e nao entram na coleta automatica nesta etapa.
 
@@ -276,7 +280,7 @@ Antes de coletar, `runAutomatedJobCollection` calcula o alvo da fila: `min(max(d
 
 O botao legado `Processar rascunhos legados` aparece apenas quando ha vagas `DRAFT` antigas. Ele usa `autoApproveJobsForToday` para preparar esses registros antigos, mas nao faz parte do fluxo principal de coleta.
 
-O servico possui um lock simples em memoria (`isCollecting`). Se uma coleta manual unificada ou automatica ja estiver em execucao, a nova execucao e ignorada com log amigavel. Esse lock evita concorrencia dentro do mesmo processo admin e nao cria estado no banco.
+O servico possui um lock simples em memoria (`isCollecting`). Se uma coleta manual unificada ou automatica ja estiver em execucao, a nova execucao e ignorada com log amigavel. Esse lock evita concorrencia dentro do mesmo processo admin e nao cria estado no banco. Ao salvar a configuracao no painel, o scheduler de coleta e recarregado sem alterar o scheduler de envio.
 
 Falhas na coleta automatica sao capturadas e registradas no logger. O processo do painel nao deve cair por erro de provider.
 

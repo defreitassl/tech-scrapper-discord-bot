@@ -26,7 +26,7 @@ Tambem existe uma camada inicial em `src/scraping/` para preparar futuras fontes
 - Novas vagas manuais entram como `PENDING` por padrao e `useAi` vem marcado por padrao no formulario.
 - Vagas coletadas por providers nao entram mais como `DRAFT`. Boas vagas entram direto como `PENDING` sem chamar IA; ruins ou duplicadas nao sao persistidas.
 - A coleta manual do painel usa um unico botao `Coletar vagas`, que chama `POST /admin/jobs/collect-all`, roda `manualCollectableJobProviders` e respeita o lock de coleta.
-- A etapa de coleta automatica diaria usa o mesmo pipeline automatizado e nao envia ao Discord.
+- A etapa de coleta automatica configuravel usa o mesmo pipeline automatizado e nao envia ao Discord.
 - O filtro de dominio fica em `src/services/jobDomainClassifier.ts` e classifica vagas como `TECH`, `POSSIBLY_TECH` ou `NON_TECH`.
 - O filtro de qualidade rejeita `NON_TECH` antes do banco. Exemplos: Direito Societario, Marketing de Performance e Afiliados/Parcerias. Suporte Tecnico, QA, Dados e Desenvolvimento devem continuar aceitos.
 - Vagas coletadas que passam pelo filtro de qualidade recebem prioridade antes da decisao de aprovacao. A prioridade favorece estagio remoto em tecnologia, estagio em Minas Gerais/BH/regiao, trainee remoto e junior remoto. `LOW` e recusada; `MEDIUM` exige estagio, trainee, remoto ou `priorityScore >= 75`.
@@ -71,9 +71,9 @@ Tambem existe uma camada inicial em `src/scraping/` para preparar futuras fontes
 ## Organizacao do painel admin
 
 - `src/admin/server.ts` e apenas o ponto de entrada: configura Express, registra routers, redireciona `/` para `/admin/jobs`, inicia o servidor e inicia o `scheduledPublisher`.
-- O servidor admin tambem inicia `scheduledCollector`, que agenda a coleta automatica diaria de providers reais.
-- Rotas de vagas ficam em `src/admin/routes/jobs.routes.ts`; rotas de envio agendado ficam em `src/admin/routes/schedule.routes.ts`.
-- Views server-rendered ficam em `src/admin/views/`: `jobs.views.ts`, `schedule.views.ts`, `layout.ts`, `components.ts` e `styles.ts`.
+- O servidor admin tambem inicia `scheduledCollector`, que agenda a coleta automatica de providers reais conforme configuracao persistida.
+- Rotas de vagas ficam em `src/admin/routes/jobs.routes.ts`; rotas de envio agendado ficam em `src/admin/routes/schedule.routes.ts`; rotas de coleta automatica ficam em `src/admin/routes/collectionSchedule.routes.ts`.
+- Views server-rendered ficam em `src/admin/views/`: `jobs.views.ts`, `schedule.views.ts`, `collectionSchedule.views.ts`, `layout.ts`, `components.ts` e `styles.ts`.
 - Helpers puros ficam em `src/admin/helpers/`: `forms.ts`, `validators.ts`, `status.ts`, `formatters.ts` e `notifications.ts`.
 - Views e helpers nao devem acessar Prisma diretamente. Rotas podem chamar Prisma e services.
 - Feedback operacional do painel usa notificacoes temporarias renderizadas no HTML via query params `message` e `noticeType`. Nao existe tela de logs nem persistencia em banco para essas notificacoes.
@@ -167,11 +167,14 @@ Regras dos providers ATS:
 - aceitar hibrido/presencial somente em Minas Gerais;
 - retornar `ProviderCollectResult` com `repositorySummaries` por alvo, para o runner completar qualidade, duplicidade e criacao.
 
-A coleta ATS fica manual dentro de `/admin/jobs/collect-all`. Ela usa o mesmo lock de `runRealJobCollection`, aprova elegiveis como `PENDING` via runner automatizado, e nao entra na coleta automatica diaria por enquanto.
+A coleta ATS fica manual dentro de `/admin/jobs/collect-all`. Ela usa o mesmo lock de `runRealJobCollection`, aprova elegiveis como `PENDING` via runner automatizado, e nao entra na coleta automatica por enquanto.
 
 ## Coleta automatica
 
-- `src/services/scheduledCollector.ts` agenda a coleta automatica diaria as 08:00 em `America/Sao_Paulo`.
+- `src/services/collectionSchedulerSettings.ts` le, cria, valida e atualiza `CollectionSchedulerSettings`.
+- `src/services/scheduledCollector.ts` agenda a coleta automatica conforme `/admin/settings/collection`.
+- A configuracao permite ativar/desativar, escolher `WEEKLY_ONCE` ou `WEEKLY_TWICE`, selecionar 1 ou 2 dias e escolher horario fixo.
+- O timezone nao e editavel; o backend usa `America/Sao_Paulo`.
 - Ela roda junto com `npm run admin`; se o painel admin nao estiver rodando, a coleta automatica nao executa.
 - Usa `node-cron` e chama `runAutomatedJobCollection(automaticJobProviders)`.
 - Nao executa `atsJobProviders` automaticamente nesta etapa.
@@ -181,6 +184,7 @@ A coleta ATS fica manual dentro de `/admin/jobs/collect-all`. Ela usa o mesmo lo
 - Falhas sao logadas e nao derrubam o processo.
 - Esse agendamento e separado do envio agendado de vagas `PENDING`.
 - `runRealJobCollection('scheduled')` ja cria as vagas aprovadas como `PENDING` sem IA; nao ha etapa separada de autoaprovacao no fluxo principal.
+- Ao salvar a tela de coleta, `reloadScheduledCollector()` recria os crons sem alterar a configuracao de envio.
 
 ## Proximos passos recomendados
 

@@ -114,7 +114,7 @@ Para vagas antigas ou rascunhos legados, a acao `Aprovar para envio` continua di
 
 Vagas coletadas por providers recebem prioridade persistida (`HIGH`, `MEDIUM` ou `LOW`), score e motivos calculados antes da decisao de aprovacao. O novo fluxo automatizado nunca persiste vagas recusadas.
 
-A coleta manual e a coleta automatica diaria usam o mesmo pipeline: provider, normalizacao, filtro TECH/NON_TECH, filtro de qualidade, deduplicacao, prioridade, preenchimento da fila e criacao do `JobPost` como `PENDING`. A coleta nao chama Gemini e nao envia nada ao Discord; o envio continua sendo feito pelo scheduler nos horarios configurados ou pelas acoes manuais.
+A coleta manual e a coleta automatica configuravel usam o mesmo pipeline: provider, normalizacao, filtro TECH/NON_TECH, filtro de qualidade, deduplicacao, prioridade, preenchimento da fila e criacao do `JobPost` como `PENDING`. A coleta nao chama Gemini e nao envia nada ao Discord; o envio continua sendo feito pelo scheduler nos horarios configurados ou pelas acoes manuais.
 
 Vagas `HIGH` sao elegiveis. Vagas `MEDIUM` so entram se forem estagio, trainee, remotas ou tiverem `priorityScore >= 75`. Vagas `LOW`, `NON_TECH`, sem URL, sem descricao util, com senioridade alta ou duplicadas sao recusadas e nao sao persistidas. O fluxo usa o limite diario configurado no agendamento para montar uma fila alvo: `min(max(dailyLimit * 7, dailyLimit), 30)`. Vagas `SENT` hoje nao reduzem a coleta; elas sao responsabilidade do scheduler no envio.
 
@@ -232,13 +232,30 @@ Todos os providers filtram vagas antigas quando ha data publica, senioridade aci
 
 O provider Solides foi criado apos reconhecimento obrigatorio com Playwright MCP, documentado em `docs/solides-scraping-research.md`. A pagina publica geral `https://vagas.solides.com.br/vagas` carrega resultados por JSON publico em `https://apigw.solides.com.br/jobs/v3/portal-vacancies-new`; paginas de empresa usam `https://apigw.solides.com.br/jobs/v3/home/vacancy`. A coleta usa somente JSON publico via `fetchPublicJson`, sem Playwright operacional, login, cookies autenticados, credenciais, proxy, rotacao de IP, captcha ou bypass.
 
-A Solides entra no botao unico `Coletar vagas` e tambem na coleta automatica diaria de baixa frequencia. Ela consulta poucos termos, limita a 20 vagas retornadas por execucao, exige vaga `TECH` ou `POSSIBLY_TECH` com sinal forte, rejeita `NON_TECH`, rejeita pleno/senior/lead/especialista/manager/coordinator e aceita remoto ou vagas hibridas/presenciais apenas em Minas Gerais/Belo Horizonte/regiao.
+A Solides entra no botao unico `Coletar vagas` e tambem na coleta automatica configuravel de baixa frequencia. Ela consulta poucos termos, limita a 20 vagas retornadas por execucao, exige vaga `TECH` ou `POSSIBLY_TECH` com sinal forte, rejeita `NON_TECH`, rejeita pleno/senior/lead/especialista/manager/coordinator e aceita remoto ou vagas hibridas/presenciais apenas em Minas Gerais/Belo Horizonte/regiao.
 
 As vagas coletadas passam pelo runner automatizado central. As boas entram como `PENDING` sem gerar Gemini; as ruins sao recusadas sem registro no banco. A coleta nunca envia direto ao Discord.
 
-### Coleta automatica diaria
+### Coleta automatica
 
-Quando o painel admin esta rodando com `npm run admin`, o sistema agenda automaticamente a coleta dos providers reais todos os dias as 08:00 no timezone `America/Sao_Paulo`.
+A coleta automatica e configurada pelo painel admin, separada do envio agendado.
+
+Acesse:
+
+```text
+http://localhost:3000/admin/settings/collection
+```
+
+Nessa tela e possivel definir:
+
+- se a coleta automatica esta ativa;
+- frequencia de 1x por semana ou 2x por semana;
+- dias da semana;
+- horario fixo entre 07:00, 08:00, 09:00, 10:00, 14:00, 16:00 e 18:00.
+
+O timezone nao e editavel pela interface. O sistema usa sempre `America/Sao_Paulo`.
+
+Quando o painel admin esta rodando com `npm run admin`, o sistema agenda a coleta dos providers reais conforme essa configuracao.
 
 Essa rotina executa os providers automaticos de baixa frequencia ja habilitados para agendamento: GitHub, Himalayas, Jobicy, RemoteOK, Remotive, Remotar, Gupy, Programathor e Solides. Os providers ATS publicos continuam apenas no botao manual `Coletar vagas`.
 
@@ -303,11 +320,12 @@ npm run admin
 - Schema inicial do Prisma com PostgreSQL
 - Model `JobPost` para armazenar vagas
 - Model `SchedulerSettings` para configuracao de envio agendado
+- Model `CollectionSchedulerSettings` para configuracao de coleta automatica
 - Painel admin simples para cadastrar, listar, visualizar e editar vagas
 - Providers reais e experimentais com coleta manual unificada
 - Provider GitHub para coletar issues publicas recentes de repositorios brasileiros de vagas no GitHub
 - Providers externos por APIs publicas JSON: Himalayas, Jobicy, RemoteOK e Remotive
 - Providers manuais de ATS publicos: Greenhouse, Lever e Ashby
-- Coleta automatica diaria dos providers automaticos as 08:00, criando apenas vagas aprovadas como `PENDING`
+- Coleta automatica configuravel dos providers automaticos 1x ou 2x por semana, criando apenas vagas aprovadas como `PENDING`
 
 Ainda nao ha scraping HTML real, browser automation ou autenticacao.

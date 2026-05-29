@@ -49,7 +49,7 @@ A lista de empresas-alvo e controlada em `src/providers/companyTargets.ts` e com
 
 Os providers ATS consultam apenas empresas cadastradas nessa lista. Se um endpoint falhar ou deixar de existir, a falha e registrada e os demais alvos continuam. A coleta aceita apenas vagas recentes, com sinal claro de entrada, localizacao compatível e revisao humana obrigatoria.
 
-Nesta etapa, ATS publicos ficam na coleta manual unificada pelo botao `Coletar vagas`. Eles nao entram na coleta automatica diaria ate a lista de empresas e o volume de chamadas amadurecerem.
+Nesta etapa, ATS publicos ficam na coleta manual unificada pelo botao `Coletar vagas`. Eles nao entram na coleta automatica configuravel ate a lista de empresas e o volume de chamadas amadurecerem.
 
 ### Solides automatica
 
@@ -65,7 +65,7 @@ Paginas publicas de empresa tambem usam JSON publico em:
 https://apigw.solides.com.br/jobs/v3/home/vacancy
 ```
 
-Por isso, a estrategia atual usa esse JSON publico com baixo volume. O provider `src/providers/solides.provider.ts` entra na coleta automatica diaria e tambem na coleta manual unificada `POST /admin/jobs/collect-all`.
+Por isso, a estrategia atual usa esse JSON publico com baixo volume. O provider `src/providers/solides.provider.ts` entra na coleta automatica configuravel e tambem na coleta manual unificada `POST /admin/jobs/collect-all`.
 
 Regras da coleta:
 
@@ -123,7 +123,7 @@ A prioridade e persistida no banco no `JobPost` aprovado com `priority`, `priori
 
 A aprovacao roda dentro do pipeline de coleta. Ela nunca aprova `LOW`, exige URL e `rawText` ou `shortDescription`, e bloqueia sinais fortes de senioridade alta. Vagas `HIGH` podem ser colocadas automaticamente na fila. Vagas `MEDIUM` so entram quando forem estagio, trainee, remotas ou tiverem `priorityScore >= 75`. A rotina marca `useAi = true`, deixa `aiGeneratedText` vazio e cria `PENDING`; Gemini sera chamado somente no envio. Ela nao envia ao Discord.
 
-Alem da coleta manual no painel, o processo admin agenda a coleta dos providers automaticos diariamente as 08:00 em `America/Sao_Paulo`. Essa rotina executa GitHub, as APIs externas registradas, Remotar, Gupy, Programathor e Solides; nao executa ATS publicos. Antes de criar vagas, calcula a fila alvo `min(max(dailyLimit * 7, dailyLimit), 30)` e cria somente o que falta para completar `PENDING`, sem descontar vagas `SENT` hoje.
+Alem da coleta manual no painel, o processo admin agenda a coleta dos providers automaticos conforme a configuracao salva em `/admin/settings/collection`: ativada ou desativada, 1x ou 2x por semana, dias da semana e horario fixo em `America/Sao_Paulo`. Essa rotina executa GitHub, as APIs externas registradas, Remotar, Gupy, Programathor e Solides; nao executa ATS publicos. Antes de criar vagas, calcula a fila alvo `min(max(dailyLimit * 7, dailyLimit), 30)` e cria somente o que falta para completar `PENDING`, sem descontar vagas `SENT` hoje.
 
 ### Paginas publicas simples
 
@@ -186,7 +186,7 @@ A Remotar foi investigada com Playwright MCP em `docs/remotar-scraping-research.
 https://api.remotar.com.br/jobs
 ```
 
-Por isso, a estrategia atual usa esse JSON publico em baixo volume. Apos a revisao operacional de 2026-05-25, a Remotar passou a rodar na coleta automatica diaria por apresentar melhor volume e aderencia entre os providers avaliados. A Remotar tambem roda pela coleta manual unificada.
+Por isso, a estrategia atual usa esse JSON publico em baixo volume. Apos a revisao operacional de 2026-05-25, a Remotar passou a rodar na coleta automatica de baixa frequencia por apresentar melhor volume e aderencia entre os providers avaliados. A Remotar tambem roda pela coleta manual unificada.
 
 Regras da coleta:
 
@@ -237,4 +237,4 @@ Comecar por fontes simples, publicas e revisaveis:
 
 Na fase atual, vagas coletadas automaticamente nao entram mais como `DRAFT`. O pipeline aprova boas vagas como `PENDING` sem chamar Gemini e recusa as demais sem persistir. A publicacao, a geracao de IA e o fallback deterministico acontecem somente pelo scheduler de envio ou por acao manual.
 
-Fontes como Arbeitnow, Findwork, Jobdata e LinkedIn continuam fora desta etapa por menor aderencia, necessidade de chave/login, uso comercial, captcha, protecoes anti-bot ou risco de scraping pesado. Remotar, Gupy, Programathor e Solides ficam na coleta automatica diaria por fontes publicas observadas e baixo volume. Greenhouse, Lever e Ashby ficam limitados ao botao manual.
+Fontes como Arbeitnow, Findwork, Jobdata e LinkedIn continuam fora desta etapa por menor aderencia, necessidade de chave/login, uso comercial, captcha, protecoes anti-bot ou risco de scraping pesado. Remotar, Gupy, Programathor e Solides ficam na coleta automatica configuravel por fontes publicas observadas e baixo volume. Greenhouse, Lever e Ashby ficam limitados ao botao manual.

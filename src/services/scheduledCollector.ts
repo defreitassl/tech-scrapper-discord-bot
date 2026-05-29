@@ -3,12 +3,22 @@ import { logger } from '../lib/logger';
 import { automaticJobProviders } from '../providers/providerRegistry';
 import { runAutomatedJobCollection, AutomatedJobCollectionSummary } from '../providers/providerRunner';
 import type { JobSourceProvider } from '../providers/types';
+import {
+  getCollectionSchedulerSettings,
+  normalizeCollectionSchedulerSettings,
+} from './collectionSchedulerSettings';
 
-const COLLECTOR_TIME = '08:00';
-const COLLECTOR_TIMEZONE = 'America/Sao_Paulo';
-const COLLECTOR_CRON_EXPRESSION = '0 8 * * *';
+const WEEKDAY_TO_CRON_DAY: Record<string, number> = {
+  SUNDAY: 0,
+  MONDAY: 1,
+  TUESDAY: 2,
+  WEDNESDAY: 3,
+  THURSDAY: 4,
+  FRIDAY: 5,
+  SATURDAY: 6,
+};
 
-let scheduledCollectorTask: ScheduledTask | null = null;
+let scheduledCollectorTasks: ScheduledTask[] = [];
 let isCollecting = false;
 
 export type JobCollectionTrigger = 'manual' | 'scheduled';
@@ -18,32 +28,61 @@ export type JobCollectionRunResult = {
   summary: AutomatedJobCollectionSummary | null;
 };
 
-export function startScheduledCollector(): void {
+export async function startScheduledCollector(): Promise<void> {
+  await reloadScheduledCollector();
+}
+
+export async function reloadScheduledCollector(): Promise<void> {
   stopScheduledCollector();
 
-  scheduledCollectorTask = cron.schedule(
-    COLLECTOR_CRON_EXPRESSION,
-    async () => {
-      await runRealJobCollection('scheduled');
-    },
-    {
-      timezone: COLLECTOR_TIMEZONE,
-      name: 'collect-real-job-providers',
-      noOverlap: true,
-    },
-  );
+  const settings = normalizeCollectionSchedulerSettings(await getCollectionSchedulerSettings());
+  const expressions = settings.weekdays.map((weekday) => cronExpressionFromTimeAndWeekday(settings.collectTime, weekday));
 
-  logger.info('Coleta automatica de providers agendada.', {
-    collectTime: COLLECTOR_TIME,
-    timezone: COLLECTOR_TIMEZONE,
-    expression: COLLECTOR_CRON_EXPRESSION,
+  logger.info('Configuracao de coleta automatica carregada.', {
+    enabled: settings.enabled,
+    frequency: settings.frequency,
+    weekdays: settings.weekdays,
+    collectTime: settings.collectTime,
+    timezone: settings.timezone,
+    expressions,
     providers: automaticJobProviders.map((provider) => provider.name),
   });
+
+  if (!settings.enabled) {
+    logger.info('Agendamento de coleta desativado.', { settingsId: settings.id });
+    return;
+  }
+
+  for (const [index, weekday] of settings.weekdays.entries()) {
+    const expression = expressions[index];
+    const task = cron.schedule(
+      expression,
+      async () => {
+        await runScheduledCollection(settings.collectTime, weekday);
+      },
+      {
+        timezone: settings.timezone,
+        name: `collect-real-job-providers-${weekday.toLowerCase()}-${settings.collectTime}`,
+        noOverlap: true,
+      },
+    );
+
+    scheduledCollectorTasks.push(task);
+    logger.info('Horario de coleta agendado.', {
+      weekday,
+      collectTime: settings.collectTime,
+      timezone: settings.timezone,
+      expression,
+      providers: automaticJobProviders.map((provider) => provider.name),
+    });
+  }
 }
 
 export function stopScheduledCollector(): void {
-  scheduledCollectorTask?.destroy();
-  scheduledCollectorTask = null;
+  while (scheduledCollectorTasks.length > 0) {
+    const task = scheduledCollectorTasks.pop();
+    task?.destroy();
+  }
 }
 
 export async function runRealJobCollection(
@@ -91,6 +130,25 @@ export async function runRealJobCollection(
       errors: summary.errors.length,
     });
 
+    if (trigger === 'scheduled') {
+      const rejectedTotal =
+        summary.rejectedByDomain +
+        summary.rejectedByQuality +
+        summary.rejectedDuplicates +
+        summary.rejectedByPriority;
+
+      logger.info('Resumo da coleta agendada.', {
+        approvedAsPending: summary.approvedAsPending,
+        rejectedTotal,
+        rejectedByDomain: summary.rejectedByDomain,
+        rejectedByQuality: summary.rejectedByQuality,
+        rejectedDuplicates: summary.rejectedDuplicates,
+        rejectedByPriority: summary.rejectedByPriority,
+        repositoryErrors: summary.repositoryErrors,
+        errors: summary.errors.length,
+      });
+    }
+
     return {
       skipped: false,
       summary,
@@ -105,4 +163,43 @@ export async function runRealJobCollection(
   } finally {
     isCollecting = false;
   }
+}
+
+async function runScheduledCollection(collectTime: string, weekday: string): Promise<void> {
+  const settings = normalizeCollectionSchedulerSettings(await getCollectionSchedulerSettings());
+
+  if (!settings.enabled) {
+    logger.info('Execucao de coleta agendada ignorada porque o agendamento esta desativado.', {
+      collectTime,
+      weekday,
+    });
+    return;
+  }
+
+  if (settings.collectTime !== collectTime || !settings.weekdays.includes(weekday)) {
+    logger.info('Execucao de coleta agendada ignorada porque o horario nao esta mais configurado.', {
+      collectTime,
+      weekday,
+      configuredCollectTime: settings.collectTime,
+      configuredWeekdays: settings.weekdays,
+    });
+    return;
+  }
+
+  logger.info('Coleta agendada iniciada.', {
+    collectTime,
+    weekday,
+    frequency: settings.frequency,
+    timezone: settings.timezone,
+    providers: automaticJobProviders.map((provider) => provider.name),
+  });
+
+  await runRealJobCollection('scheduled', automaticJobProviders);
+}
+
+function cronExpressionFromTimeAndWeekday(collectTime: string, weekday: string): string {
+  const [hour, minute] = collectTime.split(':');
+  const cronDay = WEEKDAY_TO_CRON_DAY[weekday] ?? 1;
+
+  return `${Number(minute)} ${Number(hour)} * * ${cronDay}`;
 }

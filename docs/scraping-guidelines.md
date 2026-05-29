@@ -38,13 +38,13 @@ O provider GitHub atual nao faz scraping HTML; ele usa a API oficial do GitHub e
 
 Os providers Himalayas, Jobicy, RemoteOK e Remotive tambem nao fazem scraping HTML. Eles usam APIs JSON publicas, poucas chamadas por execucao e filtros locais antes de entregar vagas ao runner. Remotive deve continuar com baixa frequencia de chamadas; Jobicy, RemoteOK e Remotive exigem atribuicao/linkback por meio da URL original.
 
-Os providers Greenhouse, Lever e Ashby tambem nao fazem scraping HTML pesado. Eles usam somente endpoints JSON publicos de ATS por empresa cadastrada, via coleta manual no painel. Nao usam Playwright, Cheerio, login, cookies, credenciais pessoais, proxy, captcha, Cloudflare bypass ou bypass anti-bot. Nesta etapa, eles nao entram na coleta automatica diaria.
+Os providers Greenhouse, Lever e Ashby tambem nao fazem scraping HTML pesado. Eles usam somente endpoints JSON publicos de ATS por empresa cadastrada, via coleta manual no painel. Nao usam Playwright, Cheerio, login, cookies, credenciais pessoais, proxy, captcha, Cloudflare bypass ou bypass anti-bot. Nesta etapa, eles nao entram na coleta automatica configuravel.
 
 O provider Gupy foi criado apos reconhecimento com Playwright MCP e fica documentado em `docs/gupy-scraping-research.md`. Ele roda automaticamente em baixo volume, com poucas chamadas, limite de 20 vagas por execucao e sem paginacao agressiva.
 
-O provider Remotar foi criado apos reconhecimento com Playwright MCP e fica documentado em `docs/remotar-scraping-research.md`. A implementacao usa JSON publico e, apos revisao operacional em 2026-05-25, foi promovida para a coleta automatica diaria por melhor volume e aderencia. Deve continuar com poucas chamadas, limite de 20 vagas por execucao e sem paginacao agressiva. A rota manual continua disponivel.
+O provider Remotar foi criado apos reconhecimento com Playwright MCP e fica documentado em `docs/remotar-scraping-research.md`. A implementacao usa JSON publico e, apos revisao operacional em 2026-05-25, foi promovida para a coleta automatica de baixa frequencia por melhor volume e aderencia. Deve continuar com poucas chamadas, limite de 20 vagas por execucao e sem paginacao agressiva. A rota manual continua disponivel.
 
-O provider Solides foi criado apos reconhecimento com Playwright MCP e fica documentado em `docs/solides-scraping-research.md`. A implementacao usa JSON publico em baixo volume, tem limite de 20 vagas por execucao, entra na coleta manual unificada e tambem na coleta automatica diaria.
+O provider Solides foi criado apos reconhecimento com Playwright MCP e fica documentado em `docs/solides-scraping-research.md`. A implementacao usa JSON publico em baixo volume, tem limite de 20 vagas por execucao, entra na coleta manual unificada e tambem na coleta automatica configuravel.
 
 ## Tratamento de falhas
 
@@ -69,7 +69,7 @@ No caso da Remotar, se o endpoint publico ou as paginas publicas passarem a exig
 
 No caso da Solides, se o endpoint publico ou as paginas publicas passarem a exigir login, captcha, Cloudflare/bypass, cookies autenticados, proxy, rotacao de IP ou qualquer credencial, a coleta deve ser parada em vez de contornada.
 
-A coleta automatica atual aprova vagas elegiveis como `PENDING`, com `useAi = true` e `aiGeneratedText` vazio quando ainda nao ha mensagem pronta, ou recusa sem persistir. Ela nao chama Gemini e nao envia ao Discord. Remotar, Gupy, Programathor e Solides rodam automaticamente em baixo volume por fontes publicas validadas; ATS publicos continuam manuais.
+A coleta automatica atual e configurada no painel para rodar 1x ou 2x por semana. Ela aprova vagas elegiveis como `PENDING`, com `useAi = true` e `aiGeneratedText` vazio quando ainda nao ha mensagem pronta, ou recusa sem persistir. Ela nao chama Gemini e nao envia ao Discord. Remotar, Gupy, Programathor e Solides rodam automaticamente em baixo volume por fontes publicas validadas; ATS publicos continuam manuais.
 
 ## Revisao antes de publicar
 

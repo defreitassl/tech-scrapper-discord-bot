@@ -3,6 +3,7 @@ import express from 'express';
 import { logger } from '../lib/logger';
 import { startScheduledCollector } from '../services/scheduledCollector';
 import { startScheduledPublisher } from '../services/scheduledPublisher';
+import { createCollectionScheduleRouter } from './routes/collectionSchedule.routes';
 import { createJobsRouter } from './routes/jobs.routes';
 import { createScheduleRouter } from './routes/schedule.routes';
 
@@ -30,11 +31,14 @@ app.get('/', (_request, response) => {
 });
 
 app.use(createScheduleRouter());
+app.use(createCollectionScheduleRouter());
 app.use(createJobsRouter());
 
 app.listen(port, () => {
   logger.info('Painel admin iniciado.', { url: `http://localhost:${port}/admin/jobs` });
-  startScheduledCollector();
+  startScheduledCollector().catch((error) => {
+    logger.error('Erro ao iniciar agendamento de coleta.', error);
+  });
   startScheduledPublisher().catch((error) => {
     logger.error('Erro ao iniciar agendamento de envio.', error);
   });

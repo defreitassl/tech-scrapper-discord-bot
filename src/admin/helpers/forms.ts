@@ -1,4 +1,9 @@
-import { JobPost, JobStatus, SchedulerSettings } from '@prisma/client';
+import { CollectionSchedulerSettings, JobPost, JobStatus, SchedulerSettings } from '@prisma/client';
+import {
+  DEFAULT_COLLECTION_SCHEDULER_TIMEZONE,
+  getDefaultCollectionSchedulerSettings,
+  normalizeCollectionSchedulerSettings,
+} from '../../services/collectionSchedulerSettings';
 import {
   AVAILABLE_SEND_TIMES,
   DEFAULT_SCHEDULER_TIMEZONE,
@@ -30,6 +35,14 @@ export type ScheduleFormData = {
   sendTimes: string[];
 };
 
+export type CollectionScheduleFormData = {
+  enabled: boolean;
+  frequency: string;
+  weekdays: string[];
+  collectTime: string;
+  timezone: string;
+};
+
 export function parseJobForm(body: unknown): JobFormData {
   return {
     title: optionalText(body, 'title'),
@@ -55,6 +68,16 @@ export function parseScheduleSettingsForm(body: unknown): ScheduleFormData {
     dailyLimit: Number(fieldValue(body, 'dailyLimit')),
     timezone: DEFAULT_SCHEDULER_TIMEZONE,
     sendTimes: fieldValues(body, 'sendTimes'),
+  };
+}
+
+export function parseCollectionScheduleSettingsForm(body: unknown): CollectionScheduleFormData {
+  return {
+    enabled: fieldValue(body, 'enabled') === 'on',
+    frequency: fieldValue(body, 'frequency'),
+    weekdays: fieldValues(body, 'weekdays'),
+    collectTime: fieldValue(body, 'collectTime'),
+    timezone: DEFAULT_COLLECTION_SCHEDULER_TIMEZONE,
   };
 }
 
@@ -111,6 +134,21 @@ export function scheduleFormFromSettings(settings?: SchedulerSettings): Schedule
     dailyLimit: normalizedSettings?.dailyLimit ?? 5,
     timezone: normalizedSettings?.timezone ?? DEFAULT_SCHEDULER_TIMEZONE,
     sendTimes: normalizedSettings?.sendTimes ?? AVAILABLE_SEND_TIMES.slice(0, 5),
+  };
+}
+
+export function collectionScheduleFormFromSettings(
+  settings?: CollectionSchedulerSettings,
+): CollectionScheduleFormData {
+  const defaults = getDefaultCollectionSchedulerSettings();
+  const normalizedSettings = settings ? normalizeCollectionSchedulerSettings(settings) : null;
+
+  return {
+    enabled: normalizedSettings?.enabled ?? defaults.enabled,
+    frequency: normalizedSettings?.frequency ?? defaults.frequency,
+    weekdays: normalizedSettings?.weekdays ?? defaults.weekdays,
+    collectTime: normalizedSettings?.collectTime ?? defaults.collectTime,
+    timezone: normalizedSettings?.timezone ?? defaults.timezone,
   };
 }
 

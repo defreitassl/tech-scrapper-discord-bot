@@ -13,12 +13,12 @@
 - Geracao de mensagem com Google AI Studio/Gemini no momento do envio.
 - Primeiro provider real via API oficial do GitHub, coletando issues abertas e recentes de repositorios brasileiros de vagas e aprovando elegiveis como `PENDING`.
 - Providers externos por APIs publicas JSON: Himalayas, Jobicy, RemoteOK e Remotive.
-- Providers Remotar, Gupy, Programathor e Solides incluidos na coleta automatica diaria por fontes publicas validadas.
+- Providers Remotar, Gupy, Programathor e Solides incluidos na coleta automatica configuravel por fontes publicas validadas.
 - Coleta manual unificada pelo botao `Coletar vagas`, executando providers automaticos e ATS publicos sem mock/teste.
 - Filtro de dominio tech/non-tech rejeitando vagas fora de tecnologia antes de salvar.
 - Prioridade de vagas coletadas persistida em `JobPost` e exibida no painel para apoiar revisao humana.
 - Acao manual para processar rascunhos legados e coloca-los na fila como `PENDING` sem IA.
-- Coleta automatica diaria dos providers automaticos as 08:00, preenchendo fila `PENDING` para vagas aprovadas sem chamar Gemini e recusando as demais sem persistir.
+- Coleta automatica configuravel pelo painel, 1x ou 2x por semana, preenchendo fila `PENDING` para vagas aprovadas sem chamar Gemini e recusando as demais sem persistir.
 
 ## V1.1 documentacao + providers
 
@@ -43,9 +43,9 @@
 
 ## V1.3 agendamento de coletas/providers
 
-- Implementada execucao agendada diaria dos providers reais as 08:00 em `America/Sao_Paulo`.
+- Implementada execucao agendada dos providers reais em `America/Sao_Paulo`.
 - Controla logs e erros por fonte.
-- Mantem limite conservador de frequencia: uma execucao por dia.
+- Mantem limite conservador de frequencia.
 - Continua exigindo scheduler ou acao manual para publicacao no Discord.
 - Executa GitHub, APIs externas, Remotar, Gupy, Programathor e Solides; ATS publicos seguem manuais.
 
@@ -55,7 +55,7 @@ Observacao: o envio agendado de vagas `PENDING` ja existe e e configurado no pai
 
 - Implementados providers Himalayas, Jobicy, RemoteOK e Remotive usando APIs publicas JSON.
 - Adicionados providers externos por APIs publicas JSON, hoje acionados tambem pelo botao unico `Coletar vagas`.
-- Registrados como providers reais para coleta automatica diaria.
+- Registrados como providers reais para coleta automatica.
 - Mantidas regras de seguranca da etapa de coleta: vagas recusadas nao sao persistidas e a coleta nao envia ao Discord.
 - Adicionados filtros conservadores de data, senioridade e localidade remota.
 - Preservada URL original para atribuicao/linkback de Jobicy, RemoteOK e Remotive.
@@ -119,6 +119,15 @@ Observacao: o envio agendado de vagas `PENDING` ja existe e e configurado no pai
 - O publisher resolve a mensagem no envio: `readyText`, `aiGeneratedText` valido, Gemini quando `useAi = true`, ou fallback deterministico.
 - Falha de Gemini nao bloqueia envio quando o fallback consegue montar uma mensagem.
 - O limite diario controla o envio; a coleta preenche fila alvo `min(max(dailyLimit * 7, dailyLimit), 30)`.
+
+## V1.4.8 Coleta automatica configuravel
+
+- Criado model `CollectionSchedulerSettings`.
+- Criada tela `/admin/settings/collection`.
+- Admin pode ativar/desativar a coleta, escolher 1x ou 2x por semana, dias da semana e horario fixo.
+- `scheduledCollector` recarrega os crons ao salvar configuracao.
+- Coleta agendada usa apenas `automaticJobProviders`; ATS publicos continuam manuais.
+- Coleta e envio seguem separados: coleta cria `PENDING` sem Gemini; envio consome `PENDING` e gera mensagem somente no momento do envio.
 
 ## V1.5 autenticacao simples
 

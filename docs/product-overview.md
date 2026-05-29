@@ -21,7 +21,7 @@ O projeto resolve parte desse problema centralizando cadastro, organizacao, revi
 5. O admin pode enviar a vaga especifica pela pagina de detalhes, enviar vagas `PENDING` em lote ou deixar para o envio agendado.
 6. O admin tambem pode executar a coleta manual unificada pelo botao `Coletar vagas`, que roda GitHub, APIs externas, Remotar, Gupy, Programathor, Solides e ATS publicos, excluindo qualquer fonte mock/teste. Vagas boas entram direto como `PENDING` sem chamar IA; vagas ruins ou duplicadas nao sao persistidas.
 7. `DRAFT` foi aposentado do fluxo principal. O enum continua no Prisma e rascunhos antigos podem aparecer como `Rascunhos legados`, mas novas coletas nao criam esse status.
-8. A coleta automatica diaria preenche uma fila `PENDING` alvo baseada em `min(max(dailyLimit * 7, dailyLimit), 30)`, sem descontar vagas `SENT` hoje. `LOW` nunca e aprovada; `MEDIUM` exige estagio, trainee, remoto ou `priorityScore >= 75`.
+8. A coleta automatica configuravel pelo painel roda 1x ou 2x por semana, preenche uma fila `PENDING` alvo baseada em `min(max(dailyLimit * 7, dailyLimit), 30)`, sem descontar vagas `SENT` hoje. `LOW` nunca e aprovada; `MEDIUM` exige estagio, trainee, remoto ou `priorityScore >= 75`.
 9. O envio manual em lote busca ate 5 vagas `PENDING`.
 10. Opcionalmente, o envio agendado configurado no painel tambem pode publicar vagas `PENDING`, respeitando o limite diario configurado. O admin escolhe de 1 a 10 vagas por dia e um horario para cada vaga; o timezone do sistema e `America/Sao_Paulo`.
 11. Para cada vaga, o sistema resolve a mensagem usando esta prioridade:
@@ -44,10 +44,11 @@ O projeto resolve parte desse problema centralizando cadastro, organizacao, revi
 - Providers reais e experimentais com coleta manual unificada, aprovando vagas elegiveis como `PENDING` e recusando as demais sem persistir.
 - Provider GitHub para coletar issues abertas e recentes de repositorios brasileiros de vagas, filtrando labels de junior/estagio/trainee, localizacao, qualidade e duplicidade antes de aprovar como `PENDING`.
 - Providers externos Himalayas, Jobicy, RemoteOK e Remotive usando APIs publicas JSON, com filtro conservador de data, nivel e localidade remota.
-- Providers Remotar, Gupy, Programathor e Solides incluidos na coleta automatica diaria por fontes publicas validadas e baixo volume.
+- Providers Remotar, Gupy, Programathor e Solides incluidos na coleta automatica configuravel por fontes publicas validadas e baixo volume.
 - Prioridade persistida para vagas coletadas, com badge, score e motivos no painel admin.
 - Acao manual para processar rascunhos legados, quando existirem.
 - Pipeline automatizado para colocar vagas `HIGH` e `MEDIUM` elegiveis na fila durante a coleta, sem chamar Gemini e sem enviar ao Discord.
+- Coleta automatica configuravel no painel em `/admin/settings/collection`, com ativacao, frequencia semanal, dias e horario.
 - Classificacao deterministica de dominio em `TECH`, `POSSIBLY_TECH` e `NON_TECH`, rejeitando vagas fora de tecnologia antes de salvar no banco.
 - Geracao opcional de mensagem com Google AI Studio/Gemini.
 - Persistencia em PostgreSQL via Prisma.
