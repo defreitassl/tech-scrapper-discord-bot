@@ -4,8 +4,8 @@ import { programathorProvider } from '../providers/programathor.provider';
 import { remotarProvider } from '../providers/remotar.provider';
 import { solidesProvider } from '../providers/solides.provider';
 import type { CollectedJob, JobSourceProvider, ProviderCollectResult, ProviderRepositorySummary } from '../providers/types';
-import { evaluateJobPriority, type JobPriorityLevel } from '../services/jobPriority';
-import { evaluateCollectedJobQuality } from '../services/jobQualityFilter';
+import { evaluateJobForQueue } from '../services/jobPolicy';
+import type { JobPriorityLevel } from '../services/jobPriority';
 
 type QualityRejectSummary = {
   title: string | null;
@@ -25,11 +25,11 @@ type ProviderDiagnostic = {
   provider: string;
   analyzed: number;
   returnedByProvider: number;
-  passRunnerQuality: number;
-  rejectedByRunnerQuality: number;
+  acceptedByJobPolicy: number;
+  rejectedByJobPolicy: number;
   priorityCounts: Record<JobPriorityLevel, number>;
   providerDiscardReasons: Record<string, number>;
-  runnerQualityRejects: Record<string, number>;
+  jobPolicyRejects: Record<string, number>;
   repositorySummaries: ProviderRepositorySummary[];
   topSources: Array<{ source: string; term?: string; returnedByProvider: number; analyzed: number }>;
   fieldCompleteness: {
@@ -48,10 +48,14 @@ type ProviderDiagnostic = {
     location: string | null;
     source: string;
     url: string | null;
-    qualityAccepted: boolean;
-    qualityReasons: string[];
+    accepted: boolean;
+    rejectionReason?: string;
+    domain: string;
     priority: JobPriorityLevel;
     priorityScore: number;
+    reasons: string[];
+    qualityScore?: number;
+    qualityReasons?: string[];
   }>;
   qualityRejectSamples: QualityRejectSummary[];
   errors: ProviderCollectResult['errors'];
@@ -79,7 +83,7 @@ async function diagnoseProvider(provider: JobSourceProvider): Promise<ProviderDi
     : collectResult.totalIssuesRead ?? sumRepositoryMetric(repositorySummaries, 'totalIssuesRead');
   const returnedByProvider = sumRepositoryMetric(repositorySummaries, 'returnedByProvider') || jobs.length;
   const providerDiscardReasons = buildProviderDiscardReasons(collectResult, repositorySummaries);
-  const runnerQualityRejects: Record<string, number> = {};
+  const jobPolicyRejects: Record<string, number> = {};
   const priorityCounts: Record<JobPriorityLevel, number> = {
     HIGH: 0,
     MEDIUM: 0,
@@ -94,18 +98,14 @@ async function diagnoseProvider(provider: JobSourceProvider): Promise<ProviderDi
   };
   const samples: ProviderDiagnostic['samples'] = [];
   const qualityRejectSamples: QualityRejectSummary[] = [];
-  let passRunnerQuality = 0;
-  let rejectedByRunnerQuality = 0;
+  let acceptedByJobPolicy = 0;
+  let rejectedByJobPolicy = 0;
 
   for (const job of jobs) {
     const normalizedJob = normalizeCollectedJob(job, provider.name);
-    const qualityResult = evaluateCollectedJobQuality({
-      ...normalizedJob,
-      collectedAt: job.collectedAt ?? new Date(),
-    });
-    const priorityResult = evaluateJobPriority(normalizedJob);
+    const decision = evaluateJobForQueue(normalizedJob);
 
-    priorityCounts[priorityResult.priority] += 1;
+    priorityCounts[decision.priority] += 1;
 
     if (normalizedJob.url) {
       fieldCompleteness.url += 1;
@@ -123,18 +123,21 @@ async function diagnoseProvider(provider: JobSourceProvider): Promise<ProviderDi
       fieldCompleteness.location += 1;
     }
 
-    if (qualityResult.accepted) {
-      passRunnerQuality += 1;
+    if (decision.accepted) {
+      acceptedByJobPolicy += 1;
     } else {
-      rejectedByRunnerQuality += 1;
-      for (const reason of qualityResult.reasons) {
-        runnerQualityRejects[reason] = (runnerQualityRejects[reason] ?? 0) + 1;
+      rejectedByJobPolicy += 1;
+      const rejectionReason = decision.rejectionReason ?? 'unknown';
+      jobPolicyRejects[rejectionReason] = (jobPolicyRejects[rejectionReason] ?? 0) + 1;
+
+      for (const reason of decision.qualityReasons ?? []) {
+        jobPolicyRejects[reason] = (jobPolicyRejects[reason] ?? 0) + 1;
       }
       qualityRejectSamples.push({
         title: normalizedJob.title,
         source: normalizedJob.source,
         url: normalizedJob.url,
-        reasons: qualityResult.reasons,
+        reasons: decision.qualityReasons?.length ? decision.qualityReasons : [rejectionReason],
       });
     }
 
@@ -146,10 +149,14 @@ async function diagnoseProvider(provider: JobSourceProvider): Promise<ProviderDi
       location: normalizedJob.location,
       source: normalizedJob.source,
       url: normalizedJob.url,
-      qualityAccepted: qualityResult.accepted,
-      qualityReasons: qualityResult.reasons,
-      priority: priorityResult.priority,
-      priorityScore: priorityResult.score,
+      accepted: decision.accepted,
+      rejectionReason: decision.rejectionReason,
+      domain: decision.domain,
+      priority: decision.priority,
+      priorityScore: decision.priorityScore,
+      reasons: decision.reasons,
+      qualityScore: decision.qualityScore,
+      qualityReasons: decision.qualityReasons,
     });
   }
 
@@ -157,11 +164,11 @@ async function diagnoseProvider(provider: JobSourceProvider): Promise<ProviderDi
     provider: provider.name,
     analyzed,
     returnedByProvider,
-    passRunnerQuality,
-    rejectedByRunnerQuality,
+    acceptedByJobPolicy,
+    rejectedByJobPolicy,
     priorityCounts,
     providerDiscardReasons,
-    runnerQualityRejects,
+    jobPolicyRejects,
     repositorySummaries,
     topSources: buildTopSources(repositorySummaries),
     fieldCompleteness,

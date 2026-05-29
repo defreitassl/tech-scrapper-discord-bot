@@ -1,7 +1,5 @@
 import type { CollectedJob } from '../providers/types';
-import { classifyJobDomain } from '../services/jobDomainClassifier';
-import { evaluateCollectedJobQuality } from '../services/jobQualityFilter';
-import { evaluateJobPriority } from '../services/jobPriority';
+import { evaluateJobForQueue } from '../services/jobPolicy';
 
 type Sample = {
   title: string;
@@ -38,19 +36,18 @@ const SAMPLES: Sample[] = [
 function main(): void {
   const diagnostics = SAMPLES.map((sample) => {
     const job = buildSampleJob(sample);
-    const domain = classifyJobDomain(job);
-    const quality = evaluateCollectedJobQuality(job);
-    const priority = evaluateJobPriority(job);
+    const decision = evaluateJobForQueue(job);
 
     return {
       title: sample.title,
-      domain: domain.domain,
-      techMatches: domain.techMatches,
-      nonTechMatches: domain.nonTechMatches,
-      qualityAccepted: quality.accepted,
-      qualityReasons: quality.reasons,
-      priority: priority.priority,
-      priorityScore: priority.score,
+      accepted: decision.accepted,
+      rejectionReason: decision.rejectionReason,
+      domain: decision.domain,
+      qualityScore: decision.qualityScore,
+      qualityReasons: decision.qualityReasons,
+      priority: decision.priority,
+      priorityScore: decision.priorityScore,
+      reasons: decision.reasons,
     };
   });
 

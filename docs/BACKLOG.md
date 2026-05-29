@@ -5,11 +5,17 @@
 - Painel admin.
 - Coleta manual unificada.
 - Coleta agendada configuravel.
+- `runAutomatedJobCollection` como fluxo unico de coleta.
+- Registry de providers simplificado para automatico e manual.
 - Envio agendado configuravel.
-- Providers atuais: GitHub, Himalayas, Jobicy, RemoteOK, Remotive, Remotar, Gupy, Programathor, Solides, Greenhouse, Lever e Ashby.
+- Providers atuais do MVP: GitHub, Himalayas, Jobicy, RemoteOK, Remotive, Remotar, Gupy, Programathor e Solides.
+- ATS publicos internacionais removidos da coleta manual: Greenhouse, Lever e Ashby.
+- Playwright removido das dependencias de runtime.
 - Filtro `TECH`/`POSSIBLY_TECH`/`NON_TECH`.
 - Prioridade `HIGH`/`MEDIUM`/`LOW` com score e motivos.
+- Politica central em `jobPolicy.ts` para dominio, qualidade, prioridade e elegibilidade de fila.
 - Fila `PENDING`.
+- Painel sem fluxo operacional de rascunho, autoaprovacao ou geracao manual de IA.
 - Status final `PENDING`, `SENT`, `ERROR`; `DRAFT` removido antes do deploy.
 - Gemini no envio.
 - Fallback deterministico.

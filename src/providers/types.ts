@@ -14,6 +14,7 @@ export type CollectedJob = {
   collectedAt: Date;
 };
 
+// Contrato minimo: provider coleta dados publicos e retorna vagas normalizadas parcialmente.
 export interface JobSourceProvider {
   name: string;
   collect(): Promise<CollectedJob[] | ProviderCollectResult>;

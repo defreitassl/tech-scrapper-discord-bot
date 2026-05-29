@@ -257,7 +257,7 @@ export function renderJobForm(options: {
       <div>
         <p class="eyebrow">Cadastro de vaga</p>
         <h1>${escapeHtml(options.title)}</h1>
-        <p class="subtitle">${isNewJob ? 'Preencha os dados principais. Vagas novas entram prontas para envio e ficam na fila do agendamento.' : 'Atualize os dados principais e escolha como a vaga sera preparada para envio.'}</p>
+        <p class="subtitle">${isNewJob ? 'Preencha os dados principais. Vagas novas entram na fila de envio.' : 'Atualize os dados principais e a forma de envio da vaga.'}</p>
       </div>
       <div class="actions">
         <a class="button secondary" href="/admin/jobs">Voltar</a>
@@ -298,7 +298,7 @@ export function renderJobForm(options: {
           `<label class="checkbox wide">
             <input type="checkbox" name="useAi" ${form.useAi ? 'checked' : ''}>
             <span>
-              <strong>Usar IA para preparar o texto</strong>
+              <strong>Usar IA no envio</strong>
               <small>${isNewJob ? 'Quando marcado, a mensagem sera gerada no envio se nao houver texto pronto.' : 'Quando marcado, o sistema pode gerar uma versao melhor formatada no envio.'}</small>
             </span>
           </label>`,
@@ -323,7 +323,7 @@ export function renderJobForm(options: {
         </label>`,
       )}
       <div class="form-actions">
-        <button type="submit" data-loading-label="Salvando...">${isNewJob ? 'Salvar e preparar para envio' : 'Salvar'}</button>
+        <button type="submit" data-loading-label="Salvando...">${isNewJob ? 'Salvar vaga' : 'Salvar'}</button>
       </div>
     </form>
   `;

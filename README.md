@@ -18,7 +18,7 @@ O projeto reduz o ruido de vagas espalhadas em varias fontes, filtra oportunidad
 
 ## Fluxo
 
-1. Coleta vagas por cadastro manual, GitHub, APIs publicas, ATS publicos e fontes publicas simples.
+1. Coleta vagas por cadastro manual, GitHub, APIs publicas e fontes publicas simples.
 2. Filtra o dominio da vaga como `TECH`, `POSSIBLY_TECH` ou `NON_TECH`.
 3. Rejeita `NON_TECH`, duplicadas, vagas sem dados minimos ou com senioridade alta.
 4. Calcula prioridade (`HIGH`, `MEDIUM`, `LOW`) com score e motivos.

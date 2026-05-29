@@ -67,7 +67,7 @@ export function renderCollectionScheduleSettingsForm(options: {
         <div class="detail-item"><dt>Horario</dt><dd>${escapeHtml(form.collectTime)}</dd></div>
         <div class="detail-item"><dt>Timezone do sistema</dt><dd>${escapeHtml(form.timezone)}</dd></div>
         <div class="detail-item"><dt>Crons</dt><dd>${renderCronSummary(cronExpressions)}</dd></div>
-        <div class="detail-item"><dt>Providers</dt><dd>Somente providers automaticos. ATS publicos continuam apenas no botao manual.</dd></div>
+        <div class="detail-item"><dt>Providers</dt><dd>Coleta automatica e botao manual usam os providers do MVP.</dd></div>
         <div class="detail-item"><dt>Separacao</dt><dd>A coleta cria PENDING sem Gemini; o envio agendado publica PENDING no Discord depois.</dd></div>
       </dl>
     </section>

@@ -42,14 +42,16 @@
 
 1. Admin cadastra uma vaga ou aciona `Coletar vagas`.
 2. Providers retornam vagas normalizadas.
-3. Runner aplica filtro `TECH`/`POSSIBLY_TECH`/`NON_TECH`.
-4. Runner rejeita vagas sem qualidade minima, duplicadas, `LOW` ou com senioridade alta.
-5. Runner calcula prioridade e salva aprovadas como `PENDING`.
+3. Runner normaliza a vaga e chama `jobPolicy.ts` para decidir dominio, qualidade, prioridade e elegibilidade.
+4. `jobPolicy.ts` rejeita vagas `NON_TECH`, sem qualidade minima, `LOW`, sem dados minimos ou com senioridade alta.
+5. Runner deduplica e salva aprovadas como `PENDING`.
 6. Coleta rejeita imediatamente o que nao entra na fila, nao chama Gemini e nao envia Discord.
 7. Envio manual ou agendado consome vagas `PENDING`.
 8. Publisher resolve a mensagem.
 9. Discord recebe embed/card.
 10. Vaga enviada vira `SENT`; falha vira `ERROR`.
+
+`runAutomatedJobCollection` e o fluxo unico de coleta usado por coleta agendada e pelo botao `Coletar vagas`. Nao existe fluxo operacional de rascunho, autoaprovacao ou geracao manual de IA.
 
 ## Estados da vaga
 
@@ -78,7 +80,7 @@
 
 - `src/admin/`: painel Express, rotas, views, helpers e autenticacao Basic.
 - `src/providers/`: providers, normalizacao, registry e runner.
-- `src/services/`: regras de negocio, filtros, prioridade, deduplicacao, schedulers, Gemini e Discord.
+- `src/services/`: politica de decisao da vaga, filtros, prioridade, deduplicacao, schedulers, Gemini e Discord.
 - `src/lib/prisma.ts`: Prisma Client compartilhado.
 - `src/lib/logger.ts`: logger simples.
 - `prisma/schema.prisma`: modelo de dados.
@@ -88,19 +90,24 @@
 
 - Provider deve ser pequeno e responsavel por uma fonte ou familia de fontes.
 - Preferir API publica, RSS, JSON publico ou HTML publico simples.
-- Playwright apenas para investigacao ou ultimo recurso.
-- Provider retorna dados; runner central decide salvar ou recusar.
+- Playwright nao e dependencia de runtime do MVP.
+- Provider retorna dados; runner chama `jobPolicy.ts` para decidir salvar ou recusar.
 - Provider nao chama Gemini.
 - Provider nao envia Discord.
 - Provider deve registrar `source` e preservar URL original quando houver.
 - Falha em uma fonte nao deve interromper as demais.
+- Registry exposto deve ser simples: `automaticJobProviders` para coleta automatica e `manualJobProviders` para o botao do painel.
 
-Providers atuais:
+Providers do MVP:
 
 - GitHub issues publicas.
 - APIs JSON: Himalayas, Jobicy, RemoteOK, Remotive.
 - JSON/HTML publico validado: Remotar, Gupy, Programathor, Solides.
-- ATS publicos manuais: Greenhouse, Lever, Ashby.
+
+Fora da coleta atual:
+
+- ATS publicos internacionais: Greenhouse, Lever e Ashby foram removidos da coleta manual porque os alvos testados eram internacionais e pouco aderentes ao publico da Projeto Desenvolve.
+- Browser scraping/Playwright: fora do runtime; providers devem usar fontes publicas seguras.
 
 ## Logs
 
@@ -112,6 +119,6 @@ Providers atuais:
 
 - Server-rendered em Express.
 - HTML/CSS simples, sem framework frontend grande.
-- Fluxos principais: listar, criar, editar, ver detalhes, coletar, enviar, configurar coleta, configurar envio.
+- Fluxos principais: listar, criar, editar, ver detalhes, coletar vagas, enviar pendentes, enviar agora e excluir vagas nao enviadas.
 - Acoes destrutivas devem ser restritas a vagas nao enviadas.
 - Interface deve continuar operacional e direta para o MVP.

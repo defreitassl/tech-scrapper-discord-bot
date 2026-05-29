@@ -1,10 +1,7 @@
-import { ashbyProvider } from './ashby.provider';
-import { greenhouseProvider } from './greenhouse.provider';
 import { gupyProvider } from './gupy.provider';
 import { githubJobsProvider } from './githubJobs.provider';
 import { himalayasProvider } from './himalayas.provider';
 import { jobicyProvider } from './jobicy.provider';
-import { leverProvider } from './lever.provider';
 import { programathorProvider } from './programathor.provider';
 import { remotarProvider } from './remotar.provider';
 import { remoteOkProvider } from './remoteOk.provider';
@@ -12,25 +9,22 @@ import { remotiveProvider } from './remotive.provider';
 import { solidesProvider } from './solides.provider';
 import type { JobSourceProvider } from './types';
 
-export const externalJobProviders: JobSourceProvider[] = [
+const publicApiJobProviders: JobSourceProvider[] = [
   himalayasProvider,
   jobicyProvider,
   remoteOkProvider,
   remotiveProvider,
 ];
-export const atsJobProviders: JobSourceProvider[] = [greenhouseProvider, leverProvider, ashbyProvider];
+
+// Coleta agendada: fontes principais e seguras do MVP.
 export const automaticJobProviders: JobSourceProvider[] = [
   githubJobsProvider,
-  ...externalJobProviders,
+  ...publicApiJobProviders,
   remotarProvider,
   gupyProvider,
   programathorProvider,
   solidesProvider,
 ];
-export const manualCollectableJobProviders: JobSourceProvider[] = [
-  ...automaticJobProviders,
-  ...atsJobProviders,
-];
-export const experimentalJobProviders: JobSourceProvider[] = [gupyProvider, programathorProvider];
-export const realJobProviders: JobSourceProvider[] = automaticJobProviders;
-export const collectableJobProviders: JobSourceProvider[] = manualCollectableJobProviders;
+
+// Botao "Coletar vagas": hoje usa a mesma lista do agendamento.
+export const manualJobProviders: JobSourceProvider[] = automaticJobProviders;

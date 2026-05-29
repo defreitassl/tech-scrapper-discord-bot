@@ -5,11 +5,11 @@ import { prisma } from '../../lib/prisma';
 import { checkJobDuplicate } from '../../services/jobDeduplication';
 import { publishPendingJobs, publishSingleJob } from '../../services/publishPendingJobs';
 import { runRealJobCollection } from '../../services/scheduledCollector';
-import { manualCollectableJobProviders } from '../../providers/providerRegistry';
+import { manualJobProviders } from '../../providers/providerRegistry';
 import { parseJobForm } from '../helpers/forms';
 import { getNoticeFromQuery, redirectWithNotice } from '../helpers/notifications';
 import { buildCompactCollectionNotice } from '../helpers/providerSummary';
-import { validateJob, validatePending } from '../helpers/validators';
+import { validateJob } from '../helpers/validators';
 import { renderLayout } from '../views/layout';
 import { renderJobDetails, renderJobForm, renderJobsList, type JobsByStatus } from '../views/jobs.views';
 
@@ -98,7 +98,7 @@ export function createJobsRouter(): express.Router {
   router.post('/admin/jobs/collect-all', async (_request, response) => {
     try {
       logger.info('Coleta manual unificada de vagas iniciada pelo admin.');
-      const collectionResult = await runRealJobCollection('manual', manualCollectableJobProviders);
+      const collectionResult = await runRealJobCollection('manual', manualJobProviders);
 
       if (collectionResult.skipped || !collectionResult.summary) {
         redirectWithNotice(
@@ -180,51 +180,6 @@ export function createJobsRouter(): express.Router {
     });
 
     response.redirect(`/admin/jobs/${job.id}`);
-  });
-
-  router.post('/admin/jobs/:id/pending', async (request, response) => {
-    const job = await findJobOrRenderNotFound(request.params.id, response);
-
-    if (!job) {
-      return;
-    }
-
-    const error = validatePending(job);
-
-    if (error) {
-      response.status(400).send(renderJobDetails(job, { notice: { message: error, type: 'error' } }));
-      return;
-    }
-
-    await prisma.jobPost.update({
-      where: { id: job.id },
-      data: { status: JobStatus.PENDING },
-    });
-    logger.info('Vaga aprovada para envio no admin.', {
-      jobId: job.id,
-      title: job.title,
-    });
-
-    redirectWithNotice(response, `/admin/jobs/${job.id}`, 'Vaga marcada como pronta para envio.');
-  });
-
-  router.post('/admin/jobs/:id/generate-ai-message', async (request, response) => {
-    const job = await findJobOrRenderNotFound(request.params.id, response);
-
-    if (!job) {
-      return;
-    }
-
-    logger.info('Geracao manual de IA ignorada: mensagens agora sao geradas no envio.', {
-      jobId: job.id,
-      title: job.title,
-    });
-    redirectWithNotice(
-      response,
-      `/admin/jobs/${job.id}`,
-      'A mensagem com IA sera gerada somente no momento do envio.',
-      'info',
-    );
   });
 
   router.post('/admin/jobs/:id/publish', async (request, response) => {

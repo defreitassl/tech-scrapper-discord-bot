@@ -56,18 +56,18 @@ Motivo: reduzir fragilidade e risco operacional.
 Impacto: fontes sem acesso publico adequado devem ser evitadas.
 Status: aceito.
 
-## ADR-009 — Playwright e ultimo recurso
+## ADR-009 — Playwright fora do runtime
 
-Decisao: Playwright pode ser usado para investigacao ou ultimo recurso, nao como padrao operacional.
+Decisao: Playwright nao e dependencia de runtime do MVP.
 Motivo: browser scraping e mais caro, fragil e sujeito a bloqueios.
-Impacto: providers reais devem preferir fetch JSON/HTML publico.
+Impacto: providers reais devem usar API, RSS, JSON publico ou HTML publico simples; investigacoes com browser ficam fora do runtime.
 Status: aceito.
 
 ## ADR-010 — LinkedIn nao sera provider
 
 Decisao: nao implementar LinkedIn como fonte de coleta.
 Motivo: exige login/fluxos protegidos e tem alto risco de bloqueio e termos restritivos.
-Impacto: buscar fontes mais sustentaveis como APIs, ATS publicos, GitHub e sites de carreira.
+Impacto: buscar fontes mais sustentaveis como APIs publicas, GitHub e sites de carreira.
 Status: aceito.
 
 ## ADR-011 — Login, captcha e bypass sao proibidos
@@ -96,4 +96,32 @@ Status: aceito.
 Decisao: remover arquivamento; painel exclui apenas vagas nao enviadas.
 Motivo: simplificar o ciclo de vida da vaga.
 Impacto: `SENT` nao e excluida pelo painel e mensagens do Discord nao sao apagadas.
+Status: aceito.
+
+## ADR-015 — Coleta usa um fluxo unico
+
+Decisao: manter `runAutomatedJobCollection` como fluxo oficial para coleta agendada e manual.
+Motivo: evitar rotas e runners paralelos para rascunho, autoaprovacao ou geracao antecipada de mensagem.
+Impacto: coletas aprovadas entram como `PENDING`; mensagens continuam resolvidas somente no envio.
+Status: aceito.
+
+## ADR-016 — Registry de providers simplificado
+
+Decisao: expor apenas `automaticJobProviders` e `manualJobProviders`.
+Motivo: remover aliases historicos e deixar claro quais providers rodam em cada entrada operacional.
+Impacto: botao `Coletar vagas` e coleta agendada usam a mesma lista de providers do MVP.
+Status: aceito.
+
+## ADR-018 — ATS publicos internacionais fora do MVP
+
+Decisao: remover Greenhouse, Lever e Ashby da coleta manual do MVP.
+Motivo: os alvos configurados eram empresas internacionais e nao traziam vagas relevantes para a Projeto Desenvolve com consistencia.
+Impacto: a coleta fica focada em fontes publicas mais aderentes; ATS podem voltar no futuro se houver alvos publicos relevantes para iniciantes no Brasil ou em Minas Gerais.
+Status: aceito.
+
+## ADR-017 — Politica central de decisao da vaga
+
+Decisao: concentrar a decisao final de entrada na fila em `src/services/jobPolicy.ts`.
+Motivo: deixar dominio, qualidade, prioridade e elegibilidade em um ponto didatico e reduzir regras detalhadas no runner.
+Impacto: providers continuam apenas coletando dados; `providerRunner` normaliza, chama a politica, deduplica e persiste vagas aprovadas como `PENDING`.
 Status: aceito.
