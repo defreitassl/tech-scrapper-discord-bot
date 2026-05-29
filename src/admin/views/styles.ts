@@ -385,45 +385,6 @@ export const adminStyles = `
             overflow-x: auto;
           }
 
-          .review-queue {
-            display: grid;
-            gap: 12px;
-            padding: 16px;
-            background: #f8fafc;
-          }
-
-          .review-card {
-            display: grid;
-            grid-template-columns: minmax(0, 1fr) auto;
-            gap: 18px;
-            padding: 18px;
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            background: #ffffff;
-          }
-
-          .review-card-main {
-            min-width: 0;
-          }
-
-          .review-card-header {
-            display: flex;
-            align-items: flex-start;
-            justify-content: space-between;
-            gap: 14px;
-          }
-
-          .review-title {
-            font-size: 17px;
-            line-height: 1.3;
-          }
-
-          .review-company {
-            margin: 5px 0 0;
-            color: #334155;
-            font-weight: 650;
-          }
-
           .source-pill {
             display: inline-flex;
             align-items: center;
@@ -438,14 +399,6 @@ export const adminStyles = `
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
-          }
-
-          .review-badges {
-            display: flex;
-            flex: 0 0 auto;
-            align-items: flex-end;
-            flex-direction: column;
-            gap: 6px;
           }
 
           .priority-badge {
@@ -488,14 +441,6 @@ export const adminStyles = `
             background: #ffffff;
           }
 
-          .review-priority-details {
-            display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            gap: 8px;
-            margin-top: 12px;
-          }
-
           .priority-score {
             color: #334155;
             font-size: 12px;
@@ -507,91 +452,6 @@ export const adminStyles = `
             font-size: 12px;
             line-height: 1.4;
             overflow-wrap: anywhere;
-          }
-
-          .review-meta-grid {
-            display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 8px;
-            margin: 14px 0 0;
-          }
-
-          .review-meta-item {
-            min-width: 0;
-            padding: 10px;
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            background: var(--surface-soft);
-          }
-
-          .review-meta-item dd {
-            font-size: 13px;
-          }
-
-          .review-stack-row {
-            display: flex;
-            align-items: flex-start;
-            gap: 10px;
-            margin-top: 12px;
-          }
-
-          .review-label {
-            flex: 0 0 auto;
-            color: var(--text-muted);
-            font-size: 12px;
-            font-weight: 800;
-            letter-spacing: 0.04em;
-            text-transform: uppercase;
-          }
-
-          .review-stacks {
-            color: #172033;
-            line-height: 1.45;
-          }
-
-          .review-stacks.muted {
-            color: var(--text-soft);
-            font-style: italic;
-          }
-
-          .review-description {
-            display: -webkit-box;
-            -webkit-line-clamp: 3;
-            -webkit-box-orient: vertical;
-            margin: 12px 0 0;
-            overflow: hidden;
-            color: #475569;
-            line-height: 1.5;
-          }
-
-          .review-original-link,
-          .review-original-text {
-            display: inline-block;
-            margin-top: 12px;
-            font-size: 13px;
-          }
-
-          .review-original-text {
-            color: var(--text-soft);
-            overflow-wrap: anywhere;
-          }
-
-          .review-actions {
-            display: flex;
-            flex-direction: column;
-            align-items: stretch;
-            gap: 8px;
-            min-width: 136px;
-          }
-
-          .review-actions form,
-          .review-actions button,
-          .review-actions .button {
-            width: 100%;
-          }
-
-          .review-empty {
-            margin: 0;
           }
 
           .job-title {
@@ -803,12 +663,6 @@ export const adminStyles = `
             white-space: nowrap;
           }
 
-          .status-draft {
-            color: #475569;
-            border-color: #cbd5e1;
-            background: #f1f5f9;
-          }
-
           .status-pending {
             color: #92400e;
             border-color: #fed7aa;
@@ -825,12 +679,6 @@ export const adminStyles = `
             color: #991b1b;
             border-color: #fecaca;
             background: #fef2f2;
-          }
-
-          .status-archived {
-            color: #e2e8f0;
-            border-color: #334155;
-            background: #334155;
           }
 
           .scheduler-active {
@@ -1028,20 +876,6 @@ export const adminStyles = `
 
             .jobs-sections {
               gap: 14px;
-            }
-
-            .review-card,
-            .review-card-header {
-              display: flex;
-              flex-direction: column;
-            }
-
-            .review-meta-grid {
-              grid-template-columns: repeat(2, minmax(0, 1fr));
-            }
-
-            .review-actions {
-              width: 100%;
             }
 
             .form-grid label,

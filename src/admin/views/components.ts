@@ -36,11 +36,18 @@ export function renderNotification(notice?: AdminNotice): string {
   `;
 }
 
-export function renderPostButton(action: string, label: string, variant = 'secondary', loadingLabel?: string): string {
+export function renderPostButton(
+  action: string,
+  label: string,
+  variant = 'secondary',
+  loadingLabel?: string,
+  confirmMessage?: string,
+): string {
   const loadingAttribute = loadingLabel ? ` data-loading-label="${escapeHtml(loadingLabel)}"` : '';
+  const confirmAttribute = confirmMessage ? ` onsubmit="return confirm('${escapeHtml(confirmMessage)}')"` : '';
 
   return `
-    <form method="post" action="${action}">
+    <form method="post" action="${action}"${confirmAttribute}>
       <button type="submit" class="${escapeHtml(variant)}"${loadingAttribute}>${escapeHtml(label)}</button>
     </form>
   `;

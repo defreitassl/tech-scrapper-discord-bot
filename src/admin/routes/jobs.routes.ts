@@ -2,7 +2,6 @@ import express from 'express';
 import { JobPost, JobStatus } from '@prisma/client';
 import { logger } from '../../lib/logger';
 import { prisma } from '../../lib/prisma';
-import { autoApproveJobsForToday } from '../../services/autoApproveJobs';
 import { checkJobDuplicate } from '../../services/jobDeduplication';
 import { publishPendingJobs, publishSingleJob } from '../../services/publishPendingJobs';
 import { runRealJobCollection } from '../../services/scheduledCollector';
@@ -93,41 +92,6 @@ export function createJobsRouter(): express.Router {
     } catch (error) {
       logger.error('Erro ao publicar vagas pendentes pelo admin.', error);
       redirectWithNotice(response, '/admin/jobs', 'Erro ao enviar vagas pendentes.', 'error');
-    }
-  });
-
-  router.post('/admin/jobs/auto-approve', async (_request, response) => {
-    try {
-      logger.info('Processamento manual de rascunhos legados iniciado pelo admin.');
-      const result = await autoApproveJobsForToday();
-
-      logger.info('Processamento manual de rascunhos legados finalizado pelo admin.', {
-        candidatesFound: result.candidatesFound,
-        approved: result.approved,
-        failed: result.failed,
-        skipped: result.skipped,
-        requestedLimit: result.requestedLimit,
-      });
-
-      if (result.approved > 0) {
-        redirectWithNotice(
-          response,
-          '/admin/jobs',
-          `Processamento de rascunhos legados concluido: ${result.approved} vagas colocadas na fila.`,
-          result.failed > 0 ? 'warning' : 'success',
-        );
-        return;
-      }
-
-      if (result.failed > 0) {
-        redirectWithNotice(response, '/admin/jobs', 'Erro ao processar rascunhos legados.', 'error');
-        return;
-      }
-
-      redirectWithNotice(response, '/admin/jobs', 'Nenhum rascunho legado elegivel para processamento.', 'info');
-    } catch (error) {
-      logger.error('Erro ao processar rascunhos legados pelo admin.', error);
-      redirectWithNotice(response, '/admin/jobs', 'Erro ao processar rascunhos legados.', 'error');
     }
   });
 
@@ -263,69 +227,6 @@ export function createJobsRouter(): express.Router {
     );
   });
 
-  router.post('/admin/jobs/:id/prepare', async (request, response) => {
-    const job = await findJobOrRenderNotFound(request.params.id, response);
-
-    if (!job) {
-      return;
-    }
-
-    if (job.status === JobStatus.SENT || job.status === JobStatus.ARCHIVED) {
-      redirectWithNotice(
-        response,
-        `/admin/jobs/${job.id}`,
-        'Esta vaga ja foi enviada ou arquivada e nao pode ser preparada para a fila.',
-        'warning',
-      );
-      return;
-    }
-
-    try {
-      logger.info('Preparacao de vaga para fila iniciada pelo admin sem gerar IA.', {
-        jobId: job.id,
-        title: job.title,
-        status: job.status,
-      });
-
-      await prisma.jobPost.update({
-        where: { id: job.id },
-        data: {
-          aiGeneratedText: job.aiGeneratedText,
-          status: JobStatus.PENDING,
-          useAi: true,
-        },
-      });
-
-      logger.info('Vaga preparada e colocada na fila.', {
-        jobId: job.id,
-        previousStatus: job.status,
-        nextStatus: JobStatus.PENDING,
-      });
-
-      redirectWithNotice(
-        response,
-        `/admin/jobs/${job.id}`,
-        job.status === JobStatus.PENDING
-          ? 'Vaga mantida na fila. A mensagem sera gerada no envio.'
-          : 'Vaga colocada na fila de envio. A mensagem sera gerada no envio.',
-      );
-    } catch (error) {
-      logger.error('Erro ao preparar vaga para fila pelo admin.', error, {
-        jobId: job.id,
-        title: job.title,
-        status: job.status,
-      });
-      redirectWithNotice(
-        response,
-        `/admin/jobs/${job.id}`,
-        job.status === JobStatus.PENDING
-          ? 'Nao foi possivel manter a vaga na fila agora.'
-          : 'Nao foi possivel colocar a vaga na fila agora.',
-        'error',
-      );
-    }
-  });
-
   router.post('/admin/jobs/:id/publish', async (request, response) => {
     const job = await findJobOrRenderNotFound(request.params.id, response);
 
@@ -339,23 +240,33 @@ export function createJobsRouter(): express.Router {
     redirectWithNotice(response, `/admin/jobs/${job.id}`, result.message, noticeType);
   });
 
-  router.post('/admin/jobs/:id/archive', async (request, response) => {
+  router.post('/admin/jobs/:id/delete', async (request, response) => {
     const job = await findJobOrRenderNotFound(request.params.id, response);
 
     if (!job) {
       return;
     }
 
-    await prisma.jobPost.update({
+    if (job.status === JobStatus.SENT) {
+      redirectWithNotice(
+        response,
+        `/admin/jobs/${job.id}`,
+        'Esta vaga ja foi enviada e nao pode ser excluida pelo painel.',
+        'warning',
+      );
+      return;
+    }
+
+    await prisma.jobPost.delete({
       where: { id: job.id },
-      data: { status: JobStatus.ARCHIVED },
     });
-    logger.info('Vaga arquivada no admin.', {
+    logger.info('Vaga excluida no admin.', {
       jobId: job.id,
       title: job.title,
+      status: job.status,
     });
 
-    redirectWithNotice(response, '/admin/jobs', 'Vaga arquivada.');
+    redirectWithNotice(response, '/admin/jobs', 'Vaga excluida com sucesso.');
   });
 
   return router;
@@ -382,35 +293,7 @@ function getJobCreatedNoticeMessage(message: string, possibleDuplicate: { id: st
 
 function groupJobsByStatus(jobs: JobPost[]): JobsByStatus {
   return {
-    draft: jobs.filter((job) => job.status === JobStatus.DRAFT).sort(compareDraftJobsByPriority),
     pending: jobs.filter((job) => job.status === JobStatus.PENDING),
     history: jobs.filter((job) => job.status === JobStatus.SENT || job.status === JobStatus.ERROR),
-    archived: jobs.filter((job) => job.status === JobStatus.ARCHIVED),
   };
-}
-
-function compareDraftJobsByPriority(a: JobPost, b: JobPost): number {
-  const priorityDifference = getPrioritySortValue(a.priority) - getPrioritySortValue(b.priority);
-
-  if (priorityDifference !== 0) {
-    return priorityDifference;
-  }
-
-  return b.createdAt.getTime() - a.createdAt.getTime();
-}
-
-function getPrioritySortValue(priority: JobPost['priority']): number {
-  if (priority === 'HIGH') {
-    return 0;
-  }
-
-  if (priority === 'MEDIUM') {
-    return 1;
-  }
-
-  if (priority === 'LOW') {
-    return 2;
-  }
-
-  return 3;
 }

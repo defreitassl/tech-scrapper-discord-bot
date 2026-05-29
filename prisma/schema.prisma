@@ -8,11 +8,9 @@ datasource db {
 }
 
 enum JobStatus {
-  DRAFT
   PENDING
   SENT
   ERROR
-  ARCHIVED
 }
 
 enum JobPriority {
@@ -37,7 +35,7 @@ model JobPost {
   readyText        String?
   aiGeneratedText  String?
   useAi            Boolean   @default(false)
-  status           JobStatus @default(DRAFT)
+  status           JobStatus @default(PENDING)
   priority         JobPriority?
   priorityScore    Int?
   priorityReasons  String?

@@ -123,7 +123,7 @@ export function parseStatus(value: string): JobStatus {
     return value as JobStatus;
   }
 
-  return JobStatus.DRAFT;
+  return JobStatus.PENDING;
 }
 
 export function scheduleFormFromSettings(settings?: SchedulerSettings): ScheduleFormData {

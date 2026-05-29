@@ -1,7 +1,6 @@
-import { JobPost, JobStatus } from '@prisma/client';
+import { JobPost, JobPriority, JobStatus } from '@prisma/client';
 import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
-import { isAutoApprovalEligible } from '../services/autoApproveJobs';
 import { classifyJobDomain } from '../services/jobDomainClassifier';
 import { checkJobDuplicate } from '../services/jobDeduplication';
 import { evaluateJobPriority, type JobPriorityLevel, type JobPriorityResult } from '../services/jobPriority';
@@ -196,8 +195,8 @@ export async function runJobProviders(
         const job = await prisma.jobPost.create({
           data: {
             ...normalizedJob,
-            status: JobStatus.DRAFT,
-            useAi: false,
+            status: JobStatus.PENDING,
+            useAi: true,
             priority: priorityResult.priority,
             priorityScore: priorityResult.score,
             priorityReasons: JSON.stringify(priorityResult.reasons),
@@ -210,7 +209,7 @@ export async function runJobProviders(
         if (repositorySummary) {
           repositorySummary.created += 1;
         }
-        logger.info('Vaga coletada criada como rascunho.', {
+        logger.info('Vaga coletada aprovada e criada como PENDING sem gerar IA.', {
           provider: provider.name,
           jobId: job.id,
           title: job.title,
@@ -359,7 +358,7 @@ export async function runAutomatedJobCollection(
         }
 
         const priorityResult = evaluateJobPriority(normalizedJob);
-        const eligibility = isAutoApprovalEligible(buildSyntheticJob(normalizedJob, priorityResult));
+        const eligibility = isCollectionApprovalEligible(buildSyntheticJob(normalizedJob, priorityResult));
 
         if (!eligibility.eligible) {
           summary.rejectedByPriority += 1;
@@ -556,7 +555,7 @@ function buildSyntheticJob(normalizedJob: NormalizedCollectedJob, priorityResult
     readyText: null,
     aiGeneratedText: null,
     useAi: true,
-    status: JobStatus.DRAFT,
+    status: JobStatus.PENDING,
     priority: priorityResult.priority,
     priorityScore: priorityResult.score,
     priorityReasons: JSON.stringify(priorityResult.reasons),
@@ -570,6 +569,127 @@ function incrementAutomatedRepositoryCreated(repositorySummary?: ProviderReposit
   if (repositorySummary) {
     repositorySummary.created += 1;
   }
+}
+
+function isCollectionApprovalEligible(job: JobPost): { eligible: true; reason: 'eligible' } | { eligible: false; reason: string } {
+  if (job.priority === JobPriority.LOW || !job.priority) {
+    return { eligible: false, reason: 'priority_not_eligible' };
+  }
+
+  if (!job.url?.trim()) {
+    return { eligible: false, reason: 'missing_url' };
+  }
+
+  if (!job.rawText?.trim() && !job.shortDescription?.trim()) {
+    return { eligible: false, reason: 'missing_description' };
+  }
+
+  if (hasStrongSenioritySignal(job)) {
+    return { eligible: false, reason: 'strong_seniority_signal' };
+  }
+
+  if (job.priority === JobPriority.HIGH) {
+    return { eligible: true, reason: 'eligible' };
+  }
+
+  if (job.priority === JobPriority.MEDIUM && isMediumEligible(job)) {
+    return { eligible: true, reason: 'eligible' };
+  }
+
+  return { eligible: false, reason: 'medium_without_required_signal' };
+}
+
+function isMediumEligible(job: JobPost): boolean {
+  return isInternship(job) || isTrainee(job) || isRemote(job) || (job.priorityScore ?? 0) >= 75;
+}
+
+function hasStrongSenioritySignal(job: JobPost): boolean {
+  const reasons = parsePriorityReasons(job.priorityReasons);
+
+  if (reasons.some((reason) => reason.includes('penalty:experience_3_plus'))) {
+    return true;
+  }
+
+  const text = normalizeText(
+    [job.title, job.level, job.shortDescription, job.rawText, job.priorityReasons].filter(Boolean).join(' '),
+  );
+
+  return hasAnyNormalizedTerm(text, [
+    'senior',
+    'pleno',
+    'especialista',
+    'tech lead',
+    'lead',
+    'staff',
+    'principal',
+    'manager',
+    'coordenador',
+    'gerente',
+  ]);
+}
+
+function isInternship(job: JobPost): boolean {
+  return hasAnyNormalizedTerm([job.level, job.title, job.rawText].filter(Boolean).join(' '), [
+    'estagio',
+    'estagiario',
+    'intern',
+    'internship',
+  ]);
+}
+
+function isTrainee(job: JobPost): boolean {
+  return hasAnyNormalizedTerm([job.level, job.title, job.rawText].filter(Boolean).join(' '), ['trainee']);
+}
+
+function isRemote(job: JobPost): boolean {
+  return hasAnyNormalizedTerm([job.modality, job.location, job.title, job.rawText].filter(Boolean).join(' '), [
+    'remoto',
+    'remote',
+    'home office',
+  ]);
+}
+
+function parsePriorityReasons(value: string | null): string[] {
+  if (!value?.trim()) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+
+    if (Array.isArray(parsed)) {
+      return parsed.filter((reason): reason is string => typeof reason === 'string');
+    }
+  } catch {
+    return [value];
+  }
+
+  return [];
+}
+
+function hasAnyNormalizedTerm(value: string | null, terms: string[]): boolean;
+function hasAnyNormalizedTerm(value: string, terms: string[]): boolean;
+function hasAnyNormalizedTerm(value: string | null, terms: string[]): boolean {
+  const normalized = normalizeText(value ?? '');
+
+  return terms.some((term) => containsNormalizedTerm(normalized, normalizeText(term)));
+}
+
+function containsNormalizedTerm(normalizedText: string, normalizedTerm: string): boolean {
+  return new RegExp(`(^|[^a-z0-9])${escapeRegex(normalizedTerm)}([^a-z0-9]|$)`).test(normalizedText);
+}
+
+function normalizeText(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function getTitleCompanyDuplicateKey(job: NormalizedCollectedJob): string | null {

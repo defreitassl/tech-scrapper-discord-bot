@@ -1,0 +1,32 @@
+services:
+  app:
+    build: .
+    restart: always
+    depends_on:
+      - postgres
+    ports:
+      - "${ADMIN_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      ADMIN_PORT: 3000
+      ADMIN_USERNAME: ${ADMIN_USERNAME:?configure ADMIN_USERNAME}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?configure ADMIN_PASSWORD}
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?configure POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-discord_jobs_bot}?schema=public"
+      DISCORD_TOKEN: ${DISCORD_TOKEN:?configure DISCORD_TOKEN}
+      DISCORD_CHANNEL_ID: ${DISCORD_CHANNEL_ID:?configure DISCORD_CHANNEL_ID}
+      GOOGLE_AI_API_KEY: ${GOOGLE_AI_API_KEY:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+    command: sh -c "npm run prisma:migrate:deploy && npm run prod"
+
+  postgres:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-discord_jobs_bot}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?configure POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+volumes:
+  postgres-data:

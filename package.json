@@ -6,6 +6,7 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
+    "prod": "node dist/admin/server.js",
     "admin": "node dist/admin/server.js",
     "diagnose:domain": "node dist/scripts/diagnoseJobDomainClassifier.js",
     "diagnose:experimental-providers": "node dist/scripts/diagnoseExperimentalProviders.js",
@@ -13,6 +14,7 @@
     "diagnose:priority": "node dist/scripts/diagnoseJobPriority.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
+    "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio"
   },
   "keywords": [
@@ -26,6 +28,7 @@
     "discord.js": "^14.19.3",
     "dotenv": "^16.5.0",
     "express": "^5.2.1",
+    "helmet": "^8.2.0",
     "node-cron": "^4.2.1",
     "playwright": "^1.60.0"
   },

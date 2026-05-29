@@ -12,14 +12,14 @@ type PriorityCounts = Record<JobPriority, number> & {
 async function main(): Promise<void> {
   const limit = readLimit();
   const jobs = await prisma.jobPost.findMany({
-    where: { status: JobStatus.DRAFT },
+    where: { status: JobStatus.PENDING },
     orderBy: { createdAt: 'desc' },
     take: limit,
   });
 
   const scoredJobs = jobs.filter((job) => job.priorityScore !== null);
 
-  console.log(`Diagnostico de prioridade de vagas DRAFT recentes`);
+  console.log(`Diagnostico de prioridade de vagas PENDING recentes`);
   console.log(`Limite analisado: ${limit}`);
   console.log(`Total de vagas analisadas: ${jobs.length}`);
   printPriorityCounts(jobs);

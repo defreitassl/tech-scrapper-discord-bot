@@ -16,10 +16,8 @@ import {
 import { renderLayout } from './layout';
 
 export type JobsByStatus = {
-  draft: JobPost[];
   pending: JobPost[];
   history: JobPost[];
-  archived: JobPost[];
 };
 
 type JobsSectionOptions = {
@@ -27,13 +25,14 @@ type JobsSectionOptions = {
   description: string;
   jobs: JobPost[];
   emptyMessage: string;
-  flow: 'review' | 'pending' | 'history' | 'archived';
+  flow: 'pending' | 'history';
   visibleLimit?: number;
 };
 
+const DELETE_CONFIRMATION = 'Tem certeza que deseja excluir esta vaga? Essa ação não pode ser desfeita.';
+
 export function renderJobsList(jobsByStatus: JobsByStatus, notice?: AdminNotice): string {
-  const totalJobs =
-    jobsByStatus.draft.length + jobsByStatus.pending.length + jobsByStatus.history.length + jobsByStatus.archived.length;
+  const totalJobs = jobsByStatus.pending.length + jobsByStatus.history.length;
 
   const content = `
     <div class="page-heading">
@@ -46,13 +45,6 @@ export function renderJobsList(jobsByStatus: JobsByStatus, notice?: AdminNotice)
         <form method="post" action="/admin/jobs/publish-pending">
           <button type="submit" class="primary-action" data-loading-label="Enviando...">Enviar vagas pendentes</button>
         </form>
-        ${
-          jobsByStatus.draft.length > 0
-            ? `<form method="post" action="/admin/jobs/auto-approve">
-                <button type="submit" class="secondary" data-loading-label="Processando...">Processar rascunhos legados</button>
-              </form>`
-            : ''
-        }
         <form method="post" action="/admin/jobs/collect-all">
           <button type="submit" class="secondary" data-loading-label="Coletando...">Coletar vagas</button>
         </form>
@@ -77,26 +69,6 @@ export function renderJobsList(jobsByStatus: JobsByStatus, notice?: AdminNotice)
         flow: 'history',
         visibleLimit: 30,
       })}
-      ${renderJobsSection({
-        title: 'Arquivadas',
-        description: 'Vagas removidas do fluxo de revisao e envio.',
-        jobs: jobsByStatus.archived,
-        emptyMessage: 'Nenhuma vaga arquivada.',
-        flow: 'archived',
-        visibleLimit: 10,
-      })}
-      ${
-        jobsByStatus.draft.length > 0
-          ? renderJobsSection({
-              title: 'Rascunhos legados',
-              description: 'Vagas DRAFT antigas, fora do fluxo principal automatizado.',
-              jobs: jobsByStatus.draft,
-              emptyMessage: 'Nenhum rascunho legado.',
-              flow: 'review',
-              visibleLimit: 10,
-            })
-          : ''
-      }
     </div>
     <p class="jobs-total">${totalJobs} vaga${totalJobs === 1 ? '' : 's'} cadastrada${totalJobs === 1 ? '' : 's'} no total.</p>
   `;
@@ -108,10 +80,7 @@ function renderJobsSection(options: JobsSectionOptions): string {
   const visibleJobs = options.visibleLimit ? options.jobs.slice(0, options.visibleLimit) : options.jobs;
   const limited = visibleJobs.length < options.jobs.length;
   const countLabel = limited ? `${visibleJobs.length} de ${options.jobs.length}` : `${options.jobs.length}`;
-  const jobsContent =
-    options.flow === 'review'
-      ? renderReviewQueue(visibleJobs, options.emptyMessage)
-      : renderJobsTable(visibleJobs, options.flow, options.emptyMessage);
+  const jobsContent = renderJobsTable(visibleJobs, options.flow, options.emptyMessage);
 
   return `
     <section class="card table-card jobs-section">
@@ -125,95 +94,6 @@ function renderJobsSection(options: JobsSectionOptions): string {
       ${jobsContent}
       ${limited ? `<p class="section-limit-note">Mostrando as ${visibleJobs.length} mais recentes desta secao.</p>` : ''}
     </section>
-  `;
-}
-
-function renderReviewQueue(jobs: JobPost[], emptyMessage: string): string {
-  if (jobs.length === 0) {
-    return `<p class="empty review-empty">${escapeHtml(emptyMessage)}</p>`;
-  }
-
-  return `
-    <div class="review-queue" aria-label="Rascunhos legados">
-      ${jobs.map(renderReviewCard).join('')}
-    </div>
-  `;
-}
-
-function renderReviewCard(job: JobPost): string {
-  const jobId = escapeHtml(job.id);
-  const source = job.source?.trim() || 'Fonte nao informada';
-  const url = job.url?.trim();
-  const priorityReasons = parsePriorityReasons(job.priorityReasons);
-
-  return `
-    <article class="review-card">
-      <div class="review-card-main">
-        <div class="review-card-header">
-          <div>
-            <a class="job-title review-title" href="/admin/jobs/${jobId}">${escapeHtml(job.title ?? 'Sem titulo')}</a>
-            <p class="review-company">${escapeHtml(job.company ?? 'Empresa nao informada')}</p>
-          </div>
-          <div class="review-badges">
-            ${renderPriorityBadge(job.priority)}
-            <span class="source-pill">${escapeHtml(source)}</span>
-          </div>
-        </div>
-        <dl class="review-meta-grid">
-          ${renderReviewMetaItem('Localizacao', job.location)}
-          ${renderReviewMetaItem('Modalidade', job.modality)}
-          ${renderReviewMetaItem('Nivel', job.level)}
-          ${renderReviewMetaItem('Criada em', formatDate(job.createdAt))}
-        </dl>
-        <div class="review-stack-row">
-          <span class="review-label">Stacks</span>
-          <span class="${job.stacks?.trim() ? 'review-stacks' : 'review-stacks muted'}">${escapeHtml(job.stacks?.trim() || 'Stacks nao informadas')}</span>
-        </div>
-        ${renderReviewPriorityDetails(job.priorityScore, priorityReasons)}
-        ${
-          job.shortDescription?.trim()
-            ? `<p class="review-description">${escapeHtml(job.shortDescription.trim())}</p>`
-            : ''
-        }
-        ${renderOriginalJobLink(url)}
-      </div>
-      <div class="review-actions">
-        ${renderPostButton(`/admin/jobs/${jobId}/prepare`, 'Preparar legado', 'primary-action', 'Preparando...')}
-        <a class="button secondary" href="/admin/jobs/${jobId}">Ver detalhes</a>
-        ${renderPostButton(`/admin/jobs/${jobId}/archive`, 'Arquivar', 'secondary', 'Salvando...')}
-      </div>
-    </article>
-  `;
-}
-
-function renderOriginalJobLink(url?: string): string {
-  if (!url) {
-    return '';
-  }
-
-  if (!isSafeExternalUrl(url)) {
-    return `<p class="review-original-text">Link original informado: ${escapeHtml(url)}</p>`;
-  }
-
-  return `<a class="review-original-link" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">Abrir vaga original</a>`;
-}
-
-function isSafeExternalUrl(value: string): boolean {
-  try {
-    const url = new URL(value);
-
-    return url.protocol === 'http:' || url.protocol === 'https:';
-  } catch {
-    return false;
-  }
-}
-
-function renderReviewMetaItem(label: string, value: string | null): string {
-  return `
-    <div class="review-meta-item">
-      <dt>${escapeHtml(label)}</dt>
-      <dd>${escapeHtml(value?.trim() || '-')}</dd>
-    </div>
   `;
 }
 
@@ -265,27 +145,33 @@ function renderJobRowActions(job: JobPost, flow: JobsSectionOptions['flow']): st
   const jobId = escapeHtml(job.id);
   const editAction = `<a class="button secondary" href="/admin/jobs/${jobId}/edit">Editar</a>`;
 
-  if (flow === 'review') {
-    return [
-      renderPostButton(`/admin/jobs/${jobId}/prepare`, 'Preparar legado', 'primary-action', 'Preparando...'),
-      editAction,
-      renderPostButton(`/admin/jobs/${jobId}/archive`, 'Arquivar', 'secondary', 'Salvando...'),
-    ].join('');
-  }
-
   if (flow === 'pending') {
     return [
       renderPostButton(`/admin/jobs/${jobId}/publish`, 'Enviar agora', 'primary-action', 'Enviando...'),
       editAction,
-      renderPostButton(`/admin/jobs/${jobId}/archive`, 'Arquivar', 'secondary', 'Salvando...'),
+      renderDeleteButton(job),
     ].join('');
   }
 
   if (flow === 'history') {
-    return [editAction, renderPostButton(`/admin/jobs/${jobId}/archive`, 'Arquivar', 'secondary', 'Salvando...')].join('');
+    return [editAction, renderDeleteButton(job)].join('');
   }
 
   return editAction;
+}
+
+function renderDeleteButton(job: JobPost): string {
+  if (job.status === JobStatus.SENT) {
+    return '';
+  }
+
+  return renderPostButton(
+    `/admin/jobs/${escapeHtml(job.id)}/delete`,
+    'Excluir',
+    'secondary',
+    'Excluindo...',
+    DELETE_CONFIRMATION,
+  );
 }
 
 export function renderJobDetails(job: JobPost, feedback: { notice?: AdminNotice } = {}): string {
@@ -349,11 +235,8 @@ export function renderJobDetails(job: JobPost, feedback: { notice?: AdminNotice 
       ${renderLongText('Texto gerado por IA', job.aiGeneratedText)}
     </div>
     <div class="actions footer-actions">
-      ${job.status === JobStatus.DRAFT ? renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/prepare`, 'Colocar legado na fila', 'primary-action', 'Preparando...') : ''}
-      ${job.status === JobStatus.PENDING ? renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/prepare`, 'Manter IA no envio', 'secondary', 'Preparando...') : ''}
-      ${renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/publish`, 'Enviar esta vaga agora', 'primary-action', 'Enviando...')}
-      ${renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/pending`, 'Aprovar para envio', 'secondary', 'Salvando...')}
-      ${renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/archive`, 'Arquivar', 'secondary', 'Salvando...')}
+      ${renderPostButton(`/admin/jobs/${escapeHtml(job.id)}/publish`, 'Enviar agora', 'primary-action', 'Enviando...')}
+      ${renderDeleteButton(job)}
     </div>
   `;
 
@@ -436,7 +319,7 @@ export function renderJobForm(options: {
               )
               .join('')}
           </select>
-          <small>Aprovacao manual segue disponivel para vagas antigas ou rascunhos.</small>
+          <small>Use PENDING para manter a vaga na fila de envio.</small>
         </label>`,
       )}
       <div class="form-actions">
@@ -505,22 +388,6 @@ function renderMessageState(job: JobPost): string {
   }
 
   return '<span class="source-pill">Template fallback</span>';
-}
-
-function renderReviewPriorityDetails(priorityScore: number | null, reasons: string[]): string {
-  if (priorityScore === null && reasons.length === 0) {
-    return '';
-  }
-
-  const score = priorityScore === null ? '' : `<span class="priority-score">Score ${priorityScore}</span>`;
-  const reasonsText = reasons.length > 0 ? reasons.slice(0, 3).join(', ') : 'Motivos nao registrados';
-
-  return `
-    <div class="review-priority-details">
-      ${score}
-      <span class="priority-reasons">${escapeHtml(reasonsText)}</span>
-    </div>
-  `;
 }
 
 function formatPriorityReasons(value: string | null): string | null {

@@ -85,13 +85,6 @@ export async function publishSingleJob(job: JobPost): Promise<PublishSingleJobRe
     };
   }
 
-  if (job.status === JobStatus.ARCHIVED) {
-    return {
-      status: 'skipped',
-      message: 'Esta vaga esta arquivada e nao pode ser enviada.',
-    };
-  }
-
   if (!hasPublishableContent(job)) {
     return {
       status: 'skipped',
