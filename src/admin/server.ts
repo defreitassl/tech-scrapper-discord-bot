@@ -15,7 +15,15 @@ const port = Number(process.env.PORT ?? process.env.ADMIN_PORT ?? 3000);
 const adminAuth = getAdminAuthConfig();
 
 app.disable('x-powered-by');
-app.use(helmet());
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+      },
+    },
+  }),
+);
 app.use(express.urlencoded({ extended: false, limit: '200kb' }));
 app.use((request, response, next) => {
   const startedAt = Date.now();

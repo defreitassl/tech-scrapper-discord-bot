@@ -124,5 +124,6 @@ Fora da coleta atual:
 - HTML/CSS simples, sem framework frontend grande.
 - Views mantidas em poucos arquivos didaticos (`layout`, `jobs`, `settings` e `styles`) e helpers consolidados.
 - Fluxos principais: listar, criar, editar, ver detalhes, coletar vagas, enviar pendentes, enviar agora e excluir vagas nao enviadas.
+- Configuracao de envio mostra um campo de horario para cada vaga definida no limite diario.
 - Acoes destrutivas devem ser restritas a vagas nao enviadas.
 - Interface deve continuar operacional e direta para o MVP.

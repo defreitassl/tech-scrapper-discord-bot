@@ -58,6 +58,7 @@ export function renderScheduleSettingsForm(options: {
   notice?: AdminNotice;
 }): string {
   const form = options.form ?? scheduleFormFromSettings(options.settings);
+  const sendTimes = sendTimesForDailyLimit(form.sendTimes, form.dailyLimit);
   const sentToday = options.dailyUsage?.sentToday ?? 0;
   const remainingToday = options.dailyUsage?.remainingToday ?? Math.max(form.dailyLimit - sentToday, 0);
   const content = `
@@ -83,7 +84,7 @@ export function renderScheduleSettingsForm(options: {
         <div class="detail-item"><dt>Enviadas hoje</dt><dd>${escapeHtml(String(sentToday))}</dd></div>
         <div class="detail-item"><dt>Restante hoje</dt><dd>${escapeHtml(String(remainingToday))}</dd></div>
         <div class="detail-item"><dt>Timezone do sistema</dt><dd>${escapeHtml(form.timezone)}</dd></div>
-        <div class="detail-item"><dt>Slots configurados</dt><dd>${renderSendTimeSlotsSummary(form.sendTimes)}</dd></div>
+        <div class="detail-item"><dt>Slots configurados</dt><dd>${renderSendTimeSlotsSummary(sendTimes)}</dd></div>
         <div class="detail-item"><dt>Processo</dt><dd>O painel admin precisa estar rodando para o agendamento funcionar.</dd></div>
         <div class="detail-item"><dt>Escopo do limite</dt><dd>O limite diario vale apenas para o envio agendado. O envio manual continua disponivel e nao e bloqueado por esse limite.</dd></div>
       </dl>
@@ -107,7 +108,7 @@ export function renderScheduleSettingsForm(options: {
             <dd>${escapeHtml(DEFAULT_SCHEDULER_TIMEZONE)}</dd>
             <small>Definido automaticamente pelo sistema.</small>
           </div>`,
-          renderSendTimeSlotSelects(form.sendTimes),
+          renderSendTimeSlotSelects(sendTimes),
         ].join(''),
       )}
       <div class="form-actions">
@@ -215,6 +216,16 @@ function renderSendTimeSlotsSummary(sendTimes: string[]): string {
         .join('')}
     </ol>
   `;
+}
+
+function sendTimesForDailyLimit(sendTimes: string[], dailyLimit: number): string[] {
+  const selectedSendTimes = sendTimes.slice(0, dailyLimit);
+
+  while (selectedSendTimes.length < dailyLimit) {
+    selectedSendTimes.push(AVAILABLE_SEND_TIMES[selectedSendTimes.length % AVAILABLE_SEND_TIMES.length]);
+  }
+
+  return selectedSendTimes;
 }
 
 function renderScheduleSettingsScript(): string {
