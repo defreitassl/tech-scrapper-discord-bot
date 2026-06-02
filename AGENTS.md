@@ -25,7 +25,7 @@ Atualize a documentacao apenas quando a mudanca alterar escopo, arquitetura, flu
 ## Padroes do projeto
 
 - Nao chame Gemini na coleta.
-- Nao reintroduza `DRAFT`; o schema usa apenas `PENDING`, `SENT` e `ERROR`.
+- O schema usa apenas `PENDING`, `SENT` e `ERROR`.
 - Nao use login, captcha, bypass, proxy ou credenciais pessoais em scraping.
 - Nao adicione provider sem documentacao curta em `docs/PROJECT.md` ou `docs/DECISIONS.md`, conforme o caso.
 - Nao altere schema Prisma sem migration.

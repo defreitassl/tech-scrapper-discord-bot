@@ -1,4 +1,4 @@
-import { escapeHtml } from '../helpers/formatters';
+import { escapeHtml } from '../helpers';
 import { adminStyles } from './styles';
 
 export function renderLayout(title: string, content: string): string {

@@ -5,8 +5,7 @@
 - Node.js 20 ou superior, se rodar sem Docker.
 - PostgreSQL, se rodar sem Docker.
 - Docker e Docker Compose, se rodar com containers.
-- Bot do Discord criado e adicionado ao servidor.
-- Canal do Discord configurado.
+- Bot Discord no servidor, com permissao para enviar mensagens no canal.
 - Repositorio clonado no servidor.
 
 ## Variaveis obrigatorias
@@ -49,6 +48,21 @@ Opcionais:
 - `GOOGLE_AI_API_KEY`: habilita Gemini; sem ela, use `readyText` ou fallback.
 - `GITHUB_TOKEN`: aumenta rate limit do GitHub.
 - `ADMIN_PORT`: porta HTTP do painel.
+
+## Bot Discord
+
+O envio para Discord usa um Bot Discord com `discord.js`. Nao ha comandos interativos ou listeners persistentes no MVP; o app apenas conecta, publica embeds no canal configurado e encerra o client.
+
+Para configurar:
+
+1. Crie uma aplicacao no Discord Developer Portal.
+2. Crie o bot e copie o token.
+3. Convide o bot para o servidor.
+4. De permissao para enviar mensagens no canal.
+5. Copie o ID do canal.
+6. Configure `DISCORD_TOKEN` e `DISCORD_CHANNEL_ID` no `.env` de producao.
+
+Trate `DISCORD_TOKEN` como segredo e nao exponha o token em logs, issues ou commits.
 
 ## Rodar sem Docker
 

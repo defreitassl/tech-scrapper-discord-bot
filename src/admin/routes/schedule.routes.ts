@@ -7,9 +7,8 @@ import {
   validateSchedulerSettingsInput,
 } from '../../services/schedulerSettings';
 import { reloadScheduledPublisher } from '../../services/scheduledPublisher';
-import { parseScheduleSettingsForm } from '../helpers/forms';
-import { getNoticeFromQuery, redirectWithNotice } from '../helpers/notifications';
-import { renderScheduleSettingsForm } from '../views/schedule.views';
+import { getNoticeFromQuery, parseScheduleSettingsForm, redirectWithNotice } from '../helpers';
+import { renderScheduleSettingsForm } from '../views/settings.view';
 
 export function createScheduleRouter(): express.Router {
   const router = express.Router();

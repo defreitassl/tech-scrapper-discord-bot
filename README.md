@@ -11,7 +11,7 @@ O projeto reduz o ruido de vagas espalhadas em varias fontes, filtra oportunidad
 - Express
 - Prisma
 - PostgreSQL
-- Discord.js
+- discord.js
 - Gemini
 - node-cron
 - Docker
@@ -27,7 +27,7 @@ O projeto reduz o ruido de vagas espalhadas em varias fontes, filtra oportunidad
 7. Usa fallback deterministico se Gemini falhar ou nao estiver configurado.
 8. Envia a vaga como embed/card no Discord.
 
-Estados finais da vaga: `PENDING`, `SENT` e `ERROR`. O estado legado `DRAFT` foi removido antes do deploy; nao existe curadoria por rascunho.
+Estados finais da vaga: `PENDING`, `SENT` e `ERROR`. Nao existe curadoria por rascunho.
 
 ## Rodando localmente
 
@@ -35,8 +35,7 @@ Requisitos:
 
 - Node.js 20 ou superior
 - PostgreSQL
-- Bot criado no Discord Developer Portal
-- Canal do Discord configurado para receber mensagens do bot
+- Bot Discord no servidor, com permissao para enviar mensagens no canal
 
 Instale as dependencias:
 
@@ -62,16 +61,30 @@ DISCORD_TOKEN=
 DISCORD_CHANNEL_ID=
 GOOGLE_AI_API_KEY=
 DATABASE_URL="postgresql://postgres:postgres@localhost:5432/discord_jobs_bot?schema=public"
+POSTGRES_PASSWORD=
 
 GITHUB_TOKEN=
 ```
 
 Observacoes:
 
-- `DISCORD_TOKEN` e `DISCORD_CHANNEL_ID` sao necessarios para publicar no Discord.
+- `DISCORD_TOKEN` e `DISCORD_CHANNEL_ID` sao necessarios para publicar no Discord; o token deve ser tratado como segredo.
 - `GOOGLE_AI_API_KEY` habilita Gemini; sem ela, o envio deve usar `readyText` ou fallback.
 - `GITHUB_TOKEN` e opcional, mas aumenta o rate limit da API do GitHub.
 - Em producao, `ADMIN_USERNAME` e `ADMIN_PASSWORD` sao obrigatorios.
+
+## Bot Discord
+
+O envio para Discord usa um Bot Discord com `discord.js`. O projeto continua publicando as vagas como embed/card no canal configurado.
+
+Para configurar:
+
+1. Crie uma aplicacao no Discord Developer Portal.
+2. Crie o bot e copie o token.
+3. Convide o bot para o servidor.
+4. De permissao para enviar mensagens no canal.
+5. Copie o ID do canal.
+6. Configure `DISCORD_TOKEN` e `DISCORD_CHANNEL_ID`.
 
 ## Banco de dados
 

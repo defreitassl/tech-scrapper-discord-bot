@@ -24,7 +24,7 @@
 - Fila `PENDING`.
 - Gemini somente no envio.
 - Fallback deterministico.
-- Publicacao como embed no Discord.
+- Publicacao como embed no Discord via Bot Discord com `discord.js`.
 - Basic Auth no painel.
 - Docker Compose para app e PostgreSQL.
 
@@ -37,6 +37,7 @@
 - Multi-tenant ou SaaS.
 - Frontend React/Next/Tailwind.
 - Delecao de mensagens ja enviadas ao Discord.
+- Comandos interativos no Discord.
 
 ## Fluxo principal
 
@@ -48,7 +49,7 @@
 6. Coleta rejeita imediatamente o que nao entra na fila, nao chama Gemini e nao envia Discord.
 7. Envio manual ou agendado consome vagas `PENDING`.
 8. Publisher resolve a mensagem.
-9. Discord recebe embed/card.
+9. Discord recebe embed/card enviado pelo bot.
 10. Vaga enviada vira `SENT`; falha vira `ERROR`.
 
 `runAutomatedJobCollection` e o fluxo unico de coleta usado por coleta agendada e pelo botao `Coletar vagas`. Nao existe fluxo operacional de rascunho, autoaprovacao ou geracao manual de IA.
@@ -59,7 +60,7 @@
 - `SENT`: vaga enviada ao Discord.
 - `ERROR`: falha no envio.
 
-`DRAFT` foi removido antes do deploy. Nao existe curadoria por rascunho: a coleta aprova ou rejeita imediatamente, e vagas aprovadas entram direto na fila `PENDING`. `ARCHIVED` tambem foi removido. O painel pode excluir vagas nao enviadas (`PENDING`, `ERROR`) e nao exclui `SENT`.
+Nao existe curadoria por rascunho: a coleta aprova ou rejeita imediatamente, e vagas aprovadas entram direto na fila `PENDING`. O painel pode excluir vagas nao enviadas (`PENDING`, `ERROR`) e nao exclui `SENT`.
 
 ## Regras de negocio
 
@@ -72,7 +73,7 @@
 - `MEDIUM` so entra se for estagio, trainee, remoto ou tiver `priorityScore >= 75`.
 - Gemini roda somente no envio.
 - Se Gemini falhar, o fallback deterministico deve publicar uma mensagem util.
-- Discord recebe embed/card; se embed falhar, publisher tenta texto puro.
+- Discord recebe embed/card pelo bot; se embed falhar, publisher tenta texto puro.
 - Coleta automatica preenche a fila alvo `min(max(dailyLimit * 7, dailyLimit), 30)`.
 - Envio em lote busca ate 5 vagas `PENDING`.
 
@@ -80,17 +81,19 @@
 
 - `src/admin/`: painel Express, rotas, views, helpers e autenticacao Basic.
 - `src/providers/`: providers, normalizacao, registry e runner.
-- `src/services/`: politica de decisao da vaga, filtros, prioridade, deduplicacao, schedulers, Gemini e Discord.
+- `src/services/`: politica de decisao da vaga, filtros, prioridade, deduplicacao, schedulers, Gemini e envio ao Discord por bot.
 - `src/lib/prisma.ts`: Prisma Client compartilhado.
 - `src/lib/logger.ts`: logger simples.
 - `prisma/schema.prisma`: modelo de dados.
 - `src/scraping/`: camada isolada para acesso publico HTML/JSON e investigacoes controladas.
 
+O Discord e integrado por `discord.js`, usando `DISCORD_TOKEN` e `DISCORD_CHANNEL_ID`. O bot precisa estar no servidor e ter permissao para enviar mensagens no canal. O MVP nao le mensagens, nao responde comandos e nao cria listeners persistentes.
+
 ## Providers
 
 - Provider deve ser pequeno e responsavel por uma fonte ou familia de fontes.
 - Preferir API publica, RSS, JSON publico ou HTML publico simples.
-- Playwright nao e dependencia de runtime do MVP.
+- Providers nao dependem de browser em runtime.
 - Provider retorna dados; runner chama `jobPolicy.ts` para decidir salvar ou recusar.
 - Provider nao chama Gemini.
 - Provider nao envia Discord.
@@ -106,8 +109,8 @@ Providers do MVP:
 
 Fora da coleta atual:
 
-- ATS publicos internacionais: Greenhouse, Lever e Ashby foram removidos da coleta manual porque os alvos testados eram internacionais e pouco aderentes ao publico da Projeto Desenvolve.
-- Browser scraping/Playwright: fora do runtime; providers devem usar fontes publicas seguras.
+- Fontes internacionais pouco aderentes ao publico da Projeto Desenvolve.
+- Browser scraping em runtime; providers devem usar fontes publicas seguras.
 
 ## Logs
 
@@ -119,6 +122,7 @@ Fora da coleta atual:
 
 - Server-rendered em Express.
 - HTML/CSS simples, sem framework frontend grande.
+- Views mantidas em poucos arquivos didaticos (`layout`, `jobs`, `settings` e `styles`) e helpers consolidados.
 - Fluxos principais: listar, criar, editar, ver detalhes, coletar vagas, enviar pendentes, enviar agora e excluir vagas nao enviadas.
 - Acoes destrutivas devem ser restritas a vagas nao enviadas.
 - Interface deve continuar operacional e direta para o MVP.

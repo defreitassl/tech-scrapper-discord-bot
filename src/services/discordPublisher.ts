@@ -1,14 +1,40 @@
+import { ChannelType, Client, GatewayIntentBits } from 'discord.js';
 import { JobPost } from '@prisma/client';
-import { Client, GatewayIntentBits } from 'discord.js';
-import type { APIEmbed, APIEmbedField, MessageCreateOptions } from 'discord.js';
 import { logger } from '../lib/logger';
 
 const DISCORD_JOB_CONTENT = '📌 Nova vaga para PDevs';
 const DISCORD_EMBED_COLOR = 0x0f766e;
 const MAX_EMBED_DESCRIPTION_LENGTH = 3500;
 const MAX_EMBED_FIELD_LENGTH = 1024;
+const MAX_CONTENT_LENGTH = 2000;
 
-export type DiscordJobPayload = Pick<MessageCreateOptions, 'content' | 'embeds'>;
+export type DiscordEmbed = {
+  title?: string;
+  url?: string;
+  description?: string;
+  color?: number;
+  fields?: DiscordEmbedField[];
+  footer?: { text: string };
+  timestamp?: string;
+};
+
+export type DiscordEmbedField = {
+  name: string;
+  value: string;
+  inline?: boolean;
+};
+
+export type DiscordMessagePayload = {
+  content?: string;
+  embeds?: DiscordEmbed[];
+};
+
+export type DiscordJobPayload = DiscordMessagePayload;
+
+type SendableDiscordChannel = {
+  type: ChannelType;
+  send(payload: DiscordMessagePayload): Promise<unknown>;
+};
 
 export async function sendDiscordMessage(message: string): Promise<void> {
   await sendDiscordPayload(message, {
@@ -45,7 +71,7 @@ export async function sendDiscordJobMessage(job: JobPost, messageText: string): 
 }
 
 export function buildDiscordJobPayload(job: JobPost, messageText: string): DiscordJobPayload {
-  const embed: APIEmbed = {
+  const embed: DiscordEmbed = {
     title: cleanValue(job.title) ?? 'Nova vaga para PDevs',
     description: truncateForDiscord(messageText, MAX_EMBED_DESCRIPTION_LENGTH),
     color: DISCORD_EMBED_COLOR,
@@ -68,35 +94,31 @@ export function buildDiscordJobPayload(job: JobPost, messageText: string): Disco
   };
 }
 
-async function sendDiscordPayload(payload: string | MessageCreateOptions, context: Record<string, unknown>): Promise<void> {
-  const token = process.env.DISCORD_TOKEN;
-  const channelId = process.env.DISCORD_CHANNEL_ID;
-
-  if (!token || !channelId) {
-    throw new Error('Configure DISCORD_TOKEN e DISCORD_CHANNEL_ID no arquivo .env.');
-  }
-
+async function sendDiscordPayload(payload: string | DiscordMessagePayload, context: Record<string, unknown>): Promise<void> {
+  const { token, channelId } = getDiscordBotConfig();
+  const messagePayload = normalizeDiscordPayload(payload);
   const client = new Client({
     intents: [GatewayIntentBits.Guilds],
   });
 
-  try {
-    logger.info('Conectando ao Discord para envio de mensagem.', {
-      channelId,
-      ...context,
-    });
+  logger.info('Envio via Bot Discord iniciado.', {
+    channelId,
+    ...context,
+  });
 
+  try {
     await client.login(token);
     await waitUntilReady(client);
 
     const channel = await client.channels.fetch(channelId);
 
-    if (!channel || !channel.isSendable()) {
-      throw new Error('O canal configurado nao foi encontrado ou nao aceita mensagens.');
+    if (!isSendableTextChannel(channel)) {
+      throw new Error('DISCORD_CHANNEL_ID nao aponta para um canal de texto onde o bot possa enviar mensagens.');
     }
 
-    await channel.send(payload);
-    logger.info('Mensagem enviada ao Discord.', {
+    await (channel as SendableDiscordChannel).send(messagePayload);
+
+    logger.info('Mensagem enviada ao Discord via bot.', {
       channelId,
       ...context,
     });
@@ -105,7 +127,7 @@ async function sendDiscordPayload(payload: string | MessageCreateOptions, contex
   }
 }
 
-function buildEmbedFields(job: JobPost): APIEmbedField[] {
+function buildEmbedFields(job: JobPost): DiscordEmbedField[] {
   return [
     buildField('Empresa', job.company),
     buildField('Local', job.location),
@@ -113,10 +135,10 @@ function buildEmbedFields(job: JobPost): APIEmbedField[] {
     buildField('Nível', job.level),
     buildField('Stacks', job.stacks),
     buildField('Faixa salarial', job.salaryRange),
-  ].filter((field): field is APIEmbedField => field !== null);
+  ].filter((field): field is DiscordEmbedField => field !== null);
 }
 
-function buildField(name: string, value: string | null): APIEmbedField | null {
+function buildField(name: string, value: string | null): DiscordEmbedField | null {
   const clean = cleanValue(value);
 
   if (!clean) {
@@ -189,6 +211,31 @@ function formatError(error: unknown): unknown {
   return error;
 }
 
+function getDiscordBotConfig(): { token: string; channelId: string } {
+  const token = process.env.DISCORD_TOKEN?.trim();
+  const channelId = process.env.DISCORD_CHANNEL_ID?.trim();
+
+  if (!token) {
+    throw new Error('Configure DISCORD_TOKEN no arquivo .env.');
+  }
+
+  if (!channelId) {
+    throw new Error('Configure DISCORD_CHANNEL_ID no arquivo .env.');
+  }
+
+  return { token, channelId };
+}
+
+function normalizeDiscordPayload(payload: string | DiscordMessagePayload): DiscordMessagePayload {
+  if (typeof payload === 'string') {
+    return {
+      content: truncateForDiscord(payload, MAX_CONTENT_LENGTH),
+    };
+  }
+
+  return payload;
+}
+
 function waitUntilReady(client: Client): Promise<void> {
   if (client.isReady()) {
     return Promise.resolve();
@@ -197,4 +244,17 @@ function waitUntilReady(client: Client): Promise<void> {
   return new Promise((resolve) => {
     client.once('ready', () => resolve());
   });
+}
+
+function isSendableTextChannel(channel: Awaited<ReturnType<Client['channels']['fetch']>>): boolean {
+  const sendableChannel = channel as SendableDiscordChannel | null;
+
+  return (
+    typeof sendableChannel?.send === 'function' &&
+    (sendableChannel.type === ChannelType.GuildText ||
+      sendableChannel.type === ChannelType.PublicThread ||
+      sendableChannel.type === ChannelType.PrivateThread ||
+      sendableChannel.type === ChannelType.AnnouncementThread ||
+      sendableChannel.type === ChannelType.GuildAnnouncement)
+  );
 }

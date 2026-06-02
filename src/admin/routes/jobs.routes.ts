@@ -6,12 +6,15 @@ import { checkJobDuplicate } from '../../services/jobDeduplication';
 import { publishPendingJobs, publishSingleJob } from '../../services/publishPendingJobs';
 import { runRealJobCollection } from '../../services/scheduledCollector';
 import { manualJobProviders } from '../../providers/providerRegistry';
-import { parseJobForm } from '../helpers/forms';
-import { getNoticeFromQuery, redirectWithNotice } from '../helpers/notifications';
-import { buildCompactCollectionNotice } from '../helpers/providerSummary';
-import { validateJob } from '../helpers/validators';
+import {
+  buildCompactCollectionNotice,
+  getNoticeFromQuery,
+  parseJobForm,
+  redirectWithNotice,
+  validateJob,
+} from '../helpers';
 import { renderLayout } from '../views/layout';
-import { renderJobDetails, renderJobForm, renderJobsList, type JobsByStatus } from '../views/jobs.views';
+import { renderJobDetails, renderJobForm, renderJobsList, type JobsByStatus } from '../views/jobs.view';
 
 export function createJobsRouter(): express.Router {
   const router = express.Router();

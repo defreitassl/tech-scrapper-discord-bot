@@ -6,9 +6,8 @@ import {
   validateCollectionSchedulerSettings,
 } from '../../services/collectionSchedulerSettings';
 import { reloadScheduledCollector } from '../../services/scheduledCollector';
-import { parseCollectionScheduleSettingsForm } from '../helpers/forms';
-import { getNoticeFromQuery, redirectWithNotice } from '../helpers/notifications';
-import { renderCollectionScheduleSettingsForm } from '../views/collectionSchedule.views';
+import { getNoticeFromQuery, parseCollectionScheduleSettingsForm, redirectWithNotice } from '../helpers';
+import { renderCollectionScheduleSettingsForm } from '../views/settings.view';
 
 export function createCollectionScheduleRouter(): express.Router {
   const router = express.Router();

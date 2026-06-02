@@ -125,3 +125,17 @@ Decisao: concentrar a decisao final de entrada na fila em `src/services/jobPolic
 Motivo: deixar dominio, qualidade, prioridade e elegibilidade em um ponto didatico e reduzir regras detalhadas no runner.
 Impacto: providers continuam apenas coletando dados; `providerRunner` normaliza, chama a politica, deduplica e persiste vagas aprovadas como `PENDING`.
 Status: aceito.
+
+## ADR-019 — Admin didatico com poucos arquivos
+
+Decisao: consolidar helpers pequenos em `src/admin/helpers.ts` e manter views principais em `layout`, `jobs`, `settings` e `styles`.
+Motivo: o projeto sera usado como material didatico e a fragmentacao anterior criava complexidade visual desnecessaria.
+Impacto: comportamento do painel permanece o mesmo; rotas continuam separadas por fluxo operacional.
+Status: aceito.
+
+## ADR-020 — Voltar de Webhook para Bot Discord
+
+Decisao: usar `discord.js` e bot token para envio.
+Motivo: branding, personalizacao do bot e possibilidade de funcionalidades futuras.
+Impacto: runtime fica um pouco maior, mas o projeto fica mais adequado para produto.
+Status: aceito.

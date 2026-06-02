@@ -3,23 +3,25 @@
 ## Implementado
 
 - Painel admin.
+- Painel admin server-rendered com helpers e views consolidados para leitura didatica.
 - Coleta manual unificada.
 - Coleta agendada configuravel.
 - `runAutomatedJobCollection` como fluxo unico de coleta.
 - Registry de providers simplificado para automatico e manual.
 - Envio agendado configuravel.
 - Providers atuais do MVP: GitHub, Himalayas, Jobicy, RemoteOK, Remotive, Remotar, Gupy, Programathor e Solides.
-- ATS publicos internacionais removidos da coleta manual: Greenhouse, Lever e Ashby.
-- Playwright removido das dependencias de runtime.
+- Fontes internacionais pouco aderentes removidas da coleta manual.
+- Browser automation removido das dependencias de runtime.
 - Filtro `TECH`/`POSSIBLY_TECH`/`NON_TECH`.
 - Prioridade `HIGH`/`MEDIUM`/`LOW` com score e motivos.
 - Politica central em `jobPolicy.ts` para dominio, qualidade, prioridade e elegibilidade de fila.
 - Fila `PENDING`.
 - Painel sem fluxo operacional de rascunho, autoaprovacao ou geracao manual de IA.
-- Status final `PENDING`, `SENT`, `ERROR`; `DRAFT` removido antes do deploy.
+- Status final `PENDING`, `SENT`, `ERROR`.
 - Gemini no envio.
 - Fallback deterministico.
-- Discord embed/card.
+- Discord embed/card via Bot Discord.
+- Envio ao Discord com `discord.js`.
 - Basic Auth.
 - Docker Compose.
 
@@ -28,6 +30,7 @@
 - Revisar `.env` de producao.
 - Confirmar `ADMIN_USERNAME` e `ADMIN_PASSWORD` fortes.
 - Confirmar `DISCORD_TOKEN` e `DISCORD_CHANNEL_ID`.
+- Confirmar que o bot esta no servidor e pode enviar mensagens no canal.
 - Rodar migrations em producao com `npm run prisma:migrate:deploy`.
 - Testar `GET /healthz`.
 - Fazer envio real de uma vaga manual de teste.
