@@ -47,7 +47,9 @@ Opcionais:
 
 - `GOOGLE_AI_API_KEY`: habilita Gemini; sem ela, use `readyText` ou fallback.
 - `GITHUB_TOKEN`: aumenta rate limit do GitHub.
-- `ADMIN_PORT`: porta HTTP do painel.
+- `ADMIN_PORT`: porta HTTP do painel quando `PORT` nao estiver configurada.
+
+Em plataformas como Railway, a variavel `PORT` costuma ser definida automaticamente pela plataforma. O servidor prioriza `PORT`, depois `ADMIN_PORT`, e por fim usa `3000`.
 
 ## Bot Discord
 
@@ -75,6 +77,31 @@ npm run prod
 ```
 
 `npm run prod` inicia `dist/admin/server.js`, incluindo schedulers configurados.
+
+## Railway
+
+No Railway, use o painel admin como processo web. O comando `npm start` tambem inicia `dist/admin/server.js`.
+
+Configuracao recomendada:
+
+- Build command: `npm run build`
+- Start command: `npm start`
+- Healthcheck path: `/healthz`
+
+Configure as variaveis:
+
+```env
+NODE_ENV=production
+ADMIN_USERNAME=
+ADMIN_PASSWORD=
+DATABASE_URL=
+DISCORD_TOKEN=
+DISCORD_CHANNEL_ID=
+GOOGLE_AI_API_KEY=
+GITHUB_TOKEN=
+```
+
+Nao configure `PORT` manualmente no Railway; a plataforma injeta essa variavel. Se usar banco PostgreSQL do Railway, use a `DATABASE_URL` fornecida por ele. Rode migrations versionadas com `npm run prisma:migrate:deploy` antes de operar o painel.
 
 ## Rodar com Docker Compose
 

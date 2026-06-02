@@ -5,7 +5,7 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/index.js",
+    "start": "node dist/admin/server.js",
     "prod": "node dist/admin/server.js",
     "admin": "node dist/admin/server.js",
     "diagnose:domain": "node dist/scripts/diagnoseJobDomainClassifier.js",

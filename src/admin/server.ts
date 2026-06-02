@@ -11,7 +11,7 @@ import { createJobsRouter } from './routes/jobs.routes';
 import { createScheduleRouter } from './routes/schedule.routes';
 
 const app = express();
-const port = Number(process.env.ADMIN_PORT ?? 3000);
+const port = Number(process.env.PORT ?? process.env.ADMIN_PORT ?? 3000);
 const adminAuth = getAdminAuthConfig();
 
 app.disable('x-powered-by');
