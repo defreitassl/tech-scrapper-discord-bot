@@ -1,6 +1,7 @@
 import { JobStatus } from '@prisma/client';
 import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
+import { publishAdminEvent } from '../services/adminEvents';
 import { checkJobDuplicate } from '../services/jobDeduplication';
 import { evaluateJobForQueue, type JobQueueDecision } from '../services/jobPolicy';
 import type { JobPriorityLevel } from '../services/jobPriority';
@@ -46,6 +47,7 @@ type AutomatedCollectionCandidate = PrioritizedCollectedJob & {
 
 export async function runAutomatedJobCollection(
   providers: JobSourceProvider[] = automaticJobProviders,
+  options: { trigger?: 'manual' | 'scheduled' } = {},
 ): Promise<AutomatedJobCollectionSummary> {
   // Runner executa providers, aplica jobPolicy, deduplica e cria PENDING.
   const settings = normalizeSchedulerSettings(await getSchedulerSettings());
@@ -78,12 +80,36 @@ export async function runAutomatedJobCollection(
     slotsToCreate,
     timezone: settings.timezone,
   });
+  publishAdminEvent({
+    type: 'collection',
+    status: 'progress',
+    title: 'Fila analisada',
+    message: `Fila atual: ${pendingCount} pendentes. Alvo: ${queueTarget}. Novas vagas buscadas: ${slotsToCreate}.`,
+    details: {
+      trigger: options.trigger,
+      dailyLimit: settings.dailyLimit,
+      pendingCount,
+      queueTarget,
+      slotsToCreate,
+    },
+  });
 
   if (slotsToCreate <= 0) {
     logger.info('Fila PENDING ja esta cheia.', {
       dailyLimit: settings.dailyLimit,
       pendingCount,
       queueTarget,
+    });
+    publishAdminEvent({
+      type: 'collection',
+      status: 'skipped',
+      title: 'Coleta sem novas vagas',
+      message: `A fila PENDING ja atingiu o alvo de ${queueTarget} vagas.`,
+      details: {
+        trigger: options.trigger,
+        pendingCount,
+        queueTarget,
+      },
     });
     return summary;
   }
@@ -95,6 +121,16 @@ export async function runAutomatedJobCollection(
 
     try {
       logger.info('Coleta automatizada de vagas iniciada.', { provider: provider.name });
+      publishAdminEvent({
+        type: 'collection',
+        status: 'progress',
+        title: 'Provider em coleta',
+        message: `Buscando vagas em ${provider.name}.`,
+        details: {
+          trigger: options.trigger,
+          provider: provider.name,
+        },
+      });
       const collectResult = await provider.collect();
       const collectedJobs = Array.isArray(collectResult) ? collectResult : collectResult.jobs;
 
@@ -109,6 +145,19 @@ export async function runAutomatedJobCollection(
           repositorySummaries.set(repositorySummary.source, repositorySummary);
         }
       }
+
+      publishAdminEvent({
+        type: 'collection',
+        status: 'progress',
+        title: 'Provider concluido',
+        message: `${provider.name}: ${collectedJobs.length} vagas analisadas.`,
+        details: {
+          trigger: options.trigger,
+          provider: provider.name,
+          collectedJobs: collectedJobs.length,
+          repositoryErrors: Array.isArray(collectResult) ? 0 : collectResult.errors?.length ?? 0,
+        },
+      });
 
       for (const [originalIndex, collectedJob] of collectedJobs.entries()) {
         const normalizedJob = normalizeCollectedJob(collectedJob, provider.name);
@@ -163,6 +212,16 @@ export async function runAutomatedJobCollection(
         message,
       });
       logger.error('Erro ao executar provider na coleta automatizada.', error, { provider: provider.name });
+      publishAdminEvent({
+        type: 'collection',
+        status: 'error',
+        title: 'Erro em provider',
+        message: `${provider.name}: ${message}`,
+        details: {
+          trigger: options.trigger,
+          provider: provider.name,
+        },
+      });
     }
   }
 
@@ -249,6 +308,19 @@ export async function runAutomatedJobCollection(
         priorityScore: candidate.decision.priorityScore,
         reasons: candidate.decision.reasons,
       });
+      publishAdminEvent({
+        type: 'collection',
+        status: 'progress',
+        title: 'Vaga aprovada',
+        message: `${job.title ?? 'Vaga sem titulo'} entrou na fila PENDING.`,
+        details: {
+          trigger: options.trigger,
+          provider: candidate.provider,
+          jobId: job.id,
+          priority: candidate.decision.priority,
+          priorityScore: candidate.decision.priorityScore,
+        },
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Erro desconhecido ao criar vaga coletada.';
       summary.errors.push({ provider: candidate.provider, message });
@@ -271,6 +343,22 @@ export async function runAutomatedJobCollection(
     queueTarget: summary.queueTarget,
     slotsToCreate: summary.slotsToCreate,
     errors: summary.errors.length,
+  });
+  publishAdminEvent({
+    type: 'collection',
+    status: summary.errors.length > 0 ? 'warning' : 'success',
+    title: 'Coleta finalizada',
+    message: `${summary.approvedAsPending} vagas aprovadas, ${summary.rejectedDuplicates} duplicatas e ${summary.errors.length} erros.`,
+    details: {
+      trigger: options.trigger,
+      analyzed: summary.analyzed,
+      approvedAsPending: summary.approvedAsPending,
+      rejectedByDomain: summary.rejectedByDomain,
+      rejectedByQuality: summary.rejectedByQuality,
+      rejectedDuplicates: summary.rejectedDuplicates,
+      rejectedByPriority: summary.rejectedByPriority,
+      errors: summary.errors.length,
+    },
   });
 
   return summary;

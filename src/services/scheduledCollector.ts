@@ -3,6 +3,7 @@ import { logger } from '../lib/logger';
 import { automaticJobProviders } from '../providers/providerRegistry';
 import { runAutomatedJobCollection, AutomatedJobCollectionSummary } from '../providers/providerRunner';
 import type { JobSourceProvider } from '../providers/types';
+import { publishAdminEvent } from './adminEvents';
 import {
   getCollectionSchedulerSettings,
   normalizeCollectionSchedulerSettings,
@@ -96,6 +97,16 @@ export async function runRealJobCollection(
       trigger,
       providers: providerNames,
     });
+    publishAdminEvent({
+      type: 'collection',
+      status: 'skipped',
+      title: 'Coleta ignorada',
+      message: 'Outra coleta ja esta em execucao.',
+      details: {
+        trigger,
+        providers: providerNames,
+      },
+    });
 
     return {
       skipped: true,
@@ -110,8 +121,18 @@ export async function runRealJobCollection(
       trigger,
       providers: providerNames,
     });
+    publishAdminEvent({
+      type: 'collection',
+      status: 'started',
+      title: trigger === 'scheduled' ? 'Coleta automatica iniciada' : 'Coleta manual iniciada',
+      message: `Executando ${providerNames.length} providers.`,
+      details: {
+        trigger,
+        providers: providerNames,
+      },
+    });
 
-    const summary = await runAutomatedJobCollection(providers);
+    const summary = await runAutomatedJobCollection(providers, { trigger });
 
     logger.info('Coleta automatizada de providers finalizada.', {
       trigger,
@@ -155,6 +176,13 @@ export async function runRealJobCollection(
     };
   } catch (error) {
     logger.error('Erro na coleta de providers reais.', error, { trigger });
+    publishAdminEvent({
+      type: 'collection',
+      status: 'error',
+      title: 'Erro na coleta',
+      message: error instanceof Error ? error.message : 'Erro desconhecido durante a coleta.',
+      details: { trigger },
+    });
 
     return {
       skipped: false,

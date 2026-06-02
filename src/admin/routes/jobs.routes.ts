@@ -6,6 +6,7 @@ import { checkJobDuplicate } from '../../services/jobDeduplication';
 import { publishPendingJobs, publishSingleJob } from '../../services/publishPendingJobs';
 import { runRealJobCollection } from '../../services/scheduledCollector';
 import { manualJobProviders } from '../../providers/providerRegistry';
+import { publishAdminEvent } from '../../services/adminEvents';
 import {
   buildCompactCollectionNotice,
   getNoticeFromQuery,
@@ -87,7 +88,7 @@ export function createJobsRouter(): express.Router {
   router.post('/admin/jobs/publish-pending', async (_request, response) => {
     try {
       logger.info('Publicacao manual de vagas pendentes iniciada pelo admin.');
-      const result = await publishPendingJobs();
+      const result = await publishPendingJobs({ trigger: 'manual' });
       const message = `Publicacao concluida. Encontradas: ${result.total}. Enviadas: ${result.sent}. Erros: ${result.failed}.`;
       const noticeType = result.failed > 0 ? 'warning' : result.sent > 0 ? 'success' : 'info';
 
@@ -192,7 +193,28 @@ export function createJobsRouter(): express.Router {
       return;
     }
 
+    publishAdminEvent({
+      type: 'publish',
+      status: 'started',
+      title: 'Envio manual iniciado',
+      message: `Enviando agora: ${job.title ?? 'Vaga sem titulo'}.`,
+      details: {
+        trigger: 'manual',
+        jobId: job.id,
+      },
+    });
     const result = await publishSingleJob(job);
+    publishAdminEvent({
+      type: 'publish',
+      status: result.status === 'sent' ? 'success' : result.status === 'failed' ? 'error' : 'warning',
+      title: result.status === 'sent' ? 'Vaga enviada' : 'Envio manual atualizado',
+      message: `${job.title ?? 'Vaga sem titulo'}: ${result.message}`,
+      details: {
+        trigger: 'manual',
+        jobId: job.id,
+        result: result.status,
+      },
+    });
     const noticeType = result.status === 'sent' ? 'success' : result.status === 'skipped' ? 'warning' : 'error';
 
     redirectWithNotice(response, `/admin/jobs/${job.id}`, result.message, noticeType);

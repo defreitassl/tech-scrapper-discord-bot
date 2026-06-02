@@ -96,7 +96,7 @@ async function runScheduledPublish(sendTime: string): Promise<void> {
     }
 
     const publishLimit = Math.min(slotCount, usage.remainingToday);
-    const result = await publishPendingJobs({ limit: publishLimit });
+    const result = await publishPendingJobs({ limit: publishLimit, trigger: 'scheduled' });
 
     logger.info('Publicacao agendada finalizada.', {
       sendTime,

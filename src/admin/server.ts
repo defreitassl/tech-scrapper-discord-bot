@@ -7,6 +7,7 @@ import { prisma } from '../lib/prisma';
 import { startScheduledCollector, stopScheduledCollector } from '../services/scheduledCollector';
 import { startScheduledPublisher, stopScheduledPublisher } from '../services/scheduledPublisher';
 import { createCollectionScheduleRouter } from './routes/collectionSchedule.routes';
+import { createEventsRouter } from './routes/events.routes';
 import { createJobsRouter } from './routes/jobs.routes';
 import { createScheduleRouter } from './routes/schedule.routes';
 
@@ -49,6 +50,7 @@ app.get('/', (_request, response) => {
 });
 
 app.use('/admin', requireAdminAuth(adminAuth));
+app.use(createEventsRouter());
 app.use(createScheduleRouter());
 app.use(createCollectionScheduleRouter());
 app.use(createJobsRouter());

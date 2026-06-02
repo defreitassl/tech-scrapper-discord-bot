@@ -1,6 +1,7 @@
 import { JobPost, JobStatus } from '@prisma/client';
 import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
+import { publishAdminEvent } from './adminEvents';
 import { generateJobMessage } from './aiMessageGenerator';
 import { sendDiscordJobMessage } from './discordPublisher';
 import { buildFallbackJobMessage } from './jobMessage';
@@ -29,13 +30,34 @@ export type PublishSingleJobResult =
       message: string;
     };
 
-export async function publishPendingJobs(options: { limit?: number } = {}): Promise<PublishPendingJobsResult> {
+export async function publishPendingJobs(options: { limit?: number; trigger?: 'manual' | 'scheduled' } = {}): Promise<PublishPendingJobsResult> {
   const limit = options.limit ?? 5;
+  const trigger = options.trigger ?? 'manual';
 
   logger.info('Buscando vagas pendentes para publicacao.', { limit });
+  publishAdminEvent({
+    type: 'publish',
+    status: 'started',
+    title: trigger === 'scheduled' ? 'Envio automatico iniciado' : 'Envio manual iniciado',
+    message: `Buscando ate ${limit} vagas PENDING para envio.`,
+    details: {
+      trigger,
+      limit,
+    },
+  });
 
   if (limit <= 0) {
     logger.info('Publicacao de vagas pendentes ignorada porque o limite e zero.', { limit });
+    publishAdminEvent({
+      type: 'publish',
+      status: 'skipped',
+      title: 'Envio ignorado',
+      message: 'O limite de envio e zero.',
+      details: {
+        trigger,
+        limit,
+      },
+    });
     return {
       total: 0,
       sent: 0,
@@ -56,8 +78,29 @@ export async function publishPendingJobs(options: { limit?: number } = {}): Prom
   };
 
   logger.info('Vagas pendentes encontradas.', { total: jobs.length });
+  publishAdminEvent({
+    type: 'publish',
+    status: jobs.length > 0 ? 'progress' : 'skipped',
+    title: 'Fila de envio consultada',
+    message: jobs.length > 0 ? `${jobs.length} vagas encontradas para envio.` : 'Nenhuma vaga PENDING encontrada.',
+    details: {
+      trigger,
+      total: jobs.length,
+    },
+  });
 
   for (const [index, job] of jobs.entries()) {
+    publishAdminEvent({
+      type: 'publish',
+      status: 'progress',
+      title: 'Enviando vaga',
+      message: `${index + 1}/${jobs.length}: ${job.title ?? 'Vaga sem titulo'}.`,
+      details: {
+        trigger,
+        jobId: job.id,
+        title: job.title,
+      },
+    });
     const publishResult = await publishSingleJob(job);
 
     if (publishResult.status === 'sent') {
@@ -67,6 +110,17 @@ export async function publishPendingJobs(options: { limit?: number } = {}): Prom
     if (publishResult.status === 'failed') {
       result.failed += 1;
     }
+    publishAdminEvent({
+      type: 'publish',
+      status: publishResult.status === 'sent' ? 'success' : publishResult.status === 'failed' ? 'error' : 'warning',
+      title: publishResult.status === 'sent' ? 'Vaga enviada' : 'Envio da vaga atualizado',
+      message: `${job.title ?? 'Vaga sem titulo'}: ${publishResult.message}`,
+      details: {
+        trigger,
+        jobId: job.id,
+        result: publishResult.status,
+      },
+    });
 
     if (index < jobs.length - 1 && publishResult.status === 'sent') {
       await delay(BATCH_SEND_DELAY_MS);
@@ -74,6 +128,16 @@ export async function publishPendingJobs(options: { limit?: number } = {}): Prom
   }
 
   logger.info('Publicacao de vagas pendentes finalizada.', result);
+  publishAdminEvent({
+    type: 'publish',
+    status: result.failed > 0 ? 'warning' : result.sent > 0 ? 'success' : 'skipped',
+    title: 'Envio finalizado',
+    message: `Encontradas: ${result.total}. Enviadas: ${result.sent}. Erros: ${result.failed}.`,
+    details: {
+      trigger,
+      ...result,
+    },
+  });
   return result;
 }
 

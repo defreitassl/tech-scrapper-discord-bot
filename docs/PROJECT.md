@@ -114,9 +114,10 @@ Fora da coleta atual:
 
 ## Logs
 
-- Logs devem ser suficientes para diagnosticar coleta, rejeicoes, duplicatas, prioridades, erros de provider e erros de envio.
+- Logs de console devem ser legiveis, com contexto em linhas separadas para diagnosticar coleta, rejeicoes, duplicatas, prioridades, erros de provider e erros de envio.
 - Logs nao devem expor tokens, senhas ou segredos.
 - Rejeicoes devem usar motivos estaveis quando possivel, como `non_tech_domain:*`, `outside_technology_profile`, duplicidade ou senioridade alta.
+- O painel exibe atividades recentes de coleta e envio em tempo real enquanto o usuario esta com o admin aberto.
 
 ## Painel admin
 
@@ -125,5 +126,6 @@ Fora da coleta atual:
 - Views mantidas em poucos arquivos didaticos (`layout`, `jobs`, `settings` e `styles`) e helpers consolidados.
 - Fluxos principais: listar, criar, editar, ver detalhes, coletar vagas, enviar pendentes, enviar agora e excluir vagas nao enviadas.
 - Configuracao de envio mostra um campo de horario para cada vaga definida no limite diario.
+- Notificacoes em tempo real mostram inicio, progresso e conclusao de coletas e envios.
 - Acoes destrutivas devem ser restritas a vagas nao enviadas.
 - Interface deve continuar operacional e direta para o MVP.

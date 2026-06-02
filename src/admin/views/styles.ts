@@ -804,6 +804,108 @@ export const adminStyles = `
             color: #475569;
           }
 
+          .live-events {
+            position: fixed;
+            z-index: 19;
+            right: 20px;
+            bottom: 20px;
+            width: min(460px, calc(100vw - 40px));
+            max-height: min(560px, calc(100vh - 120px));
+            overflow: hidden;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.98);
+            box-shadow: 0 24px 54px rgba(15, 23, 42, 0.18);
+          }
+
+          .live-events[hidden] {
+            display: none;
+          }
+
+          .live-events-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 12px 14px;
+            border-bottom: 1px solid var(--border);
+            background: #f8fafc;
+          }
+
+          .live-events-header span,
+          .live-event-meta,
+          .live-event time {
+            color: var(--text-muted);
+            font-size: 11px;
+            font-weight: 850;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+          }
+
+          .live-events-header strong {
+            display: block;
+            margin-top: 2px;
+            color: #172033;
+            font-size: 14px;
+          }
+
+          .live-events ol {
+            display: grid;
+            gap: 0;
+            max-height: 460px;
+            margin: 0;
+            padding: 0;
+            overflow-y: auto;
+            list-style: none;
+          }
+
+          .live-event {
+            display: grid;
+            gap: 4px;
+            padding: 12px 14px;
+            border-left: 4px solid #94a3b8;
+            border-bottom: 1px solid var(--border);
+          }
+
+          .live-event:last-child {
+            border-bottom: 0;
+          }
+
+          .live-event strong {
+            color: #172033;
+            font-size: 14px;
+            line-height: 1.3;
+          }
+
+          .live-event p {
+            margin: 0;
+            color: #334155;
+            font-size: 13px;
+            line-height: 1.45;
+          }
+
+          .live-event time {
+            letter-spacing: 0;
+          }
+
+          .live-event-started,
+          .live-event-progress {
+            border-left-color: #2563eb;
+          }
+
+          .live-event-success {
+            border-left-color: #16a34a;
+          }
+
+          .live-event-warning,
+          .live-event-skipped {
+            border-left-color: #f59e0b;
+          }
+
+          .live-event-error {
+            border-left-color: #dc2626;
+          }
+
           .error,
           .notice {
             padding: 14px 16px;
@@ -842,6 +944,13 @@ export const adminStyles = `
               top: 68px;
               right: 14px;
               width: calc(100vw - 28px);
+            }
+
+            .live-events {
+              right: 14px;
+              bottom: 14px;
+              width: calc(100vw - 28px);
+              max-height: calc(100vh - 120px);
             }
 
             .page-heading,

@@ -22,6 +22,8 @@
 - Fallback deterministico.
 - Discord embed/card via Bot Discord.
 - Envio ao Discord com `discord.js`.
+- Logs de console mais legiveis.
+- Notificacoes em tempo real para coletas e envios no painel admin.
 - Basic Auth.
 - Docker Compose.
 

@@ -28,9 +28,25 @@ ${adminStyles}
           </div>
         </header>
         <main>${content}</main>
+        ${renderLiveEventsPanel()}
         ${renderAdminScripts()}
       </body>
     </html>
+  `;
+}
+
+function renderLiveEventsPanel(): string {
+  return `
+    <section class="live-events" aria-live="polite" aria-label="Atividades recentes" data-live-events hidden>
+      <div class="live-events-header">
+        <div>
+          <span>Atividades</span>
+          <strong>Coletas e envios</strong>
+        </div>
+        <button type="button" class="notification-close" aria-label="Limpar atividades" data-live-events-clear>&times;</button>
+      </div>
+      <ol data-live-events-list></ol>
+    </section>
   `;
 }
 
@@ -72,6 +88,81 @@ function renderAdminScripts(): string {
             submitter.classList.add('is-loading');
           });
         });
+
+        const liveEvents = document.querySelector('[data-live-events]');
+        const liveEventsList = document.querySelector('[data-live-events-list]');
+        const liveEventsClear = document.querySelector('[data-live-events-clear]');
+        const eventLabels = {
+          collection: 'Coleta',
+          publish: 'Envio',
+          system: 'Sistema',
+        };
+        const statusLabels = {
+          started: 'Iniciado',
+          progress: 'Atualizacao',
+          success: 'Concluido',
+          warning: 'Atencao',
+          error: 'Erro',
+          skipped: 'Ignorado',
+        };
+
+        const showLiveEvent = (event) => {
+          if (!liveEvents || !liveEventsList || !event?.message) {
+            return;
+          }
+
+          liveEvents.hidden = false;
+
+          const item = document.createElement('li');
+          item.className = 'live-event live-event-' + (event.status || 'progress');
+
+          const meta = document.createElement('span');
+          meta.className = 'live-event-meta';
+          meta.textContent = (eventLabels[event.type] || 'Evento') + ' - ' + (statusLabels[event.status] || 'Atualizacao');
+
+          const title = document.createElement('strong');
+          title.textContent = event.title || 'Atualizacao';
+
+          const message = document.createElement('p');
+          message.textContent = event.message;
+
+          const time = document.createElement('time');
+          time.dateTime = event.createdAt || new Date().toISOString();
+          time.textContent = new Intl.DateTimeFormat('pt-BR', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+          }).format(event.createdAt ? new Date(event.createdAt) : new Date());
+
+          item.appendChild(meta);
+          item.appendChild(title);
+          item.appendChild(message);
+          item.appendChild(time);
+          liveEventsList.prepend(item);
+
+          while (liveEventsList.children.length > 8) {
+            liveEventsList.lastElementChild?.remove();
+          }
+        };
+
+        liveEventsClear?.addEventListener('click', () => {
+          liveEventsList?.replaceChildren();
+          if (liveEvents) {
+            liveEvents.hidden = true;
+          }
+        });
+
+        if ('EventSource' in window) {
+          const events = new EventSource('/admin/events');
+
+          events.onmessage = (message) => {
+            try {
+              showLiveEvent(JSON.parse(message.data));
+            } catch {
+              // Ignora mensagens incompletas de conexao.
+            }
+          };
+        }
       })();
     </script>
   `;
